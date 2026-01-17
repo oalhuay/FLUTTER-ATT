@@ -63,7 +63,8 @@ class _MainLayoutState extends State<MainLayout> {
 
     supabase.auth.onAuthStateChange.listen((data) {
       final AuthChangeEvent event = data.event;
-      if (event == AuthChangeEvent.signedIn || event == AuthChangeEvent.initialSession) {
+      if (event == AuthChangeEvent.signedIn ||
+          event == AuthChangeEvent.initialSession) {
         _obtenerPerfil();
       }
       if (mounted) setState(() {});
@@ -99,14 +100,31 @@ class _MainLayoutState extends State<MainLayout> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _indiceActual,
         onTap: (index) {
-          setState(() => _indiceActual = index);
+          // PROTECCIÓN DE RUTA: 
+          // Si el usuario intenta ir a Mis Turnos (índice 1) y NO hay sesión activa
+          if (index == 1 && supabase.auth.currentUser == null) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("⚠️ Debes iniciar sesión para ver tus turnos"),
+                backgroundColor: Color(0xFFEF4444),
+                duration: Duration(seconds: 2),
+              ),
+            );
+            // Redirigimos automáticamente a la pestaña de Perfil (índice 2)
+            setState(() => _indiceActual = 2);
+          } else {
+            setState(() => _indiceActual = index);
+          }
         },
         selectedItemColor: const Color(0xFFEF4444),
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.map), label: "Mapa"),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month), label: "Mis Turnos"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.calendar_month),
+            label: "Mis Turnos",
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Perfil"),
         ],
       ),
@@ -140,7 +158,11 @@ class _MapScreenState extends State<MapScreen> {
           height: 80,
           child: GestureDetector(
             onTap: () => _mostrarCartel(l),
-            child: const Icon(Icons.location_on, color: Color(0xFF3ABEF9), size: 45),
+            child: const Icon(
+              Icons.location_on,
+              color: Color(0xFF3ABEF9),
+              size: 45,
+            ),
           ),
         );
       }).toList();
@@ -161,10 +183,19 @@ class _MapScreenState extends State<MapScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(l['razon_social'],
-                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+            Text(
+              l['razon_social'],
+              style: const TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFFEF4444),
+              ),
+            ),
             const SizedBox(height: 8),
-            Text("Dirección: ${l['direccion'] ?? 'Zárate, Centro'}", style: TextStyle(color: Colors.grey[600])),
+            Text(
+              "Dirección: ${l['direccion'] ?? 'Zárate, Centro'}",
+              style: TextStyle(color: Colors.grey[600]),
+            ),
             const Spacer(),
             SizedBox(
               width: double.infinity,
@@ -172,14 +203,27 @@ class _MapScreenState extends State<MapScreen> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEF4444),
                   padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onPressed: () {
                   Navigator.pop(context);
-                  Navigator.push(context, MaterialPageRoute(builder: (context) => ReservaScreen(lavadero: l)));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ReservaScreen(lavadero: l),
+                    ),
+                  );
                 },
-                child: const Text("SOLICITAR TURNO",
-                    style: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)),
+                child: const Text(
+                  "SOLICITAR TURNO",
+                  style: TextStyle(
+                    fontSize: 16,
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
           ],
@@ -198,9 +242,14 @@ class _MapScreenState extends State<MapScreen> {
         elevation: 2,
       ),
       body: FlutterMap(
-        options: const MapOptions(initialCenter: LatLng(-34.098, -59.028), initialZoom: 14),
+        options: const MapOptions(
+          initialCenter: LatLng(-34.098, -59.028),
+          initialZoom: 14,
+        ),
         children: [
-          TileLayer(urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'),
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          ),
           MarkerLayer(markers: _markers),
         ],
       ),
@@ -228,7 +277,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Future<void> _cargarDatosPerfil() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
-      final data = await supabase.from('perfiles_usuarios').select('patente').eq('id', user.id).maybeSingle();
+      final data = await supabase
+          .from('perfiles_usuarios')
+          .select('patente')
+          .eq('id', user.id)
+          .maybeSingle();
       if (data != null && data['patente'] != null) {
         setState(() => _patenteController.text = data['patente']);
       }
@@ -241,9 +294,14 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
     setState(() => _cargandoPatente = true);
     try {
-      await supabase.from('perfiles_usuarios').update({'patente': _patenteController.text.toUpperCase()}).eq('id', user.id);
+      await supabase
+          .from('perfiles_usuarios')
+          .update({'patente': _patenteController.text.toUpperCase()})
+          .eq('id', user.id);
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("✅ Patente actualizada correctamente")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Patente actualizada correctamente")),
+        );
       }
     } catch (e) {
       debugPrint("Error al guardar patente: $e");
@@ -254,7 +312,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   Future<void> _loginConGoogle() async {
     try {
-      await supabase.auth.signInWithOAuth(OAuthProvider.google, redirectTo: 'http://localhost:3000');
+      await supabase.auth.signInWithOAuth(
+        OAuthProvider.google,
+        redirectTo: 'http://localhost:3000',
+      );
     } catch (e) {
       debugPrint("Error de Login: $e");
     }
@@ -280,9 +341,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
             ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.account_circle, size: 100, color: Colors.grey),
+                  const Icon(
+                    Icons.account_circle,
+                    size: 100,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(height: 20),
-                  const Text("Ingresá para gestionar tus turnos", style: TextStyle(fontSize: 18)),
+                  const Text(
+                    "Ingresá para gestionar tus turnos",
+                    style: TextStyle(fontSize: 18),
+                  ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: 260,
@@ -292,16 +360,25 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         foregroundColor: Colors.black87,
                         side: const BorderSide(color: Colors.grey, width: 0.5),
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       onPressed: _loginConGoogle,
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Image.network('https://authjs.dev/img/providers/google.svg',
-                              height: 22, errorBuilder: (context, error, stackTrace) => const Icon(Icons.login)),
+                          Image.network(
+                            'https://authjs.dev/img/providers/google.svg',
+                            height: 22,
+                            errorBuilder: (context, error, stackTrace) =>
+                                const Icon(Icons.login),
+                          ),
                           const SizedBox(width: 12),
-                          const Text("Continuar con Google", style: TextStyle(fontWeight: FontWeight.w500)),
+                          const Text(
+                            "Continuar con Google",
+                            style: TextStyle(fontWeight: FontWeight.w500),
+                          ),
                         ],
                       ),
                     ),
@@ -313,11 +390,23 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
                     CircleAvatar(
-                        radius: 50, backgroundImage: NetworkImage(usuario.userMetadata?['avatar_url'] ?? '')),
+                      radius: 50,
+                      backgroundImage: NetworkImage(
+                        usuario.userMetadata?['avatar_url'] ?? '',
+                      ),
+                    ),
                     const SizedBox(height: 15),
-                    Text(usuario.userMetadata?['full_name'] ?? 'Usuario',
-                        style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                    Text(usuario.email ?? '', style: const TextStyle(color: Colors.grey)),
+                    Text(
+                      usuario.userMetadata?['full_name'] ?? 'Usuario',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      usuario.email ?? '',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                     const SizedBox(height: 30),
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 40),
@@ -329,15 +418,29 @@ class _PerfilScreenState extends State<PerfilScreen> {
                           border: const OutlineInputBorder(),
                           prefixIcon: const Icon(Icons.directions_car),
                           suffixIcon: _cargandoPatente
-                              ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2))
-                              : IconButton(icon: const Icon(Icons.save, color: Colors.green), onPressed: _guardarPatente),
+                              ? const Padding(
+                                  padding: EdgeInsets.all(12),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : IconButton(
+                                  icon: const Icon(
+                                    Icons.save,
+                                    color: Colors.green,
+                                  ),
+                                  onPressed: _guardarPatente,
+                                ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 20),
                     TextButton(
                       onPressed: _cerrarSesion,
-                      child: const Text("Cerrar Sesión", style: TextStyle(color: Colors.red)),
+                      child: const Text(
+                        "Cerrar Sesión",
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
                   ],
                 ),
