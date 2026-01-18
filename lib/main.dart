@@ -20,6 +20,9 @@ void main() async {
 
 final supabase = Supabase.instance.client;
 
+// 1. Llave global para que el Layout pueda hablar con el Mapa
+final GlobalKey<_MapScreenState> mapScreenKey = GlobalKey<_MapScreenState>();
+
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
@@ -50,8 +53,9 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _indiceActual = 0;
 
-  final List<Widget> _paginas = [
-    const MapScreen(),
+  // 2. Pasamos la llave al MapScreen en la lista de páginas
+  late final List<Widget> _paginas = [
+    MapScreen(key: mapScreenKey),
     const MisTurnosScreen(),
     const PerfilScreen(),
   ];
@@ -92,6 +96,11 @@ class _MainLayoutState extends State<MainLayout> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _indiceActual,
         onTap: (index) {
+          // 3. Si se presiona el botón de Mapa (índice 0), refrescamos datos
+          if (index == 0) {
+            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+          }
+
           if (index == 1 && supabase.auth.currentUser == null) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -119,7 +128,7 @@ class _MainLayoutState extends State<MainLayout> {
   }
 }
 
-// --- PANTALLA DE MAPA ---
+// --- PANTALLA DE MAPA (CON REALTIME Y REFRESH EXTERNO) ---
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
   @override
@@ -128,32 +137,59 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   List<Marker> _markers = [];
+  RealtimeChannel? _channel;
 
   @override
   void initState() {
     super.initState();
-    _cargarLavaderosDeSupabase();
+    cargarLavaderosDeSupabase();
+    _suscribirARealtime();
   }
 
-  Future<void> _cargarLavaderosDeSupabase() async {
+  @override
+  void dispose() {
+    if (_channel != null) supabase.removeChannel(_channel!);
+    super.dispose();
+  }
+
+  void _suscribirARealtime() {
+    _channel = supabase
+        .channel('public:lavaderos')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'lavaderos',
+          callback: (payload) {
+            debugPrint('🔥 Cambio detectado en lavaderos!');
+            cargarLavaderosDeSupabase();
+          },
+        )
+        .subscribe();
+  }
+
+  // 4. Función pública para que el NavBar pueda activarla
+  Future<void> cargarLavaderosDeSupabase() async {
     final data = await supabase.from('lavaderos').select();
-    setState(() {
-      _markers = (data as List).map((l) {
-        return Marker(
-          point: LatLng(l['latitud'], l['longitud']),
-          width: 80,
-          height: 80,
-          child: GestureDetector(
-            onTap: () => _mostrarCartel(l),
-            child: const Icon(
-              Icons.location_on,
-              color: Color(0xFF3ABEF9),
-              size: 45,
+    if (mounted) {
+      setState(() {
+        _markers = (data as List).map((l) {
+          return Marker(
+            point: LatLng(l['latitud'], l['longitud']),
+            width: 80,
+            height: 80,
+            child: GestureDetector(
+              onTap: () => _mostrarCartel(l),
+              child: const Icon(
+                Icons.location_on,
+                color: Color(0xFF3ABEF9),
+                size: 45,
+              ),
             ),
-          ),
-        );
-      }).toList();
-    });
+          );
+        }).toList();
+      });
+      debugPrint("📍 Lavaderos refrescados desde la barra de navegación");
+    }
   }
 
   void _mostrarCartel(dynamic l) {
@@ -236,6 +272,13 @@ class _MapScreenState extends State<MapScreen> {
           ),
           MarkerLayer(markers: _markers),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        mini: true,
+        backgroundColor: const Color(0xFF3ABEF9),
+        foregroundColor: Colors.white,
+        onPressed: cargarLavaderosDeSupabase,
+        child: const Icon(Icons.refresh),
       ),
     );
   }
@@ -338,7 +381,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                   ),
                   const SizedBox(height: 20),
-                  // BOTÓN PARA IR A REGISTRO DE LAVADERO
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.blueGrey,
@@ -346,12 +388,15 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                     icon: const Icon(Icons.add_business),
                     label: const Text("REGISTRAR MI LAVADERO"),
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const RegistroLavaderoScreen(),
-                      ),
-                    ),
+                    onPressed: () async {
+                      await Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const RegistroLavaderoScreen(),
+                        ),
+                      );
+                      debugPrint("🔄 El usuario volvió del registro");
+                    },
                   ),
                   TextButton(
                     onPressed: () => supabase.auth.signOut(),
@@ -367,7 +412,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 }
 
-// --- NUEVA PANTALLA: REGISTRO DE LAVADERO ---
+// --- PANTALLA: REGISTRO DE LAVADERO ---
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
   @override
