@@ -62,9 +62,8 @@ class _MainLayoutState extends State<MainLayout> {
     _obtenerPerfil();
 
     supabase.auth.onAuthStateChange.listen((data) {
-      final AuthChangeEvent event = data.event;
-      if (event == AuthChangeEvent.signedIn ||
-          event == AuthChangeEvent.initialSession) {
+      if (data.event == AuthChangeEvent.signedIn ||
+          data.event == AuthChangeEvent.initialSession) {
         _obtenerPerfil();
       }
       if (mounted) setState(() {});
@@ -74,19 +73,12 @@ class _MainLayoutState extends State<MainLayout> {
   Future<void> _obtenerPerfil() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
-      debugPrint("🔐 Usuario activo: ${user.email} (ID: ${user.id})");
       try {
-        final perfil = await supabase
+        await supabase
             .from('perfiles_usuarios')
             .select()
             .eq('id', user.id)
             .maybeSingle();
-
-        if (perfil != null) {
-          debugPrint("🚀 OBJETO PERFIL RECUPERADO DE LA DB: $perfil");
-        } else {
-          debugPrint("⏳ Perfil no encontrado aún. ¿Corriste el Trigger en SQL?");
-        }
       } catch (e) {
         debugPrint("❌ Error al consultar perfiles_usuarios: $e");
       }
@@ -100,17 +92,12 @@ class _MainLayoutState extends State<MainLayout> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _indiceActual,
         onTap: (index) {
-          // PROTECCIÓN DE RUTA: 
-          // Si el usuario intenta ir a Mis Turnos (índice 1) y NO hay sesión activa
           if (index == 1 && supabase.auth.currentUser == null) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
                 content: Text("⚠️ Debes iniciar sesión para ver tus turnos"),
-                backgroundColor: Color(0xFFEF4444),
-                duration: Duration(seconds: 2),
               ),
             );
-            // Redirigimos automáticamente a la pestaña de Perfil (índice 2)
             setState(() => _indiceActual = 2);
           } else {
             setState(() => _indiceActual = index);
@@ -202,7 +189,6 @@ class _MapScreenState extends State<MapScreen> {
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFFEF4444),
-                  padding: const EdgeInsets.symmetric(vertical: 15),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(12),
                   ),
@@ -219,7 +205,6 @@ class _MapScreenState extends State<MapScreen> {
                 child: const Text(
                   "SOLICITAR TURNO",
                   style: TextStyle(
-                    fontSize: 16,
                     color: Colors.white,
                     fontWeight: FontWeight.bold,
                   ),
@@ -239,7 +224,6 @@ class _MapScreenState extends State<MapScreen> {
         title: const Text("ATT: A Todo Trapo"),
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
-        elevation: 2,
       ),
       body: FlutterMap(
         options: const MapOptions(
@@ -291,45 +275,24 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Future<void> _guardarPatente() async {
     final user = supabase.auth.currentUser;
     if (user == null || _patenteController.text.isEmpty) return;
-
     setState(() => _cargandoPatente = true);
     try {
       await supabase
           .from('perfiles_usuarios')
           .update({'patente': _patenteController.text.toUpperCase()})
           .eq('id', user.id);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Patente actualizada correctamente")),
-        );
-      }
-    } catch (e) {
-      debugPrint("Error al guardar patente: $e");
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("✅ Patente actualizada")));
     } finally {
       if (mounted) setState(() => _cargandoPatente = false);
     }
   }
 
-  Future<void> _loginConGoogle() async {
-    try {
-      await supabase.auth.signInWithOAuth(
-        OAuthProvider.google,
-        redirectTo: 'http://localhost:3000',
-      );
-    } catch (e) {
-      debugPrint("Error de Login: $e");
-    }
-  }
-
-  Future<void> _cerrarSesion() async {
-    await supabase.auth.signOut();
-    setState(() {});
-  }
-
   @override
   Widget build(BuildContext context) {
     final usuario = supabase.auth.currentUser;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mi Perfil"),
@@ -338,113 +301,144 @@ class _PerfilScreenState extends State<PerfilScreen> {
       ),
       body: Center(
         child: usuario == null
-            ? Column(
+            ? ElevatedButton(
+                onPressed: () =>
+                    supabase.auth.signInWithOAuth(OAuthProvider.google),
+                child: const Text("Entrar con Google"),
+              )
+            : Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(
-                    Icons.account_circle,
-                    size: 100,
-                    color: Colors.grey,
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundImage: NetworkImage(
+                      usuario.userMetadata?['avatar_url'] ?? '',
+                    ),
                   ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    "Ingresá para gestionar tus turnos",
-                    style: TextStyle(fontSize: 18),
+                  const SizedBox(height: 15),
+                  Text(
+                    usuario.userMetadata?['full_name'] ?? 'Usuario',
+                    style: const TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: 260,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
-                        side: const BorderSide(color: Colors.grey, width: 0.5),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                  const SizedBox(height: 30),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 40),
+                    child: TextField(
+                      controller: _patenteController,
+                      decoration: InputDecoration(
+                        labelText: "Patente",
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.save, color: Colors.green),
+                          onPressed: _guardarPatente,
                         ),
                       ),
-                      onPressed: _loginConGoogle,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Image.network(
-                            'https://authjs.dev/img/providers/google.svg',
-                            height: 22,
-                            errorBuilder: (context, error, stackTrace) =>
-                                const Icon(Icons.login),
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            "Continuar con Google",
-                            style: TextStyle(fontWeight: FontWeight.w500),
-                          ),
-                        ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  // BOTÓN PARA IR A REGISTRO DE LAVADERO
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blueGrey,
+                      foregroundColor: Colors.white,
+                    ),
+                    icon: const Icon(Icons.add_business),
+                    label: const Text("REGISTRAR MI LAVADERO"),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegistroLavaderoScreen(),
                       ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () => supabase.auth.signOut(),
+                    child: const Text(
+                      "Cerrar Sesión",
+                      style: TextStyle(color: Colors.red),
                     ),
                   ),
                 ],
-              )
-            : SingleChildScrollView(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundImage: NetworkImage(
-                        usuario.userMetadata?['avatar_url'] ?? '',
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    Text(
-                      usuario.userMetadata?['full_name'] ?? 'Usuario',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      usuario.email ?? '',
-                      style: const TextStyle(color: Colors.grey),
-                    ),
-                    const SizedBox(height: 30),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 40),
-                      child: TextField(
-                        controller: _patenteController,
-                        textCapitalization: TextCapitalization.characters,
-                        decoration: InputDecoration(
-                          labelText: "Patente del vehículo",
-                          border: const OutlineInputBorder(),
-                          prefixIcon: const Icon(Icons.directions_car),
-                          suffixIcon: _cargandoPatente
-                              ? const Padding(
-                                  padding: EdgeInsets.all(12),
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                )
-                              : IconButton(
-                                  icon: const Icon(
-                                    Icons.save,
-                                    color: Colors.green,
-                                  ),
-                                  onPressed: _guardarPatente,
-                                ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    TextButton(
-                      onPressed: _cerrarSesion,
-                      child: const Text(
-                        "Cerrar Sesión",
-                        style: TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  ],
-                ),
               ),
+      ),
+    );
+  }
+}
+
+// --- NUEVA PANTALLA: REGISTRO DE LAVADERO ---
+class RegistroLavaderoScreen extends StatefulWidget {
+  const RegistroLavaderoScreen({super.key});
+  @override
+  State<RegistroLavaderoScreen> createState() => _RegistroLavaderoScreenState();
+}
+
+class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
+  final _nombreController = TextEditingController();
+  final _direccionController = TextEditingController();
+  final _latController = TextEditingController();
+  final _lngController = TextEditingController();
+
+  Future<void> _registrar() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+    try {
+      await supabase.from('lavaderos').insert({
+        'dueño_id': user.id,
+        'razon_social': _nombreController.text,
+        'direccion': _direccionController.text,
+        'latitud': double.parse(_latController.text),
+        'longitud': double.parse(_lngController.text),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("✅ Lavadero registrado")));
+        Navigator.pop(context);
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("❌ Error: $e")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Registrar Lavadero")),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _nombreController,
+              decoration: const InputDecoration(labelText: "Nombre Comercial"),
+            ),
+            TextField(
+              controller: _direccionController,
+              decoration: const InputDecoration(labelText: "Dirección"),
+            ),
+            TextField(
+              controller: _latController,
+              decoration: const InputDecoration(
+                labelText: "Latitud (ej: -34.09)",
+              ),
+            ),
+            TextField(
+              controller: _lngController,
+              decoration: const InputDecoration(
+                labelText: "Longitud (ej: -59.02)",
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: _registrar,
+              child: const Text("GUARDAR LAVADERO"),
+            ),
+          ],
+        ),
       ),
     );
   }
