@@ -19,8 +19,6 @@ void main() async {
 }
 
 final supabase = Supabase.instance.client;
-
-// 1. Llave global para que el Layout pueda hablar con el Mapa
 final GlobalKey<_MapScreenState> mapScreenKey = GlobalKey<_MapScreenState>();
 
 class MyApp extends StatelessWidget {
@@ -43,6 +41,102 @@ class MyApp extends StatelessWidget {
   }
 }
 
+// --- PANTALLA DE SELECCIÓN DE ROL ---
+class SeleccionRolScreen extends StatefulWidget {
+  const SeleccionRolScreen({super.key});
+
+  @override
+  State<SeleccionRolScreen> createState() => _SeleccionRolScreenState();
+}
+
+class _SeleccionRolScreenState extends State<SeleccionRolScreen> {
+  bool _procesando = false;
+
+  Future<void> _definirRol(String nuevoRol) async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => _procesando = true);
+    try {
+      // Usamos upsert para crear o actualizar el perfil en SQL inmediatamente
+      await supabase.from('perfiles_usuarios').upsert({
+        'id': user.id,
+        'rol': nuevoRol,
+        'email': user.email,
+      });
+
+      if (mounted) {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const MainLayout()),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _procesando = false);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Container(
+        padding: const EdgeInsets.all(30),
+        width: double.infinity,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.directions_car_filled,
+              size: 80,
+              color: Color(0xFF3ABEF9),
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              "¡Bienvenido a ATT!\n¿Cómo quieres usar la App?",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 40),
+            if (_procesando)
+              const CircularProgressIndicator()
+            else ...[
+              _botonRol("QUIERO LAVAR MI AUTO", Icons.person, 'cliente'),
+              const SizedBox(height: 20),
+              _botonRol("SOY DUEÑO DE LAVADERO", Icons.store, 'lavadero'),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _botonRol(String texto, IconData icono, String valor) {
+    return SizedBox(
+      width: double.infinity,
+      height: 60,
+      child: ElevatedButton.icon(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: valor == 'cliente'
+              ? const Color(0xFF3ABEF9)
+              : Colors.blueGrey,
+          foregroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+        ),
+        icon: Icon(icono),
+        label: Text(texto, style: const TextStyle(fontWeight: FontWeight.bold)),
+        onPressed: () => _definirRol(valor),
+      ),
+    );
+  }
+}
+
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
 
@@ -53,7 +147,6 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _indiceActual = 0;
 
-  // 2. Pasamos la llave al MapScreen en la lista de páginas
   late final List<Widget> _paginas = [
     MapScreen(key: mapScreenKey),
     const MisTurnosScreen(),
@@ -63,30 +156,9 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
-    _obtenerPerfil();
-
     supabase.auth.onAuthStateChange.listen((data) {
-      if (data.event == AuthChangeEvent.signedIn ||
-          data.event == AuthChangeEvent.initialSession) {
-        _obtenerPerfil();
-      }
       if (mounted) setState(() {});
     });
-  }
-
-  Future<void> _obtenerPerfil() async {
-    final user = supabase.auth.currentUser;
-    if (user != null) {
-      try {
-        await supabase
-            .from('perfiles_usuarios')
-            .select()
-            .eq('id', user.id)
-            .maybeSingle();
-      } catch (e) {
-        debugPrint("❌ Error al consultar perfiles_usuarios: $e");
-      }
-    }
   }
 
   @override
@@ -96,16 +168,13 @@ class _MainLayoutState extends State<MainLayout> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _indiceActual,
         onTap: (index) {
-          // 3. Si se presiona el botón de Mapa (índice 0), refrescamos datos
           if (index == 0) {
             mapScreenKey.currentState?.cargarLavaderosDeSupabase();
           }
 
           if (index == 1 && supabase.auth.currentUser == null) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("⚠️ Debes iniciar sesión para ver tus turnos"),
-              ),
+              const SnackBar(content: Text("⚠️ Debes iniciar sesión")),
             );
             setState(() => _indiceActual = 2);
           } else {
@@ -128,7 +197,7 @@ class _MainLayoutState extends State<MainLayout> {
   }
 }
 
-// --- PANTALLA DE MAPA (CON REALTIME Y REFRESH EXTERNO) ---
+// --- PANTALLA DE MAPA ---
 class MapScreen extends StatefulWidget {
   const MapScreen({super.key});
   @override
@@ -138,18 +207,28 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   List<Marker> _markers = [];
   RealtimeChannel? _channel;
+  String _userRol = 'pendiente';
 
   @override
   void initState() {
     super.initState();
+    _checkUserRol();
     cargarLavaderosDeSupabase();
     _suscribirARealtime();
   }
 
-  @override
-  void dispose() {
-    if (_channel != null) supabase.removeChannel(_channel!);
-    super.dispose();
+  Future<void> _checkUserRol() async {
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      final data = await supabase
+          .from('perfiles_usuarios')
+          .select('rol')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (data != null && mounted) {
+        setState(() => _userRol = data['rol'] ?? 'pendiente');
+      }
+    }
   }
 
   void _suscribirARealtime() {
@@ -159,16 +238,13 @@ class _MapScreenState extends State<MapScreen> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'lavaderos',
-          callback: (payload) {
-            debugPrint('🔥 Cambio detectado en lavaderos!');
-            cargarLavaderosDeSupabase();
-          },
+          callback: (payload) => cargarLavaderosDeSupabase(),
         )
         .subscribe();
   }
 
-  // 4. Función pública para que el NavBar pueda activarla
   Future<void> cargarLavaderosDeSupabase() async {
+    _checkUserRol();
     final data = await supabase.from('lavaderos').select();
     if (mounted) {
       setState(() {
@@ -188,7 +264,6 @@ class _MapScreenState extends State<MapScreen> {
           );
         }).toList();
       });
-      debugPrint("📍 Lavaderos refrescados desde la barra de navegación");
     }
   }
 
@@ -216,37 +291,42 @@ class _MapScreenState extends State<MapScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              "Dirección: ${l['direccion'] ?? 'Zárate, Centro'}",
+              "Dirección: ${l['direccion'] ?? 'Zárate'}",
               style: TextStyle(color: Colors.grey[600]),
             ),
             const Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEF4444),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+            if (_userRol == 'cliente')
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFFEF4444),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ReservaScreen(lavadero: l),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    "SOLICITAR TURNO",
+                    style: TextStyle(color: Colors.white),
                   ),
                 ),
-                onPressed: () {
-                  Navigator.pop(context);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ReservaScreen(lavadero: l),
-                    ),
-                  );
-                },
-                child: const Text(
-                  "SOLICITAR TURNO",
+              )
+            else
+              const Center(
+                child: Text(
+                  "Solo clientes pueden reservar.",
                   style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.orange,
                   ),
                 ),
               ),
-            ),
           ],
         ),
       ),
@@ -273,13 +353,6 @@ class _MapScreenState extends State<MapScreen> {
           MarkerLayer(markers: _markers),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        mini: true,
-        backgroundColor: const Color(0xFF3ABEF9),
-        foregroundColor: Colors.white,
-        onPressed: cargarLavaderosDeSupabase,
-        child: const Icon(Icons.refresh),
-      ),
     );
   }
 }
@@ -293,7 +366,8 @@ class PerfilScreen extends StatefulWidget {
 
 class _PerfilScreenState extends State<PerfilScreen> {
   final TextEditingController _patenteController = TextEditingController();
-  bool _cargandoPatente = false;
+  String _rolUsuario = 'pendiente';
+  bool _cargando = true;
 
   @override
   void initState() {
@@ -304,38 +378,58 @@ class _PerfilScreenState extends State<PerfilScreen> {
   Future<void> _cargarDatosPerfil() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
-      final data = await supabase
-          .from('perfiles_usuarios')
-          .select('patente')
-          .eq('id', user.id)
-          .maybeSingle();
-      if (data != null && data['patente'] != null) {
-        setState(() => _patenteController.text = data['patente']);
+      try {
+        final data = await supabase
+            .from('perfiles_usuarios')
+            .select()
+            .eq('id', user.id)
+            .maybeSingle();
+        if (mounted) {
+          setState(() {
+            if (data != null) {
+              _patenteController.text = data['patente'] ?? '';
+              _rolUsuario = data['rol'] ?? 'pendiente';
+            }
+            _cargando = false;
+          });
+        }
+      } catch (e) {
+        if (mounted) setState(() => _cargando = false);
       }
+    } else {
+      if (mounted) setState(() => _cargando = false);
+    }
+  }
+
+  Future<void> _cerrarSesion() async {
+    await supabase.auth.signOut();
+    if (mounted) {
+      setState(() {
+        _rolUsuario = 'pendiente';
+        _patenteController.clear();
+      });
     }
   }
 
   Future<void> _guardarPatente() async {
     final user = supabase.auth.currentUser;
-    if (user == null || _patenteController.text.isEmpty) return;
-    setState(() => _cargandoPatente = true);
-    try {
-      await supabase
-          .from('perfiles_usuarios')
-          .update({'patente': _patenteController.text.toUpperCase()})
-          .eq('id', user.id);
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("✅ Patente actualizada")));
-    } finally {
-      if (mounted) setState(() => _cargandoPatente = false);
-    }
+    if (user == null) return;
+    await supabase
+        .from('perfiles_usuarios')
+        .update({'patente': _patenteController.text.toUpperCase()})
+        .eq('id', user.id);
+    if (mounted)
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("✅ Patente guardada")));
   }
 
   @override
   Widget build(BuildContext context) {
     final usuario = supabase.auth.currentUser;
+    if (_cargando)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mi Perfil"),
@@ -349,63 +443,70 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     supabase.auth.signInWithOAuth(OAuthProvider.google),
                 child: const Text("Entrar con Google"),
               )
-            : Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAvatar(
-                    radius: 50,
-                    backgroundImage: NetworkImage(
-                      usuario.userMetadata?['avatar_url'] ?? '',
-                    ),
-                  ),
-                  const SizedBox(height: 15),
-                  Text(
-                    usuario.userMetadata?['full_name'] ?? 'Usuario',
-                    style: const TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 30),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: TextField(
-                      controller: _patenteController,
-                      decoration: InputDecoration(
-                        labelText: "Patente",
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.save, color: Colors.green),
-                          onPressed: _guardarPatente,
-                        ),
+            : Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundImage: NetworkImage(
+                        usuario.userMetadata?['avatar_url'] ?? '',
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.blueGrey,
-                      foregroundColor: Colors.white,
+                    const SizedBox(height: 10),
+                    Text(
+                      usuario.userMetadata?['full_name'] ?? 'Usuario',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    icon: const Icon(Icons.add_business),
-                    label: const Text("REGISTRAR MI LAVADERO"),
-                    onPressed: () async {
-                      await Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const RegistroLavaderoScreen(),
+                    const Divider(height: 40),
+                    Text(
+                      "MODO: ${_rolUsuario.toUpperCase()}",
+                      style: const TextStyle(
+                        color: Colors.blueGrey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    if (_rolUsuario == 'cliente')
+                      TextField(
+                        controller: _patenteController,
+                        decoration: InputDecoration(
+                          labelText: "Tu Patente",
+                          suffixIcon: IconButton(
+                            icon: const Icon(Icons.save, color: Colors.green),
+                            onPressed: _guardarPatente,
+                          ),
                         ),
-                      );
-                      debugPrint("🔄 El usuario volvió del registro");
-                    },
-                  ),
-                  TextButton(
-                    onPressed: () => supabase.auth.signOut(),
-                    child: const Text(
-                      "Cerrar Sesión",
-                      style: TextStyle(color: Colors.red),
+                      ),
+                    if (_rolUsuario == 'lavadero')
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueGrey,
+                          foregroundColor: Colors.white,
+                        ),
+                        icon: const Icon(Icons.add_business),
+                        label: const Text("REGISTRAR MI LAVADERO"),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                const RegistroLavaderoScreen(),
+                          ),
+                        ),
+                      ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: _cerrarSesion,
+                      child: const Text(
+                        "Cerrar Sesión",
+                        style: TextStyle(color: Colors.red),
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
       ),
     );
@@ -424,6 +525,15 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _direccionController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
+  bool _mostrarMapa = false;
+  LatLng _punto = const LatLng(-34.098, -59.028);
+
+  @override
+  void initState() {
+    super.initState();
+    _latController.text = _punto.latitude.toString();
+    _lngController.text = _punto.longitude.toString();
+  }
 
   Future<void> _registrar() async {
     final user = supabase.auth.currentUser;
@@ -452,8 +562,8 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Registrar Lavadero")),
-      body: Padding(
+      appBar: AppBar(title: const Text("Ubicar Lavadero")),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
@@ -465,22 +575,84 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               controller: _direccionController,
               decoration: const InputDecoration(labelText: "Dirección"),
             ),
-            TextField(
-              controller: _latController,
-              decoration: const InputDecoration(
-                labelText: "Latitud (ej: -34.09)",
-              ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _latController,
+                    readOnly: true,
+                    decoration: const InputDecoration(labelText: "Latitud"),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextField(
+                    controller: _lngController,
+                    readOnly: true,
+                    decoration: const InputDecoration(labelText: "Longitud"),
+                  ),
+                ),
+              ],
             ),
-            TextField(
-              controller: _lngController,
-              decoration: const InputDecoration(
-                labelText: "Longitud (ej: -59.02)",
-              ),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              icon: Icon(_mostrarMapa ? Icons.close : Icons.map),
+              label: Text(_mostrarMapa ? "Cerrar Mapa" : "Seleccionar en Mapa"),
+              onPressed: () => setState(() => _mostrarMapa = !_mostrarMapa),
             ),
+            if (_mostrarMapa)
+              Container(
+                height: 300, // ALTURA FIJA PARA QUE EL MAPA NO DESAPAREZCA
+                margin: const EdgeInsets.symmetric(vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.blue),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: FlutterMap(
+                    options: MapOptions(
+                      initialCenter: _punto,
+                      initialZoom: 15,
+                      onTap: (tapPos, p) => setState(() {
+                        _punto = p;
+                        _latController.text = p.latitude.toString();
+                        _lngController.text = p.longitude.toString();
+                      }),
+                    ),
+                    children: [
+                      TileLayer(
+                        urlTemplate:
+                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      ),
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: _punto,
+                            child: const Icon(
+                              Icons.location_on,
+                              color: Colors.red,
+                              size: 40,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
             const SizedBox(height: 20),
             ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 50),
+                backgroundColor: const Color(0xFFEF4444),
+              ),
               onPressed: _registrar,
-              child: const Text("GUARDAR LAVADERO"),
+              child: const Text(
+                "GUARDAR LAVADERO",
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
         ),
