@@ -58,7 +58,6 @@ class _SeleccionRolScreenState extends State<SeleccionRolScreen> {
 
     setState(() => _procesando = true);
     try {
-      // Usamos upsert para crear o actualizar el perfil en SQL inmediatamente
       await supabase.from('perfiles_usuarios').upsert({
         'id': user.id,
         'rol': nuevoRol,
@@ -147,8 +146,11 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _indiceActual = 0;
 
-  late final List<Widget> _paginas = [
-    MapScreen(key: mapScreenKey),
+  List<Widget> get _paginas => [
+    MapScreen(
+      key: mapScreenKey,
+      onIrAPerfil: () => setState(() => _indiceActual = 2),
+    ),
     const MisTurnosScreen(),
     const PerfilScreen(),
   ];
@@ -171,7 +173,6 @@ class _MainLayoutState extends State<MainLayout> {
           if (index == 0) {
             mapScreenKey.currentState?.cargarLavaderosDeSupabase();
           }
-
           if (index == 1 && supabase.auth.currentUser == null) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("⚠️ Debes iniciar sesión")),
@@ -199,7 +200,9 @@ class _MainLayoutState extends State<MainLayout> {
 
 // --- PANTALLA DE MAPA ---
 class MapScreen extends StatefulWidget {
-  const MapScreen({super.key});
+  final VoidCallback? onIrAPerfil;
+  const MapScreen({super.key, this.onIrAPerfil});
+
   @override
   State<MapScreen> createState() => _MapScreenState();
 }
@@ -335,11 +338,55 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final user = supabase.auth.currentUser;
+    final String? avatarUrl = user?.userMetadata?['avatar_url'];
+    final String primerNombre = (user?.userMetadata?['full_name'] ?? 'Usuario')
+        .split(' ')[0];
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("ATT: A Todo Trapo"),
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
+        actions: [
+          if (user != null)
+            // MODIFICACIÓN: MouseRegion para mostrar la manito
+            MouseRegion(
+              cursor: SystemMouseCursors.click,
+              child: GestureDetector(
+                onTap: widget.onIrAPerfil,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 15.0),
+                  child: Row(
+                    children: [
+                      Text(
+                        primerNombre,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      CircleAvatar(
+                        radius: 18,
+                        backgroundColor: Colors.white24,
+                        backgroundImage: avatarUrl != null
+                            ? NetworkImage(avatarUrl)
+                            : null,
+                        child: avatarUrl == null
+                            ? const Icon(
+                                Icons.person,
+                                color: Colors.white,
+                                size: 20,
+                              )
+                            : null,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: FlutterMap(
         options: const MapOptions(
@@ -357,7 +404,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 }
 
-// --- PANTALLA DE PERFIL ---
+// --- PANTALLA DE PERFIL (Se mantiene igual) ---
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
   @override
@@ -403,12 +450,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   Future<void> _cerrarSesion() async {
     await supabase.auth.signOut();
-    if (mounted) {
+    if (mounted)
       setState(() {
         _rolUsuario = 'pendiente';
         _patenteController.clear();
       });
-    }
   }
 
   Future<void> _guardarPatente() async {
@@ -429,7 +475,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
     final usuario = supabase.auth.currentUser;
     if (_cargando)
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mi Perfil"),
@@ -513,7 +558,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 }
 
-// --- PANTALLA: REGISTRO DE LAVADERO ---
+// --- PANTALLA: REGISTRO DE LAVADERO (Se mantiene igual) ---
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
   @override
@@ -603,7 +648,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
             ),
             if (_mostrarMapa)
               Container(
-                height: 300, // ALTURA FIJA PARA QUE EL MAPA NO DESAPAREZCA
+                height: 300,
                 margin: const EdgeInsets.symmetric(vertical: 10),
                 decoration: BoxDecoration(
                   border: Border.all(color: Colors.blue),
