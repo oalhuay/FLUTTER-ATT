@@ -336,6 +336,50 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Future<void> _generarLavaderosAutomaticos() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final nuevosLavaderos = [
+      {
+        'dueño_id': user.id,
+        'razon_social': 'Lavadero Express Zárate',
+        'direccion': 'Av. Lavalle 1200',
+        'latitud': -34.098,
+        'longitud': -59.028,
+        'telefono_contacto': '12345678', // Nombre corregido según tu SQL
+        'cuit': '20-12345678-9', // Agregado porque es UNIQUE
+        'duracion_estandar_min': 45,
+      },
+      {
+        'dueño_id': user.id,
+        'razon_social': 'A Todo Trapo Premium',
+        'direccion': 'Justa Lima 500',
+        'latitud': -34.102,
+        'longitud': -59.022,
+        'telefono_contacto': '87654321', // Nombre corregido según tu SQL
+        'cuit': '20-87654321-0', // Agregado porque es UNIQUE
+        'duracion_estandar_min': 60,
+      },
+    ];
+
+    try {
+      await supabase.from('lavaderos').insert(nuevosLavaderos);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Lavaderos de prueba creados")),
+        );
+      }
+    } catch (e) {
+      debugPrint("❌ Error al generar: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
