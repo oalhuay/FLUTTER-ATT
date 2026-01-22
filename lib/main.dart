@@ -417,62 +417,95 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
       onEnter: (_) => setState(() => _isHovered = true),
       onExit: (_) => setState(() => _isHovered = false),
       child: Stack(
-        alignment: Alignment.bottomCenter, // El pin siempre abajo
+        alignment: Alignment.bottomCenter,
+        clipBehavior: Clip.none, // Evita que la animación se corte al crecer
         children: [
-          if (_isHovered)
-            Positioned(
-              bottom: 50, // Eleva el popup sobre el pin
-              child: Container(
-                width: 180,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black26, blurRadius: 8),
-                  ],
-                  border: Border.all(
-                    color: const Color(0xFF3ABEF9),
-                    width: 1.5,
+          // --- POPUP ANIMADO ---
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            bottom: _isHovered ? 55 : 30, // El cartel "sube" al aparecer
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 300),
+              scale: _isHovered ? 1.0 : 0.0, // De 0 a 100% de tamaño
+              curve: Curves.easeOutBack, // b minúscula corregida
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: _isHovered ? 1.0 : 0.0,
+                child: Container(
+                  width: 180,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: const Color(0xFF3ABEF9),
+                      width: 1.5,
+                    ),
                   ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        'https://picsum.photos/seed/${widget.l['id']}/200/120',
-                        height: 80,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        // Evita que el marcador desaparezca si la imagen tarda en cargar
-                        errorBuilder: (context, error, stackTrace) =>
-                            Container(height: 80, color: Colors.grey[200]),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          'https://picsum.photos/seed/${widget.l['id']}/200/120',
+                          height: 80,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                height: 80,
+                                color: Colors.grey[200],
+                                child: const Icon(Icons.image_not_supported),
+                              ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.l['razon_social'] ?? 'Lavadero',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.l['razon_social'] ?? 'Lavadero',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
                       ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
+                      const Text(
+                        "⭐ 4.5 | Disponible",
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
-          // El Icono siempre debe estar presente y ser el centro de atención del Marker
+          ),
+
+          // --- ICONO DEL PIN (TAMBIÉN SE AGRANDA UN POCO) ---
           GestureDetector(
             onTap: widget.alTocar,
-            child: Icon(
-              Icons.location_on,
-              color: _isHovered
-                  ? const Color(0xFFEF4444)
-                  : const Color(0xFF3ABEF9),
-              size: 45,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 200),
+              scale: _isHovered ? 1.2 : 1.0, // El pin crece un 20% en hover
+              child: Icon(
+                Icons.location_on,
+                color: _isHovered
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFF3ABEF9),
+                size: 45,
+              ),
             ),
           ),
         ],
