@@ -22,9 +22,17 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _bancoController = TextEditingController();
   final _cuentaController = TextEditingController();
 
+  // --- LÓGICA DE SERVICIOS (TAGS) ---
+  final _tagController = TextEditingController();
+  final List<String> _servicios = [
+    'Lavado',
+    'Control de aire/ruedas',
+    'Venta de insumos',
+  ];
+
   final supabase = Supabase.instance.client;
 
-  bool _mostrarMapa = true; // Lo dejamos visible por defecto para mejor UX
+  bool _mostrarMapa = true;
   LatLng _puntoSeleccionado = const LatLng(-34.098, -59.028);
 
   @override
@@ -38,11 +46,20 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     _lngController.text = punto.longitude.toStringAsFixed(6);
   }
 
+  // Método para añadir tags personalizados
+  void _addTag(String val) {
+    if (val.isNotEmpty && !_servicios.contains(val)) {
+      setState(() {
+        _servicios.add(val);
+        _tagController.clear();
+      });
+    }
+  }
+
   Future<void> _registrar() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    // Validación de campos obligatorios
     if (_nombreController.text.isEmpty ||
         _direccionController.text.isEmpty ||
         _telefonoController.text.isEmpty) {
@@ -64,6 +81,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         'cuenta_bancaria': _cuentaController.text,
         'latitud': double.parse(_latController.text),
         'longitud': double.parse(_lngController.text),
+        'servicios': _servicios, // Se envía la lista de tags
       });
 
       if (mounted) {
@@ -84,7 +102,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F9), // Fondo suave
+      backgroundColor: const Color(0xFFF4F7F9),
       appBar: AppBar(
         title: const Text("Configurar mi Lavadero"),
         backgroundColor: const Color(0xFF3ABEF9),
@@ -95,7 +113,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            // --- SECCIÓN 1: REGISTRO DE LAVADERO ---
+            // --- SECCIÓN 1: DATOS DEL LAVADERO ---
             _buildSectionCard(
               title: "Datos del Lavadero",
               icon: Icons.local_car_wash,
@@ -117,6 +135,64 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                   "Teléfono de contacto",
                   Icons.phone,
                   type: TextInputType.phone,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // --- NUEVA SECCIÓN: SERVICIOS OFRECIDOS (TAGS) ---
+            _buildSectionCard(
+              title: "Servicios Ofrecidos",
+              icon: Icons.list_alt,
+              children: [
+                const Text(
+                  "Define tus servicios. Escribe y presiona Enter para añadir.",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 15),
+                Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  children: _servicios.map((s) {
+                    final bool esFijo = s == 'Lavado';
+                    return Chip(
+                      label: Text(
+                        s,
+                        style: TextStyle(
+                          color: esFijo ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      backgroundColor: esFijo
+                          ? const Color(0xFF3ABEF9)
+                          : Colors.white,
+                      side: BorderSide(
+                        color: const Color(0xFF3ABEF9).withOpacity(0.5),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      onDeleted: esFijo
+                          ? null
+                          : () => setState(() => _servicios.remove(s)),
+                      deleteIconColor: Colors.redAccent,
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: _tagController,
+                  decoration: InputDecoration(
+                    hintText: "Ej: Encerado, Pulido...",
+                    prefixIcon: const Icon(
+                      Icons.add_circle_outline,
+                      color: Color(0xFF3ABEF9),
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  onSubmitted: _addTag,
                 ),
               ],
             ),
@@ -206,7 +282,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
             // --- BOTÓN DE GUARDADO ---
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444), // Rojo ATT
+                backgroundColor: const Color(0xFFEF4444),
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 60),
                 shape: RoundedRectangleBorder(
@@ -227,7 +303,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     );
   }
 
-  // Widget para agrupar campos en tarjetas estéticas
   Widget _buildSectionCard({
     required String title,
     required IconData icon,
@@ -262,7 +337,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     );
   }
 
-  // Widget para crear campos de texto uniformes
   Widget _buildField(
     TextEditingController controller,
     String label,
