@@ -254,16 +254,11 @@ class _MapScreenState extends State<MapScreen> {
         _markers = (data as List).map((l) {
           return Marker(
             point: LatLng(l['latitud'], l['longitud']),
-            width: 80,
-            height: 80,
-            child: GestureDetector(
-              onTap: () => _mostrarCartel(l),
-              child: const Icon(
-                Icons.location_on,
-                color: Color(0xFF3ABEF9),
-                size: 45,
-              ),
-            ),
+            width: 200, // Espacio suficiente para el popup
+            height: 250, // Espacio suficiente para que no desaparezca
+            alignment:
+                Alignment.topCenter, // Importante para que el pin no se mueva
+            child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
           );
         }).toList();
       });
@@ -336,50 +331,6 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Future<void> _generarLavaderosAutomaticos() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-
-    final nuevosLavaderos = [
-      {
-        'dueño_id': user.id,
-        'razon_social': 'Lavadero Express Zárate',
-        'direccion': 'Av. Lavalle 1200',
-        'latitud': -34.098,
-        'longitud': -59.028,
-        'telefono_contacto': '12345678', // Nombre corregido según tu SQL
-        'cuit': '20-12345678-9', // Agregado porque es UNIQUE
-        'duracion_estandar_min': 45,
-      },
-      {
-        'dueño_id': user.id,
-        'razon_social': 'A Todo Trapo Premium',
-        'direccion': 'Justa Lima 500',
-        'latitud': -34.102,
-        'longitud': -59.022,
-        'telefono_contacto': '87654321', // Nombre corregido según tu SQL
-        'cuit': '20-87654321-0', // Agregado porque es UNIQUE
-        'duracion_estandar_min': 60,
-      },
-    ];
-
-    try {
-      await supabase.from('lavaderos').insert(nuevosLavaderos);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Lavaderos de prueba creados")),
-        );
-      }
-    } catch (e) {
-      debugPrint("❌ Error al generar: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Error: $e")));
-      }
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
@@ -394,7 +345,6 @@ class _MapScreenState extends State<MapScreen> {
         foregroundColor: Colors.white,
         actions: [
           if (user != null)
-            // MODIFICACIÓN: MouseRegion para mostrar la manito
             MouseRegion(
               cursor: SystemMouseCursors.click,
               child: GestureDetector(
@@ -448,7 +398,90 @@ class _MapScreenState extends State<MapScreen> {
   }
 }
 
-// --- PANTALLA DE PERFIL (Se mantiene igual) ---
+// --- WIDGET PERSONALIZADO PARA EL MARCADOR CON POPUP (Evita Dead Code) ---
+class MarkerConPopup extends StatefulWidget {
+  final dynamic l;
+  final VoidCallback alTocar;
+  const MarkerConPopup({super.key, required this.l, required this.alTocar});
+
+  @override
+  State<MarkerConPopup> createState() => _MarkerConPopupState();
+}
+
+class _MarkerConPopupState extends State<MarkerConPopup> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      child: Stack(
+        alignment: Alignment.bottomCenter, // El pin siempre abajo
+        children: [
+          if (_isHovered)
+            Positioned(
+              bottom: 50, // Eleva el popup sobre el pin
+              child: Container(
+                width: 180,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(color: Colors.black26, blurRadius: 8),
+                  ],
+                  border: Border.all(
+                    color: const Color(0xFF3ABEF9),
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.network(
+                        'https://picsum.photos/seed/${widget.l['id']}/200/120',
+                        height: 80,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        // Evita que el marcador desaparezca si la imagen tarda en cargar
+                        errorBuilder: (context, error, stackTrace) =>
+                            Container(height: 80, color: Colors.grey[200]),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.l['razon_social'] ?? 'Lavadero',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // El Icono siempre debe estar presente y ser el centro de atención del Marker
+          GestureDetector(
+            onTap: widget.alTocar,
+            child: Icon(
+              Icons.location_on,
+              color: _isHovered
+                  ? const Color(0xFFEF4444)
+                  : const Color(0xFF3ABEF9),
+              size: 45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
   const PerfilScreen({super.key});
   @override
@@ -602,7 +635,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 }
 
-// --- PANTALLA: REGISTRO DE LAVADERO (Se mantiene igual) ---
+// --- PANTALLA: REGISTRO DE LAVADERO ---
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
   @override
