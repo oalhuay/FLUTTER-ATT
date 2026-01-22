@@ -11,20 +11,25 @@ class RegistroLavaderoScreen extends StatefulWidget {
 }
 
 class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
+  // Controladores existentes
   final _nombreController = TextEditingController();
   final _direccionController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
+
+  // NUEVOS Controladores según documentación
+  final _telefonoController = TextEditingController();
+  final _bancoController = TextEditingController();
+  final _cuentaController = TextEditingController();
+
   final supabase = Supabase.instance.client;
 
-  bool _mostrarMapa = false;
-  // Posición inicial: Zárate, Argentina
+  bool _mostrarMapa = true; // Lo dejamos visible por defecto para mejor UX
   LatLng _puntoSeleccionado = const LatLng(-34.098, -59.028);
 
   @override
   void initState() {
     super.initState();
-    // Inicializamos con los valores por defecto para evitar errores de null
     _actualizarControllers(_puntoSeleccionado);
   }
 
@@ -37,19 +42,26 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    if (_nombreController.text.isEmpty || _direccionController.text.isEmpty) {
+    // Validación de campos obligatorios
+    if (_nombreController.text.isEmpty ||
+        _direccionController.text.isEmpty ||
+        _telefonoController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Por favor, completa el nombre y la dirección")),
+        const SnackBar(
+          content: Text("⚠️ Por favor, completa los datos del lavadero"),
+        ),
       );
       return;
     }
 
     try {
-      // Importante: Verifica que el nombre de la columna sea 'dueño_id' o 'dueno_id' en tu DB
       await supabase.from('lavaderos').insert({
-        'dueño_id': user.id, 
+        'dueño_id': user.id,
         'razon_social': _nombreController.text,
         'direccion': _direccionController.text,
+        'telefono': _telefonoController.text,
+        'nombre_banco': _bancoController.text,
+        'cuenta_bancaria': _cuentaController.text,
         'latitud': double.parse(_latController.text),
         'longitud': double.parse(_lngController.text),
       });
@@ -58,13 +70,13 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("✅ Lavadero registrado con éxito")),
         );
-        Navigator.pop(context); 
+        Navigator.pop(context);
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Error al guardar: $e")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("❌ Error al guardar: $e")));
       }
     }
   }
@@ -72,146 +84,205 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF4F7F9), // Fondo suave
       appBar: AppBar(
-        title: const Text("Registrar Lavadero"),
+        title: const Text("Configurar mi Lavadero"),
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            // --- SECCIÓN 1: REGISTRO DE LAVADERO ---
+            _buildSectionCard(
+              title: "Datos del Lavadero",
+              icon: Icons.local_car_wash,
+              children: [
+                _buildField(
+                  _nombreController,
+                  "Nombre Comercial",
+                  Icons.storefront,
+                ),
+                const SizedBox(height: 15),
+                _buildField(
+                  _direccionController,
+                  "Dirección (Calle y altura)",
+                  Icons.location_on,
+                ),
+                const SizedBox(height: 15),
+                _buildField(
+                  _telefonoController,
+                  "Teléfono de contacto",
+                  Icons.phone,
+                  type: TextInputType.phone,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // --- SECCIÓN 2: UBICACIÓN GEOGRÁFICA ---
+            _buildSectionCard(
+              title: "Ubicación Geográfica",
+              icon: Icons.map,
+              children: [
+                const Text(
+                  "Toca el mapa para posicionar el marcador exacto",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 10),
+                Container(
+                  height: 250,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    border: Border.all(
+                      color: const Color(0xFF3ABEF9).withOpacity(0.3),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(15),
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: _puntoSeleccionado,
+                        initialZoom: 15,
+                        onTap: (tapPosition, point) {
+                          setState(() {
+                            _puntoSeleccionado = point;
+                            _actualizarControllers(point);
+                          });
+                        },
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate:
+                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: _puntoSeleccionado,
+                              width: 50,
+                              height: 50,
+                              child: const Icon(
+                                Icons.location_on,
+                                color: Color(0xFFEF4444),
+                                size: 45,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
+            // --- SECCIÓN 3: REGISTRO BANCARIO ---
+            _buildSectionCard(
+              title: "Registro Bancario (Cobros)",
+              icon: Icons.account_balance,
+              children: [
+                _buildField(
+                  _bancoController,
+                  "Nombre de Banco",
+                  Icons.account_balance_wallet,
+                ),
+                const SizedBox(height: 15),
+                _buildField(
+                  _cuentaController,
+                  "Cuenta Bancaria (CBU/Alias)",
+                  Icons.credit_card,
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 30),
+
+            // --- BOTÓN DE GUARDADO ---
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444), // Rojo ATT
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 60),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+                elevation: 4,
+              ),
+              onPressed: _registrar,
+              child: const Text(
+                "GUARDAR CONFIGURACIÓN",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // Widget para agrupar campos en tarjetas estéticas
+  Widget _buildSectionCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            TextField(
-              controller: _nombreController,
-              decoration: const InputDecoration(
-                labelText: "Nombre Comercial",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _direccionController,
-              decoration: const InputDecoration(
-                labelText: "Dirección (Calle y altura)",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 20),
-            
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  "Ubicación del Lavadero:",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                ),
-                TextButton.icon(
-                  onPressed: () => setState(() => _mostrarMapa = !_mostrarMapa),
-                  icon: Icon(_mostrarMapa ? Icons.layers_clear : Icons.map),
-                  label: Text(_mostrarMapa ? "Ocultar Mapa" : "Seleccionar en Mapa"),
-                ),
-              ],
-            ),
-
-            if (_mostrarMapa) ...[
-              const Text(
-                "Toca el mapa para posicionar el marcador",
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                height: 300, // Altura fija para asegurar visibilidad
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(15),
-                  border: Border.all(color: Colors.blueGrey.shade200),
-                ),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(15),
-                  child: FlutterMap(
-                    options: MapOptions(
-                      initialCenter: _puntoSeleccionado,
-                      initialZoom: 15,
-                      onTap: (tapPosition, point) {
-                        setState(() {
-                          _puntoSeleccionado = point;
-                          _actualizarControllers(point);
-                        });
-                      },
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'com.tuapp.att',
-                      ),
-                      MarkerLayer(
-                        markers: [
-                          Marker(
-                            point: _puntoSeleccionado,
-                            width: 50,
-                            height: 50,
-                            child: const Icon(
-                              Icons.location_on,
-                              color: Color(0xFFEF4444),
-                              size: 45,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-
-            const SizedBox(height: 20),
             Row(
               children: [
-                Expanded(
-                  child: TextField(
-                    controller: _latController,
-                    readOnly: true, // Evita errores de escritura manual
-                    decoration: const InputDecoration(
-                      labelText: "Latitud",
-                      prefixIcon: Icon(Icons.gps_fixed, size: 18),
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                ),
+                Icon(icon, color: const Color(0xFF3ABEF9), size: 22),
                 const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _lngController,
-                    readOnly: true,
-                    decoration: const InputDecoration(
-                      labelText: "Longitud",
-                      prefixIcon: Icon(Icons.gps_fixed, size: 18),
-                      border: OutlineInputBorder(),
-                    ),
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 30),
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFEF4444),
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                ),
-                onPressed: _registrar,
-                child: const Text(
-                  "GUARDAR LAVADERO",
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ),
+            const Divider(height: 30),
+            ...children,
           ],
+        ),
+      ),
+    );
+  }
+
+  // Widget para crear campos de texto uniformes
+  Widget _buildField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    TextInputType type = TextInputType.text,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: type,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: const Color(0xFF3ABEF9), size: 20),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey.shade300),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: Color(0xFF3ABEF9), width: 2),
         ),
       ),
     );

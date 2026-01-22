@@ -254,11 +254,16 @@ class _MapScreenState extends State<MapScreen> {
         _markers = (data as List).map((l) {
           return Marker(
             point: LatLng(l['latitud'], l['longitud']),
-            width: 200, // Espacio suficiente para el popup
-            height: 250, // Espacio suficiente para que no desaparezca
-            alignment:
-                Alignment.topCenter, // Importante para que el pin no se mueva
-            child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
+            width: 80,
+            height: 80,
+            child: GestureDetector(
+              onTap: () => _mostrarCartel(l),
+              child: const Icon(
+                Icons.location_on,
+                color: Color(0xFF3ABEF9),
+                size: 45,
+              ),
+            ),
           );
         }).toList();
       });
@@ -392,89 +397,6 @@ class _MapScreenState extends State<MapScreen> {
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           ),
           MarkerLayer(markers: _markers),
-        ],
-      ),
-    );
-  }
-}
-
-// --- WIDGET PERSONALIZADO PARA EL MARCADOR CON POPUP (Evita Dead Code) ---
-class MarkerConPopup extends StatefulWidget {
-  final dynamic l;
-  final VoidCallback alTocar;
-  const MarkerConPopup({super.key, required this.l, required this.alTocar});
-
-  @override
-  State<MarkerConPopup> createState() => _MarkerConPopupState();
-}
-
-class _MarkerConPopupState extends State<MarkerConPopup> {
-  bool _isHovered = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
-      child: Stack(
-        alignment: Alignment.bottomCenter, // El pin siempre abajo
-        children: [
-          if (_isHovered)
-            Positioned(
-              bottom: 50, // Eleva el popup sobre el pin
-              child: Container(
-                width: 180,
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black26, blurRadius: 8),
-                  ],
-                  border: Border.all(
-                    color: const Color(0xFF3ABEF9),
-                    width: 1.5,
-                  ),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        'https://picsum.photos/seed/${widget.l['id']}/200/120',
-                        height: 80,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                        // Evita que el marcador desaparezca si la imagen tarda en cargar
-                        errorBuilder: (context, error, stackTrace) =>
-                            Container(height: 80, color: Colors.grey[200]),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      widget.l['razon_social'] ?? 'Lavadero',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          // El Icono siempre debe estar presente y ser el centro de atención del Marker
-          GestureDetector(
-            onTap: widget.alTocar,
-            child: Icon(
-              Icons.location_on,
-              color: _isHovered
-                  ? const Color(0xFFEF4444)
-                  : const Color(0xFF3ABEF9),
-              size: 45,
-            ),
-          ),
         ],
       ),
     );
@@ -635,7 +557,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 }
 
-// --- PANTALLA: REGISTRO DE LAVADERO ---
+// --- PANTALLA: REGISTRO DE LAVADERO (CON PERSONALIZACIÓN) ---
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
   @override
@@ -645,9 +567,12 @@ class RegistroLavaderoScreen extends StatefulWidget {
 class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _nombreController = TextEditingController();
   final _direccionController = TextEditingController();
+  final _telefonoController = TextEditingController();
+  final _bancoController = TextEditingController();
+  final _cuentaController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
-  bool _mostrarMapa = false;
+
   LatLng _punto = const LatLng(-34.098, -59.028);
 
   @override
@@ -665,13 +590,16 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         'dueño_id': user.id,
         'razon_social': _nombreController.text,
         'direccion': _direccionController.text,
+        'telefono': _telefonoController.text,
+        'nombre_banco': _bancoController.text,
+        'cuenta_bancaria': _cuentaController.text,
         'latitud': double.parse(_latController.text),
         'longitud': double.parse(_lngController.text),
       });
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("✅ Lavadero registrado")));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Lavadero configurado a todo trapo")),
+        );
         Navigator.pop(context);
       }
     } catch (e) {
@@ -684,60 +612,37 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Ubicar Lavadero")),
+      backgroundColor: const Color(0xFFF4F7F9),
+      appBar: AppBar(
+        title: const Text("Mi Lavadero"),
+        backgroundColor: const Color(0xFF3ABEF9),
+        foregroundColor: Colors.white,
+      ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            TextField(
-              controller: _nombreController,
-              decoration: const InputDecoration(labelText: "Nombre Comercial"),
-            ),
-            TextField(
-              controller: _direccionController,
-              decoration: const InputDecoration(labelText: "Dirección"),
-            ),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _latController,
-                    readOnly: true,
-                    decoration: const InputDecoration(labelText: "Latitud"),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextField(
-                    controller: _lngController,
-                    readOnly: true,
-                    decoration: const InputDecoration(labelText: "Longitud"),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            ElevatedButton.icon(
-              icon: Icon(_mostrarMapa ? Icons.close : Icons.map),
-              label: Text(_mostrarMapa ? "Cerrar Mapa" : "Seleccionar en Mapa"),
-              onPressed: () => setState(() => _mostrarMapa = !_mostrarMapa),
-            ),
-            if (_mostrarMapa)
-              Container(
-                height: 300,
-                margin: const EdgeInsets.symmetric(vertical: 10),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.blue),
-                  borderRadius: BorderRadius.circular(10),
-                ),
+            _cardSeccion("Información del Negocio", Icons.store, [
+              _input(_nombreController, "Nombre Comercial", Icons.badge),
+              _input(_direccionController, "Dirección", Icons.location_on),
+              _input(
+                _telefonoController,
+                "Teléfono",
+                Icons.phone,
+                k: TextInputType.phone,
+              ),
+            ]),
+            const SizedBox(height: 15),
+            _cardSeccion("Ubicación exacta (Toca el mapa)", Icons.pin_drop, [
+              SizedBox(
+                height: 200,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(15),
                   child: FlutterMap(
                     options: MapOptions(
                       initialCenter: _punto,
                       initialZoom: 15,
-                      onTap: (tapPos, p) => setState(() {
+                      onTap: (tap, p) => setState(() {
                         _punto = p;
                         _latController.text = p.latitude.toString();
                         _lngController.text = p.longitude.toString();
@@ -754,7 +659,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                             point: _punto,
                             child: const Icon(
                               Icons.location_on,
-                              color: Colors.red,
+                              color: Color(0xFFEF4444),
                               size: 40,
                             ),
                           ),
@@ -764,19 +669,76 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                   ),
                 ),
               ),
-            const SizedBox(height: 20),
+            ]),
+            const SizedBox(height: 15),
+            _cardSeccion("Registro Bancario (Cobros)", Icons.account_balance, [
+              _input(
+                _bancoController,
+                "Nombre del Banco",
+                Icons.account_balance_wallet,
+              ),
+              _input(_cuentaController, "CBU / Alias / CVU", Icons.vignette),
+            ]),
+            const SizedBox(height: 25),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                minimumSize: const Size(double.infinity, 50),
                 backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 60),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
               ),
               onPressed: _registrar,
               child: const Text(
-                "GUARDAR LAVADERO",
-                style: TextStyle(color: Colors.white),
+                "GUARDAR CONFIGURACIÓN",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _cardSeccion(String t, IconData i, List<Widget> c) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: Padding(
+        padding: const EdgeInsets.all(15),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Icon(i, color: const Color(0xFF3ABEF9)),
+                const SizedBox(width: 10),
+                Text(t, style: const TextStyle(fontWeight: FontWeight.bold)),
+              ],
+            ),
+            const Divider(),
+            ...c,
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _input(
+    TextEditingController ctrl,
+    String lab,
+    IconData ico, {
+    TextInputType k = TextInputType.text,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: TextField(
+        controller: ctrl,
+        keyboardType: k,
+        decoration: InputDecoration(
+          labelText: lab,
+          prefixIcon: Icon(ico, color: const Color(0xFF3ABEF9), size: 20),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
