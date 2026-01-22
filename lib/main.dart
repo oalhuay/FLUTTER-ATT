@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -254,19 +255,58 @@ class _MapScreenState extends State<MapScreen> {
         _markers = (data as List).map((l) {
           return Marker(
             point: LatLng(l['latitud'], l['longitud']),
-            width: 80,
-            height: 80,
-            child: GestureDetector(
-              onTap: () => _mostrarCartel(l),
-              child: const Icon(
-                Icons.location_on,
-                color: Color(0xFF3ABEF9),
-                size: 45,
-              ),
-            ),
+            width: 200, // Espacio suficiente para el popup
+            height: 250, // Espacio suficiente para que no desaparezca
+            alignment:
+                Alignment.topCenter, // Importante para que el pin no se mueva
+            child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
           );
         }).toList();
       });
+    }
+  }
+
+  Future<void> _generarLavaderosAutomaticos() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final nuevosLavaderos = [
+      {
+        'dueño_id': user.id,
+        'razon_social': 'Lavadero Express Zárate',
+        'direccion': 'Av. Lavalle 1200',
+        'latitud': -34.098,
+        'longitud': -59.028,
+        'telefono': '12345678',
+        'nombre_banco': 'Banco Provincia',
+        'cuenta_bancaria': 'AL-123456',
+      },
+      {
+        'dueño_id': user.id,
+        'razon_social': 'A Todo Trapo Premium',
+        'direccion': 'Justa Lima 500',
+        'latitud': -34.102,
+        'longitud': -59.022,
+        'telefono': '87654321',
+        'nombre_banco': 'Banco Galicia',
+        'cuenta_bancaria': 'AL-654321',
+      },
+    ];
+
+    try {
+      await supabase.from('lavaderos').insert(nuevosLavaderos);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("✅ Lavaderos de prueba creados")),
+        );
+      }
+    } catch (e) {
+      debugPrint("❌ Error al generar: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      }
     }
   }
 
@@ -349,6 +389,13 @@ class _MapScreenState extends State<MapScreen> {
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
         actions: [
+          // Botón secreto para ingenieros (solo para testing de lavaderos automáticos)
+          if (user != null)
+            IconButton(
+              icon: const Icon(Icons.auto_fix_high),
+              onPressed: _generarLavaderosAutomaticos,
+              tooltip: "Generar datos de prueba",
+            ),
           if (user != null)
             MouseRegion(
               cursor: SystemMouseCursors.click,
@@ -397,6 +444,124 @@ class _MapScreenState extends State<MapScreen> {
             urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
           ),
           MarkerLayer(markers: _markers),
+        ],
+      ),
+    );
+  }
+}
+
+// --- WIDGET PERSONALIZADO PARA EL MARCADOR CON POPUP ---
+class MarkerConPopup extends StatefulWidget {
+  final dynamic l;
+  final VoidCallback alTocar;
+  const MarkerConPopup({super.key, required this.l, required this.alTocar});
+
+  @override
+  State<MarkerConPopup> createState() => _MarkerConPopupState();
+}
+
+class _MarkerConPopupState extends State<MarkerConPopup> {
+  bool _isHovered = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovered = true),
+      onExit: (_) => setState(() => _isHovered = false),
+      cursor: SystemMouseCursors.click,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        clipBehavior:
+            Clip.none, // Fundamental para que el popup no se corte al subir
+        children: [
+          // --- POPUP ANIMADO (Tipo Airbnb) ---
+          AnimatedPositioned(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            bottom: _isHovered ? 55 : 30, // El cartel "sube" al aparecer
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 300),
+              scale: _isHovered ? 1.0 : 0.0, // De 0% a 100% de tamaño
+              curve: Curves.easeOutBack,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: _isHovered ? 1.0 : 0.0,
+                child: Container(
+                  width: 180,
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        spreadRadius: 1,
+                      ),
+                    ],
+                    border: Border.all(
+                      color: const Color(0xFF3ABEF9),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Image.network(
+                          'https://picsum.photos/seed/${widget.l['id']}/200/120',
+                          height: 80,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                height: 80,
+                                color: Colors.grey[200],
+                                child: const Icon(Icons.image_not_supported),
+                              ),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        widget.l['razon_social'] ?? 'Lavadero',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const Text(
+                        "⭐ 4.5 | Disponible",
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.green,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // --- ICONO DEL PIN (CON ANIMACIÓN DE ESCALA) ---
+          GestureDetector(
+            onTap: widget.alTocar,
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 200),
+              scale: _isHovered ? 1.2 : 1.0, // El pin crece un 20% en hover
+              child: Icon(
+                Icons.location_on,
+                color: _isHovered
+                    ? const Color(0xFFEF4444) // Rojo al pasar el mouse
+                    : const Color(0xFF3ABEF9), // Celeste por defecto
+                size: 45,
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -557,7 +722,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 }
 
-// --- PANTALLA: REGISTRO DE LAVADERO (CON PERSONALIZACIÓN) ---
+// --- PANTALLA: REGISTRO DE LAVADERO ---
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
   @override
@@ -572,6 +737,13 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _cuentaController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
+
+  final _tagController = TextEditingController();
+  final List<String> _servicios = [
+    'Lavado',
+    'Control de aire/ruedas',
+    'Venta de insumos',
+  ];
 
   LatLng _punto = const LatLng(-34.098, -59.028);
 
@@ -595,6 +767,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         'cuenta_bancaria': _cuentaController.text,
         'latitud': double.parse(_latController.text),
         'longitud': double.parse(_lngController.text),
+        'servicios': _servicios,
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -614,7 +787,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7F9),
       appBar: AppBar(
-        title: const Text("Mi Lavadero"),
+        title: const Text("Configurar mi Lavadero"),
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
       ),
@@ -633,7 +806,39 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               ),
             ]),
             const SizedBox(height: 15),
-            _cardSeccion("Ubicación exacta (Toca el mapa)", Icons.pin_drop, [
+            _cardSeccion("Servicios Ofrecidos", Icons.list_alt, [
+              Wrap(
+                spacing: 8.0,
+                runSpacing: 4.0,
+                children: _servicios
+                    .map(
+                      (s) => Chip(
+                        label: Text(s),
+                        onDeleted: s == 'Lavado'
+                            ? null
+                            : () => setState(() => _servicios.remove(s)),
+                        deleteIconColor: Colors.red,
+                      ),
+                    )
+                    .toList(),
+              ),
+              TextField(
+                controller: _tagController,
+                decoration: const InputDecoration(
+                  hintText: "Agregar servicio...",
+                ),
+                onSubmitted: (val) {
+                  if (val.isNotEmpty && !_servicios.contains(val)) {
+                    setState(() {
+                      _servicios.add(val);
+                      _tagController.clear();
+                    });
+                  }
+                },
+              ),
+            ]),
+            const SizedBox(height: 15),
+            _cardSeccion("Ubicación exacta", Icons.pin_drop, [
               SizedBox(
                 height: 200,
                 child: ClipRRect(
@@ -671,7 +876,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               ),
             ]),
             const SizedBox(height: 15),
-            _cardSeccion("Registro Bancario (Cobros)", Icons.account_balance, [
+            _cardSeccion("Registro Bancario", Icons.account_balance, [
               _input(
                 _bancoController,
                 "Nombre del Banco",
