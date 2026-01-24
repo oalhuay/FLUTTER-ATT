@@ -213,6 +213,9 @@ class _MapScreenState extends State<MapScreen> {
   RealtimeChannel? _channel;
   String _userRol = 'pendiente';
 
+  // CONTROLADOR DEL MAPA PARA EL ZOOM Y GPS
+  final MapController _mapController = MapController();
+
   @override
   void initState() {
     super.initState();
@@ -255,10 +258,9 @@ class _MapScreenState extends State<MapScreen> {
         _markers = (data as List).map((l) {
           return Marker(
             point: LatLng(l['latitud'], l['longitud']),
-            width: 200, // Espacio suficiente para el popup
-            height: 250, // Espacio suficiente para que no desaparezca
-            alignment:
-                Alignment.topCenter, // Importante para que el pin no se mueva
+            width: 200,
+            height: 250,
+            alignment: Alignment.topCenter,
             child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
           );
         }).toList();
@@ -376,6 +378,41 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  // WIDGETS DE ESTILO PARA BOTONES DEL MAPA
+  Widget _botonCircular({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        shape: BoxShape.circle,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.2),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: IconButton(
+        icon: Icon(icon, color: Colors.black87, size: 24),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
+  Widget _botonZoom({required IconData icon, required VoidCallback onPressed}) {
+    return SizedBox(
+      width: 45,
+      height: 45,
+      child: IconButton(
+        icon: Icon(icon, color: Colors.black87, size: 24),
+        onPressed: onPressed,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
@@ -389,7 +426,6 @@ class _MapScreenState extends State<MapScreen> {
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
         actions: [
-          // Botón secreto para ingenieros (solo para testing de lavaderos automáticos)
           if (user != null)
             IconButton(
               icon: const Icon(Icons.auto_fix_high),
@@ -434,16 +470,70 @@ class _MapScreenState extends State<MapScreen> {
             ),
         ],
       ),
-      body: FlutterMap(
-        options: const MapOptions(
-          initialCenter: LatLng(-34.098, -59.028),
-          initialZoom: 14,
-        ),
+      body: Stack(
         children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          FlutterMap(
+            mapController: _mapController,
+            options: const MapOptions(
+              initialCenter: LatLng(-34.098, -59.028),
+              initialZoom: 14,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              ),
+              MarkerLayer(markers: _markers),
+            ],
           ),
-          MarkerLayer(markers: _markers),
+          // --- PANEL DE BOTONES FACHEROS ---
+          Positioned(
+            bottom: 20,
+            right: 15,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _botonCircular(
+                  icon: Icons.my_location,
+                  onPressed: () {
+                    _mapController.move(const LatLng(-34.098, -59.028), 15);
+                  },
+                ),
+                const SizedBox(height: 12),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 6,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      _botonZoom(
+                        icon: Icons.add,
+                        onPressed: () => _mapController.move(
+                          _mapController.camera.center,
+                          _mapController.camera.zoom + 1,
+                        ),
+                      ),
+                      Container(width: 30, height: 1, color: Colors.grey[300]),
+                      _botonZoom(
+                        icon: Icons.remove,
+                        onPressed: () => _mapController.move(
+                          _mapController.camera.center,
+                          _mapController.camera.zoom - 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -471,17 +561,15 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
       cursor: SystemMouseCursors.click,
       child: Stack(
         alignment: Alignment.bottomCenter,
-        clipBehavior:
-            Clip.none, // Fundamental para que el popup no se corte al subir
+        clipBehavior: Clip.none,
         children: [
-          // --- POPUP ANIMADO (Tipo Airbnb) ---
           AnimatedPositioned(
             duration: const Duration(milliseconds: 300),
             curve: Curves.easeOutBack,
-            bottom: _isHovered ? 55 : 30, // El cartel "sube" al aparecer
+            bottom: _isHovered ? 55 : 30,
             child: AnimatedScale(
               duration: const Duration(milliseconds: 300),
-              scale: _isHovered ? 1.0 : 0.0, // De 0% a 100% de tamaño
+              scale: _isHovered ? 1.0 : 0.0,
               curve: Curves.easeOutBack,
               child: AnimatedOpacity(
                 duration: const Duration(milliseconds: 200),
@@ -546,18 +634,16 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
               ),
             ),
           ),
-
-          // --- ICONO DEL PIN (CON ANIMACIÓN DE ESCALA) ---
           GestureDetector(
             onTap: widget.alTocar,
             child: AnimatedScale(
               duration: const Duration(milliseconds: 200),
-              scale: _isHovered ? 1.2 : 1.0, // El pin crece un 20% en hover
+              scale: _isHovered ? 1.2 : 1.0,
               child: Icon(
                 Icons.location_on,
                 color: _isHovered
-                    ? const Color(0xFFEF4444) // Rojo al pasar el mouse
-                    : const Color(0xFF3ABEF9), // Celeste por defecto
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFF3ABEF9),
                 size: 45,
               ),
             ),
