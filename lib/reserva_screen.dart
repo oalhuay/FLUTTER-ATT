@@ -14,20 +14,30 @@ class ReservaScreen extends StatefulWidget {
 }
 
 class _ReservaScreenState extends State<ReservaScreen> {
-  late final Stream<List<Map<String, dynamic>>> _turnosStream;
+  late Stream<List<Map<String, dynamic>>> _turnosStream;
   final List<String> _serviciosSeleccionados = ["Lavado"];
   double _totalAPagar = 0.0;
+
+  // --- VARIABLES DE ESTADO ---
+  bool _estaProcesando = false;
+  DateTime _fechaSeleccionada = DateTime.now();
+  final TextEditingController _comentariosController = TextEditingController();
 
   @override
   void initState() {
     super.initState();
-    final nombreLavadero = widget.lavadero['razon_social'];
     _calcularTotal();
+    _inicializarStream();
+  }
 
-    _turnosStream = Supabase.instance.client
-        .from('turnos')
-        .stream(primaryKey: ['id'])
-        .eq('lavadero_nombre', nombreLavadero);
+  void _inicializarStream() {
+    final nombreLavadero = widget.lavadero['razon_social'];
+    setState(() {
+      _turnosStream = Supabase.instance.client
+          .from('turnos')
+          .stream(primaryKey: ['id'])
+          .eq('lavadero_nombre', nombreLavadero);
+    });
   }
 
   void _calcularTotal() {
@@ -45,7 +55,6 @@ class _ReservaScreenState extends State<ReservaScreen> {
     });
   }
 
-  // --- NUEVA FUNCIÓN: SUBIR A STORAGE Y ASOCIAR AL TURNO ---
   Future<void> _subirComprobanteAStorage(
     String turnoId,
     Uint8List pdfBytes,
@@ -53,7 +62,6 @@ class _ReservaScreenState extends State<ReservaScreen> {
     try {
       final String path = 'tickets/comprobante_$turnoId.pdf';
 
-      // 1. Subir al bucket 'comprobantes'
       await Supabase.instance.client.storage
           .from('comprobantes')
           .uploadBinary(
@@ -62,12 +70,10 @@ class _ReservaScreenState extends State<ReservaScreen> {
             fileOptions: const FileOptions(upsert: true),
           );
 
-      // 2. Obtener URL pública
       final String publicUrl = Supabase.instance.client.storage
           .from('comprobantes')
           .getPublicUrl(path);
 
-      // 3. Actualizar la tabla turnos con la URL
       await Supabase.instance.client
           .from('turnos')
           .update({'url_comprobante': publicUrl})
@@ -77,6 +83,58 @@ class _ReservaScreenState extends State<ReservaScreen> {
     } catch (e) {
       debugPrint("❌ Error Storage/Update: $e");
     }
+  }
+
+  // --- DIÁLOGO DE PREAVISO ---
+  void _confirmarAntesDePagar(BuildContext context, String hora) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+        title: const Row(
+          children: [
+            Icon(Icons.help_outline, color: Color(0xFF3ABEF9)),
+            SizedBox(width: 10),
+            Text("Confirmar Turno"),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text("¿Estás seguro de elegir esta fecha y horario?"),
+            const SizedBox(height: 15),
+            Text(
+              "📅 Fecha: ${_fechaSeleccionada.day}/${_fechaSeleccionada.month}/${_fechaSeleccionada.year}",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            Text(
+              "⏰ Horario: $hora hs",
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3ABEF9),
+            ),
+            onPressed: () {
+              Navigator.pop(context); // Cierra el aviso
+              _procesarPagoYReserva(context, hora); // Inicia el proceso
+            },
+            child: const Text(
+              "SÍ, CONTINUAR AL PAGO",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -91,116 +149,192 @@ class _ReservaScreenState extends State<ReservaScreen> {
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
       ),
-      body: Column(
+      body: Stack(
         children: [
-          Container(
-            padding: const EdgeInsets.all(15),
-            color: const Color(0xFF3ABEF9).withOpacity(0.1),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  "Servicios Adicionales:",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  children: serviciosDisponibles.keys.map((serv) {
-                    final seleccionado = _serviciosSeleccionados.contains(serv);
-                    return FilterChip(
-                      label: Text("$serv (\$${serviciosDisponibles[serv]})"),
-                      selected: seleccionado,
-                      onSelected: serv == "Lavado"
-                          ? null
-                          : (val) {
-                              setState(() {
-                                val
-                                    ? _serviciosSeleccionados.add(serv)
-                                    : _serviciosSeleccionados.remove(serv);
-                                _calcularTotal();
-                              });
-                            },
-                    );
-                  }).toList(),
-                ),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Column(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(15),
+                color: const Color(0xFF3ABEF9).withOpacity(0.1),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      "TOTAL A PAGAR:",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      "Seleccionar Fecha:",
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    Text(
-                      "\$${_totalAPagar.toStringAsFixed(0)}",
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(
+                        Icons.calendar_month,
                         color: Color(0xFFEF4444),
                       ),
+                      title: Text(
+                        "${_fechaSeleccionada.day}/${_fechaSeleccionada.month}/${_fechaSeleccionada.year}",
+                      ),
+                      trailing: const Text(
+                        "CAMBIAR",
+                        style: TextStyle(
+                          color: Color(0xFF3ABEF9),
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: _fechaSeleccionada,
+                          firstDate: DateTime.now(),
+                          lastDate: DateTime.now().add(
+                            const Duration(days: 30),
+                          ),
+                        );
+                        if (picked != null)
+                          setState(() => _fechaSeleccionada = picked);
+                      },
+                    ),
+                    const Divider(),
+                    const Text(
+                      "Servicios Adicionales:",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      children: serviciosDisponibles.keys.map((serv) {
+                        final seleccionado = _serviciosSeleccionados.contains(
+                          serv,
+                        );
+                        return FilterChip(
+                          label: Text(
+                            "$serv (\$${serviciosDisponibles[serv]})",
+                          ),
+                          selected: seleccionado,
+                          onSelected: serv == "Lavado"
+                              ? null
+                              : (val) {
+                                  setState(() {
+                                    val
+                                        ? _serviciosSeleccionados.add(serv)
+                                        : _serviciosSeleccionados.remove(serv);
+                                    _calcularTotal();
+                                  });
+                                },
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 15),
+                    TextField(
+                      controller: _comentariosController,
+                      decoration: InputDecoration(
+                        labelText: "Comentarios o indicaciones...",
+                        prefixIcon: const Icon(Icons.comment_outlined),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        filled: true,
+                        fillColor: Colors.white,
+                      ),
+                    ),
+                    const Divider(),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          "TOTAL A PAGAR:",
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Text(
+                          "\$${_totalAPagar.toStringAsFixed(0)}",
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFFEF4444),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: StreamBuilder<List<Map<String, dynamic>>>(
-              stream: _turnosStream,
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final data = snapshot.data ?? [];
-                final horariosOcupados = data.map((item) {
-                  String horaDb = item['hora'].toString().trim();
-                  return horaDb.length >= 5 ? horaDb.substring(0, 5) : horaDb;
-                }).toList();
+              ),
+              Expanded(
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _turnosStream,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting)
+                      return const Center(child: CircularProgressIndicator());
 
-                return ListView.builder(
-                  itemCount: horarios.length,
-                  itemBuilder: (context, index) {
-                    final horaActual = horarios[index];
-                    final estaOcupado = horariosOcupados.contains(horaActual);
+                    final fechaIso = _fechaSeleccionada.toIso8601String().split(
+                      'T',
+                    )[0];
+                    final dataFiltrada = (snapshot.data ?? [])
+                        .where((t) => t['fecha'].toString() == fechaIso)
+                        .toList();
+                    final ocupados = dataFiltrada.map((item) {
+                      String h = item['hora'].toString().trim();
+                      return h.length >= 5 ? h.substring(0, 5) : h;
+                    }).toList();
 
-                    return Card(
-                      color: estaOcupado ? Colors.grey[200] : Colors.white,
-                      margin: const EdgeInsets.symmetric(
-                        horizontal: 15,
-                        vertical: 5,
-                      ),
-                      child: ListTile(
-                        leading: Icon(
-                          estaOcupado ? Icons.block : Icons.access_time,
-                          color: estaOcupado
-                              ? Colors.grey
-                              : const Color(0xFF3ABEF9),
-                        ),
-                        title: Text(
-                          "Horario: $horaActual hs",
-                          style: TextStyle(
-                            decoration: estaOcupado
-                                ? TextDecoration.lineThrough
-                                : null,
+                    return ListView.builder(
+                      itemCount: horarios.length,
+                      itemBuilder: (context, index) {
+                        final hora = horarios[index];
+                        final estaOcupado = ocupados.contains(hora);
+                        return Card(
+                          color: estaOcupado ? Colors.grey[200] : Colors.white,
+                          margin: const EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 5,
                           ),
-                        ),
-                        trailing: estaOcupado
-                            ? const Text("OCUPADO")
-                            : const Icon(Icons.payment, color: Colors.green),
-                        onTap: estaOcupado
-                            ? null
-                            : () => _procesarPagoYReserva(context, horaActual),
-                      ),
+                          child: ListTile(
+                            leading: Icon(
+                              estaOcupado ? Icons.block : Icons.access_time,
+                              color: estaOcupado
+                                  ? Colors.grey
+                                  : const Color(0xFF3ABEF9),
+                            ),
+                            title: Text(
+                              "Horario: $hora hs",
+                              style: TextStyle(
+                                decoration: estaOcupado
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                            ),
+                            trailing: estaOcupado
+                                ? const Text(
+                                    "OCUPADO",
+                                    style: TextStyle(
+                                      color: Colors.red,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.payment,
+                                    color: Colors.green,
+                                  ),
+                            onTap: estaOcupado
+                                ? null
+                                : () => _confirmarAntesDePagar(context, hora),
+                          ),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+            ],
           ),
+          // --- CAPA DE CARGA (Para evitar bloqueos de Navigator) ---
+          if (_estaProcesando)
+            Container(
+              color: Colors.black45,
+              child: const Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            ),
         ],
       ),
     );
@@ -209,19 +343,9 @@ class _ReservaScreenState extends State<ReservaScreen> {
   void _procesarPagoYReserva(BuildContext context, String hora) async {
     final usuario = Supabase.instance.client.auth.currentUser;
     if (usuario == null) return;
+    if (_totalAPagar <= 0) return;
 
-    if (_totalAPagar <= 0) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("⚠️ Total inválido")));
-      return;
-    }
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => const Center(child: CircularProgressIndicator()),
-    );
+    setState(() => _estaProcesando = true);
 
     try {
       final mp = MPService();
@@ -231,16 +355,12 @@ class _ReservaScreenState extends State<ReservaScreen> {
         cantidad: 1,
       );
 
-      if (!mounted) return;
-      Navigator.pop(context);
-
       if (urlPago != null) {
         await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
 
-        // 1. REGISTRO DE FACTURA
         final facturaData = await mp.registrarFacturaLimpia(
           paymentId: "MP-${DateTime.now().millisecondsSinceEpoch}",
           status: "approved",
@@ -248,11 +368,12 @@ class _ReservaScreenState extends State<ReservaScreen> {
           servicios: _serviciosSeleccionados.join(", "),
         );
 
-        // 2. GUARDADO DEL TURNO (Obtenemos el ID para asociar el PDF)
         final response = await Supabase.instance.client
             .from('turnos')
             .insert({
               'hora': hora,
+              'fecha': _fechaSeleccionada.toIso8601String().split('T')[0],
+              'comentarios': _comentariosController.text,
               'lavadero_nombre': widget.lavadero['razon_social'],
               'user_id': usuario.id,
               'monto_pagado': _totalAPagar,
@@ -261,9 +382,6 @@ class _ReservaScreenState extends State<ReservaScreen> {
             .select()
             .single();
 
-        final turnoId = response['id'].toString();
-
-        // 3. GENERACIÓN DE BYTES Y SUBIDA A STORAGE
         if (facturaData != null) {
           final pdfBytes = await PdfHelper.obtenerBytesPDF(
             nroFactura: facturaData['id']
@@ -275,16 +393,15 @@ class _ReservaScreenState extends State<ReservaScreen> {
             servicios: facturaData['servicios'],
             total: (facturaData['total'] as num).toDouble(),
           );
-
-          await _subirComprobanteAStorage(turnoId, pdfBytes);
+          await _subirComprobanteAStorage(response['id'].toString(), pdfBytes);
+          setState(() => _estaProcesando = false);
           _mostrarExitoConTicket(hora, facturaData);
-        } else {
-          _mostrarExitoSimple(hora);
         }
+      } else {
+        setState(() => _estaProcesando = false);
       }
     } catch (e) {
-      if (!mounted) return;
-      if (Navigator.canPop(context)) Navigator.pop(context);
+      setState(() => _estaProcesando = false);
       debugPrint("❌ Error: $e");
     }
   }
@@ -295,9 +412,7 @@ class _ReservaScreenState extends State<ReservaScreen> {
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Icon(Icons.check_circle, color: Colors.green, size: 60),
-        content: const Text(
-          "¡Pago y Reserva exitosa!\nEl comprobante se guardó en tu historial.",
-        ),
+        content: const Text("¡Pago y Reserva exitosa!"),
         actions: [
           ElevatedButton.icon(
             onPressed: () => PdfHelper.generarComprobante(
@@ -312,10 +427,6 @@ class _ReservaScreenState extends State<ReservaScreen> {
             ),
             icon: const Icon(Icons.picture_as_pdf),
             label: const Text("DESCARGAR TICKET"),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-            ),
           ),
           TextButton(
             onPressed: () {
@@ -323,22 +434,6 @@ class _ReservaScreenState extends State<ReservaScreen> {
               Navigator.pop(context);
             },
             child: const Text("SALIR"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _mostrarExitoSimple(String hora) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Icon(Icons.check_circle, color: Colors.green),
-        content: Text("Reserva confirmada para las $hora hs."),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CERRAR"),
           ),
         ],
       ),

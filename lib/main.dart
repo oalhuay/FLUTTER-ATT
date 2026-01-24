@@ -339,6 +339,7 @@ class _MapScreenState extends State<MapScreen> {
               "Dirección: ${l['direccion'] ?? 'Zárate'}",
               style: TextStyle(color: Colors.grey[600]),
             ),
+            // --- REEMPLAZO DENTRO DE _mostrarCartel ---
             const Spacer(),
             if (_userRol == 'cliente')
               SizedBox(
@@ -348,13 +349,32 @@ class _MapScreenState extends State<MapScreen> {
                     backgroundColor: const Color(0xFFEF4444),
                   ),
                   onPressed: () {
-                    Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ReservaScreen(lavadero: l),
-                      ),
-                    );
+                    // 1. VALIDAMOS SESIÓN EN TIEMPO REAL
+                    final usuarioActivo = supabase.auth.currentUser;
+
+                    if (usuarioActivo == null) {
+                      // 2. SI NO HAY SESIÓN: Cerramos cartel, avisamos y mandamos al perfil
+                      Navigator.pop(context);
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "⚠️ Debes iniciar sesión para solicitar un turno",
+                          ),
+                          backgroundColor: Colors.orange,
+                        ),
+                      );
+                      // Llamamos a la función para cambiar de pestaña al perfil
+                      if (widget.onIrAPerfil != null) widget.onIrAPerfil!();
+                    } else {
+                      // 3. SI HAY SESIÓN: Vamos a la reserva normalmente
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ReservaScreen(lavadero: l),
+                        ),
+                      );
+                    }
                   },
                   child: const Text(
                     "SOLICITAR TURNO",
