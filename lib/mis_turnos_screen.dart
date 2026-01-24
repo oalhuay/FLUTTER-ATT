@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart'; // Importante para abrir el link del Storage
 
 class MisTurnosScreen extends StatefulWidget {
   const MisTurnosScreen({super.key});
@@ -37,18 +38,14 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
     super.dispose();
   }
 
-  // --- FUNCIÓN DE CANCELACIÓN OPTIMISTA Y ROBUSTA ---
+  // --- CANCELACIÓN OPTIMISTA ---
   Future<void> _cancelarTurno(dynamic idTurno) async {
-    // 1. Borrado Local Instantáneo e Infalible
-    // Convertimos ambos a String para asegurar que la comparación sea exitosa
     setState(() {
       misTurnos.removeWhere((t) => t['id'].toString() == idTurno.toString());
     });
 
     try {
-      // 2. Ejecutamos el borrado en Supabase (usamos await para asegurar la petición)
       await supabase.from('turnos').delete().eq('id', idTurno);
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -57,16 +54,10 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
             duration: Duration(seconds: 1),
           ),
         );
-        // NOTA: No llamamos a _cargarMisTurnos() aquí para evitar que el dato
-        // "vuelva" si la DB aún no se actualizó internamente.
-        // El usuario ya no lo ve, que es lo que importa.
       }
     } catch (e) {
-      debugPrint("Error al cancelar en la nube: $e");
-
-      // 3. Si falla la red, recuperamos los datos reales para que no haya inconsistencia
+      debugPrint("Error al cancelar: $e");
       _cargarMisTurnos();
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -91,7 +82,6 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
 
       final ahora = DateTime.now();
       _horaUltimaPeticion = ahora;
-
       final horaFormateada =
           "${ahora.hour.toString().padLeft(2, '0')}:${ahora.minute.toString().padLeft(2, '0')}:${ahora.second.toString().padLeft(2, '0')}";
 
@@ -103,12 +93,10 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
           segundosRestantes = 5;
           _colorEstado = Colors.green;
         });
-
         _iniciarTemporizadorBloqueo();
         _iniciarSemaforo();
       }
     } catch (e) {
-      debugPrint("Error: $e");
       if (mounted) {
         setState(() {
           cargando = false;
@@ -138,23 +126,14 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
     _timerSemaforo?.cancel();
     _timerSemaforo = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (_horaUltimaPeticion == null) return;
-
       final diferencia = DateTime.now()
           .difference(_horaUltimaPeticion!)
           .inSeconds;
-
-      Color nuevoColor;
-      if (diferencia <= 30) {
-        nuevoColor = Colors.green;
-      } else if (diferencia <= 60) {
-        nuevoColor = Colors.amber;
-      } else {
-        nuevoColor = Colors.red;
-      }
-
-      if (mounted && _colorEstado != nuevoColor) {
+      Color nuevoColor = diferencia <= 30
+          ? Colors.green
+          : (diferencia <= 60 ? Colors.amber : Colors.red);
+      if (mounted && _colorEstado != nuevoColor)
         setState(() => _colorEstado = nuevoColor);
-      }
     });
   }
 
@@ -168,35 +147,27 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
       ),
       body: Column(
         children: [
+          // Barra de estado superior
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(12),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
-                    Text(
-                      "Actualizado: $ultimaActualizacion",
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 13,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
+                    Icon(Icons.circle, size: 10, color: _colorEstado),
                     const SizedBox(width: 8),
-                    Icon(Icons.circle, size: 12, color: _colorEstado),
+                    Text(
+                      "Sync: $ultimaActualizacion",
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
                   ],
                 ),
-                ElevatedButton.icon(
+                TextButton.icon(
                   onPressed: botonHabilitado ? _cargarMisTurnos : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3ABEF9),
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.grey[300],
-                  ),
                   icon: Icon(
-                    botonHabilitado ? Icons.refresh : Icons.timer,
-                    size: 18,
+                    botonHabilitado ? Icons.refresh : Icons.hourglass_empty,
+                    size: 16,
                   ),
                   label: Text(
                     botonHabilitado ? "Actualizar" : "$segundosRestantes s",
@@ -205,6 +176,7 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
               ],
             ),
           ),
+
           Expanded(
             child: cargando
                 ? const Center(child: CircularProgressIndicator())
@@ -215,27 +187,137 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                     itemBuilder: (context, index) {
                       final turno = misTurnos[index];
                       return Card(
+                        elevation: 2,
                         margin: const EdgeInsets.symmetric(
                           horizontal: 15,
-                          vertical: 5,
+                          vertical: 6,
                         ),
-                        child: ListTile(
-                          leading: const Icon(
-                            Icons.directions_car,
-                            color: Color(0xFF3ABEF9),
-                          ),
-                          title: Text(turno['lavadero_nombre']),
-                          subtitle: Text("Hora: ${turno['hora']} hs"),
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.red,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: ExpansionTile(
+                          leading: const CircleAvatar(
+                            backgroundColor: Color(0xFF3ABEF9),
+                            child: Icon(
+                              Icons.directions_car,
+                              color: Colors.white,
+                              size: 20,
                             ),
-                            onPressed: () {
-                              // Pasamos el ID directamente
-                              _cancelarTurno(turno['id']);
-                            },
                           ),
+                          title: Text(
+                            turno['lavadero_nombre'],
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          subtitle: Text("Hoy: ${turno['hora']} hs"),
+                          trailing: Text(
+                            "\$${turno['monto_pagado'] ?? '0'}",
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          children: [
+                            Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Divider(),
+                                  const SizedBox(height: 5),
+                                  Row(
+                                    children: [
+                                      const Icon(
+                                        Icons.receipt_long,
+                                        size: 18,
+                                        color: Colors.grey,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      const Text(
+                                        "Detalle:",
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Expanded(
+                                        child: Text(
+                                          turno['servicios'] ??
+                                              "Lavado estándar",
+                                          style: const TextStyle(
+                                            fontStyle: FontStyle.italic,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+
+                                  const SizedBox(height: 15),
+
+                                  // --- BOTÓN PARA ABRIR EL PDF DESDE STORAGE ---
+                                  if (turno['url_comprobante'] != null)
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: OutlinedButton.icon(
+                                        onPressed: () async {
+                                          final url = Uri.parse(
+                                            turno['url_comprobante'],
+                                          );
+                                          if (await canLaunchUrl(url)) {
+                                            await launchUrl(
+                                              url,
+                                              mode: LaunchMode
+                                                  .externalApplication,
+                                            );
+                                          }
+                                        },
+                                        icon: const Icon(
+                                          Icons.picture_as_pdf,
+                                          color: Colors.red,
+                                        ),
+                                        label: const Text(
+                                          "VER COMPROBANTE PDF",
+                                        ),
+                                        style: OutlinedButton.styleFrom(
+                                          side: const BorderSide(
+                                            color: Colors.red,
+                                          ),
+                                          foregroundColor: Colors.red,
+                                        ),
+                                      ),
+                                    ),
+
+                                  const SizedBox(height: 12),
+                                  Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      const Text(
+                                        "Estado: Pagado Online",
+                                        style: TextStyle(
+                                          color: Color(0xFF3ABEF9),
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      TextButton.icon(
+                                        onPressed: () =>
+                                            _cancelarTurno(turno['id']),
+                                        icon: const Icon(
+                                          Icons.delete_forever,
+                                          color: Colors.red,
+                                          size: 20,
+                                        ),
+                                        label: const Text(
+                                          "CANCELAR",
+                                          style: TextStyle(color: Colors.red),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
                       );
                     },

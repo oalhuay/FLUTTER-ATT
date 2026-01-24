@@ -29,7 +29,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'ATT: A todo Trapo',
+      title: 'ATT!: A Todo Trapo',
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(
@@ -385,7 +385,7 @@ class _MapScreenState extends State<MapScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("ATT: A Todo Trapo"),
+        title: const Text("ATT!: A Todo Trapo"),
         backgroundColor: const Color(0xFF3ABEF9),
         foregroundColor: Colors.white,
         actions: [
