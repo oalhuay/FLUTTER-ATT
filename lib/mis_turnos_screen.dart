@@ -45,7 +45,10 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
     });
 
     try {
-      await supabase.from('turnos').delete().eq('id', idTurno);
+      await supabase
+          .from('turnos')
+          .update({'estado': 'cancelado'})
+          .eq('id', idTurno);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -292,26 +295,44 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                                     mainAxisAlignment:
                                         MainAxisAlignment.spaceBetween,
                                     children: [
-                                      const Text(
-                                        "Estado: Pagado Online",
+                                      // 1. TEXTO DEL ESTADO (Izquierda)
+                                      Text(
+                                        turno['estado'] == 'cancelado'
+                                            ? "Estado: Cancelado"
+                                            : "Estado: Pagado Online",
                                         style: TextStyle(
-                                          color: Color(0xFF3ABEF9),
+                                          color: turno['estado'] == 'cancelado'
+                                              ? Colors.red
+                                              : const Color(0xFF3ABEF9),
                                           fontWeight: FontWeight.w600,
                                         ),
                                       ),
-                                      TextButton.icon(
-                                        onPressed: () =>
-                                            _cancelarTurno(turno['id']),
-                                        icon: const Icon(
-                                          Icons.delete_forever,
-                                          color: Colors.red,
-                                          size: 20,
-                                        ),
-                                        label: const Text(
-                                          "CANCELAR",
-                                          style: TextStyle(color: Colors.red),
-                                        ),
-                                      ),
+
+                                      // 2. EL BOTÓN CON CEREBRO (Derecha)
+                                      // Preguntamos: ¿Está cancelado?
+                                      turno['estado'] == 'cancelado'
+                                          ? const Text(
+                                              "ANULADO",
+                                              style: TextStyle(
+                                                color: Colors.grey,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ) // Si es verdadero, muestra esto
+                                          : TextButton.icon(
+                                              onPressed: () =>
+                                                  _cancelarTurno(turno['id']),
+                                              icon: const Icon(
+                                                Icons.cancel,
+                                                color: Colors.red,
+                                                size: 20,
+                                              ),
+                                              label: const Text(
+                                                "CANCELAR",
+                                                style: TextStyle(
+                                                  color: Colors.red,
+                                                ),
+                                              ),
+                                            ), // Si es falso, muestra el botón
                                     ],
                                   ),
                                 ],

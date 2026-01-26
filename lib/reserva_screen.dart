@@ -270,8 +270,11 @@ class _ReservaScreenState extends State<ReservaScreen> {
                       'T',
                     )[0];
                     final dataFiltrada = (snapshot.data ?? [])
-                        .where((t) => t['fecha'].toString() == fechaIso)
-                        .toList();
+                    .where((t) => 
+                        t['fecha'].toString() == fechaIso && 
+                        t['estado'] != 'cancelado' // <--- ESTO LIBERA EL HORARIO
+                    )
+                    .toList();
                     final ocupados = dataFiltrada.map((item) {
                       String h = item['hora'].toString().trim();
                       return h.length >= 5 ? h.substring(0, 5) : h;
@@ -378,6 +381,7 @@ class _ReservaScreenState extends State<ReservaScreen> {
               'user_id': usuario.id,
               'monto_pagado': _totalAPagar,
               'servicios': _serviciosSeleccionados.join(", "),
+              'estado': 'activo',
             })
             .select()
             .single();
