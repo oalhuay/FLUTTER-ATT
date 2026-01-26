@@ -250,6 +250,45 @@ class _MapScreenState extends State<MapScreen> {
         .subscribe();
   }
 
+  // --- FUNCIÓN PARA MOVIMIENTO SUAVE (PEGAR AQUÍ) ---
+  void _animatedMapMove(LatLng destLocation, double destZoom) {
+    final latTween = Tween<double>(
+      begin: _mapController.camera.center.latitude,
+      end: destLocation.latitude,
+    );
+    final lngTween = Tween<double>(
+      begin: _mapController.camera.center.longitude,
+      end: destLocation.longitude,
+    );
+    final zoomTween = Tween<double>(
+      begin: _mapController.camera.zoom,
+      end: destZoom,
+    );
+
+    final controller = AnimationController(
+      duration: const Duration(milliseconds: 500),
+      vsync: Navigator.of(context),
+    );
+
+    final animation = CurvedAnimation(
+      parent: controller,
+      curve: Curves.easeInOutCubic,
+    );
+
+    controller.addListener(() {
+      _mapController.move(
+        LatLng(latTween.evaluate(animation), lngTween.evaluate(animation)),
+        zoomTween.evaluate(animation),
+      );
+    });
+
+    animation.addStatusListener((status) {
+      if (status == AnimationStatus.completed) controller.dispose();
+    });
+
+    controller.forward();
+  }
+
   Future<void> cargarLavaderosDeSupabase() async {
     _checkUserRol();
     final data = await supabase.from('lavaderos').select();
@@ -514,9 +553,8 @@ class _MapScreenState extends State<MapScreen> {
               children: [
                 _botonCircular(
                   icon: Icons.my_location,
-                  onPressed: () {
-                    _mapController.move(const LatLng(-34.098, -59.028), 15);
-                  },
+                  onPressed: () =>
+                      _animatedMapMove(const LatLng(-34.098, -59.028), 15),
                 ),
                 const SizedBox(height: 12),
                 Container(
@@ -535,7 +573,7 @@ class _MapScreenState extends State<MapScreen> {
                     children: [
                       _botonZoom(
                         icon: Icons.add,
-                        onPressed: () => _mapController.move(
+                        onPressed: () => _animatedMapMove(
                           _mapController.camera.center,
                           _mapController.camera.zoom + 1,
                         ),
@@ -543,7 +581,7 @@ class _MapScreenState extends State<MapScreen> {
                       Container(width: 30, height: 1, color: Colors.grey[300]),
                       _botonZoom(
                         icon: Icons.remove,
-                        onPressed: () => _mapController.move(
+                        onPressed: () => _animatedMapMove(
                           _mapController.camera.center,
                           _mapController.camera.zoom - 1,
                         ),
