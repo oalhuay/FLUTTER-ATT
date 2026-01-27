@@ -146,11 +146,18 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _indiceActual = 0;
+  dynamic
+  _lavaderoSeleccionado; // Acá guardamos el lavadero que toques en el mapa
+  // Controladores para poder editar el texto en el panel derecho
+  final TextEditingController _nombreCtrl = TextEditingController();
+  final TextEditingController _direccionCtrl = TextEditingController();
 
   List<Widget> get _paginas => [
     MapScreen(
       key: mapScreenKey,
       onIrAPerfil: () => setState(() => _indiceActual = 2),
+      // Esta línea es la conexión mágica con el panel derecho
+      onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
     ),
     const MisTurnosScreen(),
     const PerfilScreen(),
@@ -167,42 +174,528 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _indiceActual, children: _paginas),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _indiceActual,
-        onTap: (index) {
-          if (index == 0) {
-            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-          }
-          if (index == 1 && supabase.auth.currentUser == null) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("⚠️ Debes iniciar sesión")),
-            );
-            setState(() => _indiceActual = 2);
-          } else {
-            setState(() => _indiceActual = index);
-          }
-        },
-        selectedItemColor: const Color(0xFFEF4444),
-        unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType.fixed,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.map), label: "Mapa"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.calendar_month),
-            label: "Mis Turnos",
+      body: Row(
+        // <-- Esta es la clave para las 3 columnas
+        children: [
+          // COLUMNA 1: SIDEBAR (Menú lateral oscuro)
+          Container(
+            width: 250,
+            color: const Color(0xFF1E1E2D), // Azul oscuro pro
+            child: Column(
+              children: [
+                const SizedBox(height: 50),
+                // --- NUEVO LOGO ESTILO PREMIUM ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // El círculo celeste con el auto blanco
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF3ABEF9), // Celeste ATT!
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.directions_car_filled,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      // El Texto ATT!
+                      RichText(
+                        text: TextSpan(
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 1.1,
+                          ),
+                          children: [
+                            const TextSpan(
+                              text: "ATT",
+                              style: TextStyle(color: Colors.white),
+                            ),
+                            const TextSpan(
+                              text: "!",
+                              style: TextStyle(
+                                color: Color(0xFF3ABEF9),
+                              ), // El Celeste de ATT!
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 40),
+                _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
+                _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
+                _itemMenuLateral(Icons.person, "Mi Perfil", 2),
+                const Spacer(),
+                const Text(
+                  "v1.0.8",
+                  style: TextStyle(color: Colors.white24, fontSize: 10),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
           ),
-          BottomNavigationBarItem(icon: Icon(Icons.person), label: "Perfil"),
+
+          // COLUMNA 2: CONTENIDO CENTRAL (Mapa + Herramientas Flotantes)
+          Expanded(
+            child: Stack(
+              children: [
+                Container(
+                  color: const Color(0xFFF5F7F9),
+                  child: IndexedStack(index: _indiceActual, children: _paginas),
+                ),
+
+                // --- BARRA SUPERIOR INTEGRADA (Buscador + Varita + Avatar) ---
+                if (_indiceActual == 0)
+                  Positioned(
+                    top: 20,
+                    left: 20,
+                    right: 20,
+                    child: Row(
+                      children: [
+                        // 1. BOTÓN ADD TURNO
+                        ElevatedButton.icon(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF3ABEF9),
+                            foregroundColor: Colors.white,
+                            shape: const StadiumBorder(),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                          ),
+                          icon: const Icon(Icons.add, size: 18),
+                          label: const Text(
+                            "Add Turno",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          onPressed: () {},
+                        ),
+                        const SizedBox(width: 15),
+
+                        // 2. BUSCADOR CENTRAL
+                        Expanded(
+                          child: Container(
+                            height: 45,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.1),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: TextField(
+                              decoration: InputDecoration(
+                                hintText: "Search lavadero...",
+                                prefixIcon: const Icon(
+                                  Icons.search,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
+                                border: InputBorder.none,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 15),
+
+                        // 3. LA VARITA MÁGICA (Sigue funcionando igual)
+                        Container(
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.auto_fix_high,
+                              color: Color(0xFF3ABEF9),
+                            ),
+                            onPressed: () {
+                              // Ejecuta la función del mapa
+                              mapScreenKey.currentState
+                                  ?.generarLavaderosAutomaticos();
+                            },
+                            tooltip: "Generar datos de prueba",
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+
+                        // 4. EL AVATAR CLICKEABLE (Te lleva al perfil)
+                        GestureDetector(
+                          onTap: () => setState(() => _indiceActual = 2),
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(color: Colors.black12, blurRadius: 4),
+                              ],
+                            ),
+                            child: CircleAvatar(
+                              radius: 20,
+                              backgroundColor: const Color(0xFF3ABEF9),
+                              backgroundImage:
+                                  supabase
+                                          .auth
+                                          .currentUser
+                                          ?.userMetadata?['avatar_url'] !=
+                                      null
+                                  ? NetworkImage(
+                                      supabase
+                                          .auth
+                                          .currentUser!
+                                          .userMetadata!['avatar_url'],
+                                    )
+                                  : null,
+                              child:
+                                  supabase
+                                          .auth
+                                          .currentUser
+                                          ?.userMetadata?['avatar_url'] ==
+                                      null
+                                  ? const Icon(
+                                      Icons.person,
+                                      color: Colors.white,
+                                    )
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          // COLUMNA 3: PANEL DERECHO (El CRUD)
+          Container(
+            width: 350,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: _buildPanelInformacion(),
+          ),
         ],
       ),
     );
+  }
+
+  // Función para crear los botones del menú lateral
+  // --- SUSTITUIR DESDE AQUÍ ---
+  Widget _itemMenuLateral(IconData icono, String texto, int index) {
+    bool seleccionado = _indiceActual == index;
+    return Padding(
+      // 1. EL MARGEN: Para que el botón no toque los bordes del sidebar
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+      child: ListTile(
+        // 2. EL REDONDEADO: 'borderRadius' de 12 o más para ese efecto cápsula
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+
+        // 3. EL COLOR DE FONDO: Solo se ve cuando está seleccionado
+        tileColor: seleccionado
+            ? Colors.white.withOpacity(0.1)
+            : Colors.transparent,
+
+        // 4. EL ESTADO: Para que Flutter sepa que debe aplicar los colores de arriba
+        selected: seleccionado,
+
+        onTap: () {
+          if (index == 0)
+            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+          setState(() => _indiceActual = index);
+        },
+
+        leading: Icon(
+          icono,
+          color: seleccionado ? const Color(0xFFEF4444) : Colors.white60,
+          size: 22,
+        ),
+        title: Text(
+          texto,
+          style: TextStyle(
+            color: seleccionado ? Colors.white : Colors.white60,
+            fontSize: 15,
+            fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
+          ),
+        ),
+      ),
+    );
+  }
+  // --- HASTA AQUÍ ---
+
+  // Función para el panel de detalles a la derecha
+  // Función para el panel de detalles a la derecha (Ahora es un CRUD)
+  Widget _buildPanelInformacion() {
+    if (_lavaderoSeleccionado == null) {
+      return const Center(
+        child: Text(
+          "Seleccioná un lavadero\nen el mapa para editar",
+          textAlign: TextAlign.center,
+          style: TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    // Cargamos los datos actuales en los cuadritos de texto
+    _nombreCtrl.text = _lavaderoSeleccionado['razon_social'] ?? '';
+    _direccionCtrl.text = _lavaderoSeleccionado['direccion'] ?? '';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 1. IMAGEN DEL LAVADERO
+          ClipRRect(
+            borderRadius: BorderRadius.circular(15),
+            child: Image.network(
+              'https://picsum.photos/seed/${_lavaderoSeleccionado['id']}/400/250',
+              height: 180,
+              width: double.infinity,
+              fit: BoxFit.cover,
+              errorBuilder: (context, e, s) => Container(
+                height: 180,
+                color: Colors.grey[200],
+                child: const Icon(Icons.image),
+              ),
+            ),
+          ),
+          const SizedBox(height: 25),
+
+          const Text(
+            "EDITAR INFORMACIÓN",
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 2. CAMPOS EDITABLES
+          _inputPanel("Nombre del Negocio", _nombreCtrl),
+          const SizedBox(height: 15),
+          _inputPanel("Dirección", _direccionCtrl),
+
+          const SizedBox(height: 30),
+
+          // 3. BOTONES Update / Cancel
+          // 3. BOTONES Update / Borrar / Cancel
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3ABEF9),
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  onPressed: () => _actualizarLavaderoEnSupabase(),
+                  child: const Text("Update"),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // --- ICONO DE BORRAR ---
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () => _confirmarBorrado(),
+                tooltip: "Eliminar Lavadero",
+              ),
+              const SizedBox(width: 8),
+              OutlinedButton(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.grey),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                onPressed: () => setState(() => _lavaderoSeleccionado = null),
+                child: const Text(
+                  "Cancel",
+                  style: TextStyle(color: Colors.grey),
+                ),
+              ),
+            ],
+          ),
+
+          const Divider(height: 50),
+
+          // Botón de Reserva (para el cliente)
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 50),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            icon: const Icon(Icons.calendar_today, size: 18),
+            label: const Text("SOLICITAR TURNO"),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ReservaScreen(lavadero: _lavaderoSeleccionado),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Widget para crear los cuadritos de texto lindos en el panel
+  Widget _inputPanel(String label, TextEditingController ctrl) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: Colors.blueGrey,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 5),
+        TextField(
+          controller: ctrl,
+          decoration: InputDecoration(
+            filled: true,
+            fillColor: Colors.grey[100],
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide.none,
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 10,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  // LA FUNCIÓN QUE GUARDA EN SUPABASE
+  Future<void> _actualizarLavaderoEnSupabase() async {
+    try {
+      await supabase
+          .from('lavaderos')
+          .update({
+            'razon_social': _nombreCtrl.text,
+            'direccion': _direccionCtrl.text,
+          })
+          .eq('id', _lavaderoSeleccionado['id']);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("✅ Lavadero actualizado correctamente"),
+          backgroundColor: Colors.green,
+        ),
+      );
+
+      // Esto hace que el mapa se refresque solo y muestre el nuevo nombre
+      mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ Error al actualizar: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  // --- FUNCIÓN PARA CONFIRMAR BORRADO ---
+  void _confirmarBorrado() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("¿Eliminar lavadero?"),
+        content: Text(
+          "Estás por borrar '${_lavaderoSeleccionado['razon_social']}'. Esta acción no se puede deshacer.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR"),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _eliminarLavaderoDeSupabase();
+            },
+            child: const Text("BORRAR", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- FUNCIÓN QUE BORRA DE SUPABASE ---
+  Future<void> _eliminarLavaderoDeSupabase() async {
+    try {
+      await supabase
+          .from('lavaderos')
+          .delete()
+          .eq('id', _lavaderoSeleccionado['id']);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("🗑️ Lavadero eliminado"),
+          backgroundColor: Colors.orange,
+        ),
+      );
+
+      setState(() => _lavaderoSeleccionado = null); // Cerramos el panel derecho
+      mapScreenKey.currentState
+          ?.cargarLavaderosDeSupabase(); // Refrescamos el mapa
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ Error al borrar: $e"),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
   }
 }
 
 // --- PANTALLA DE MAPA ---
 class MapScreen extends StatefulWidget {
   final VoidCallback? onIrAPerfil;
-  const MapScreen({super.key, this.onIrAPerfil});
+  final Function(dynamic)? onSelectLavadero; // <--- ESTO ES LO QUE TE FALTA
+
+  const MapScreen({
+    super.key,
+    this.onIrAPerfil,
+    this.onSelectLavadero,
+  }); // <--- Y ESTO TAMBIÉN
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -307,7 +800,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  Future<void> _generarLavaderosAutomaticos() async {
+  Future<void> generarLavaderosAutomaticos() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
@@ -352,6 +845,9 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _mostrarCartel(dynamic l) {
+    // Esta línea le avisa al Dashboard qué lavadero tocaste
+    if (widget.onSelectLavadero != null) widget.onSelectLavadero!(l);
+    // ... el resto de tu código del showModalBottomSheet ...
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -474,61 +970,7 @@ class _MapScreenState extends State<MapScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final user = supabase.auth.currentUser;
-    final String? avatarUrl = user?.userMetadata?['avatar_url'];
-    final String primerNombre = (user?.userMetadata?['full_name'] ?? 'Usuario')
-        .split(' ')[0];
-
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("ATT!: A Todo Trapo"),
-        backgroundColor: const Color(0xFF3ABEF9),
-        foregroundColor: Colors.white,
-        actions: [
-          if (user != null)
-            IconButton(
-              icon: const Icon(Icons.auto_fix_high),
-              onPressed: _generarLavaderosAutomaticos,
-              tooltip: "Generar datos de prueba",
-            ),
-          if (user != null)
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                onTap: widget.onIrAPerfil,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 15.0),
-                  child: Row(
-                    children: [
-                      Text(
-                        primerNombre,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      CircleAvatar(
-                        radius: 18,
-                        backgroundColor: Colors.white24,
-                        backgroundImage: avatarUrl != null
-                            ? NetworkImage(avatarUrl)
-                            : null,
-                        child: avatarUrl == null
-                            ? const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                                size: 20,
-                              )
-                            : null,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
       body: Stack(
         children: [
           FlutterMap(
@@ -544,6 +986,7 @@ class _MapScreenState extends State<MapScreen> {
               MarkerLayer(markers: _markers),
             ],
           ),
+          // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
           // --- PANEL DE BOTONES FACHEROS ---
           Positioned(
             bottom: 20,
@@ -752,19 +1195,12 @@ class _PerfilScreenState extends State<PerfilScreen> {
         if (mounted) setState(() => _cargando = false);
       }
     } else {
+      // Si no hay usuario, también hay que frenar la carga
       if (mounted) setState(() => _cargando = false);
     }
   }
 
-  Future<void> _cerrarSesion() async {
-    await supabase.auth.signOut();
-    if (mounted)
-      setState(() {
-        _rolUsuario = 'pendiente';
-        _patenteController.clear();
-      });
-  }
-
+  Future<void> _cerrarSesion() async => await supabase.auth.signOut();
   Future<void> _guardarPatente() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -781,8 +1217,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
   @override
   Widget build(BuildContext context) {
     final usuario = supabase.auth.currentUser;
-    if (_cargando)
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_cargando)return const Scaffold(body: Center(child: CircularProgressIndicator()));
+
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mi Perfil"),
@@ -817,36 +1253,16 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     const Divider(height: 40),
                     Text(
                       "MODO: ${_rolUsuario.toUpperCase()}",
-                      style: const TextStyle(
-                        color: Colors.blueGrey,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      style: const TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    const SizedBox(height: 20),
                     if (_rolUsuario == 'cliente')
                       TextField(
                         controller: _patenteController,
                         decoration: InputDecoration(
                           labelText: "Tu Patente",
                           suffixIcon: IconButton(
-                            icon: const Icon(Icons.save, color: Colors.green),
+                            icon: const Icon(Icons.save),
                             onPressed: _guardarPatente,
-                          ),
-                        ),
-                      ),
-                    if (_rolUsuario == 'lavadero')
-                      ElevatedButton.icon(
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blueGrey,
-                          foregroundColor: Colors.white,
-                        ),
-                        icon: const Icon(Icons.add_business),
-                        label: const Text("REGISTRAR MI LAVADERO"),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                const RegistroLavaderoScreen(),
                           ),
                         ),
                       ),
@@ -864,9 +1280,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
       ),
     );
   }
-}
+} // <--- CIERRE DE LA CLASE PERFIL
 
-// --- PANTALLA: REGISTRO DE LAVADERO ---
+// --- PANTALLA: REGISTRO DE LAVADERO (Esta clase estaba suelta y hay que mantenerla) ---
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
   @override
@@ -881,14 +1297,12 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _cuentaController = TextEditingController();
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
-
   final _tagController = TextEditingController();
   final List<String> _servicios = [
     'Lavado',
     'Control de aire/ruedas',
     'Venta de insumos',
   ];
-
   LatLng _punto = const LatLng(-34.098, -59.028);
 
   @override
@@ -914,9 +1328,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         'servicios': _servicios,
       });
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Lavadero configurado a todo trapo")),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("✅ Lavadero configurado")));
         Navigator.pop(context);
       }
     } catch (e) {
@@ -953,7 +1367,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
             _cardSeccion("Servicios Ofrecidos", Icons.list_alt, [
               Wrap(
                 spacing: 8.0,
-                runSpacing: 4.0,
                 children: _servicios
                     .map(
                       (s) => Chip(
@@ -961,7 +1374,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                         onDeleted: s == 'Lavado'
                             ? null
                             : () => setState(() => _servicios.remove(s)),
-                        deleteIconColor: Colors.red,
                       ),
                     )
                     .toList(),
@@ -972,12 +1384,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                   hintText: "Agregar servicio...",
                 ),
                 onSubmitted: (val) {
-                  if (val.isNotEmpty && !_servicios.contains(val)) {
-                    setState(() {
-                      _servicios.add(val);
-                      _tagController.clear();
-                    });
-                  }
+                  if (val.isNotEmpty && !_servicios.contains(val))
+                    setState(() => _servicios.add(val));
+                  _tagController.clear();
                 },
               ),
             ]),
@@ -1019,15 +1428,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                 ),
               ),
             ]),
-            const SizedBox(height: 15),
-            _cardSeccion("Registro Bancario", Icons.account_balance, [
-              _input(
-                _bancoController,
-                "Nombre del Banco",
-                Icons.account_balance_wallet,
-              ),
-              _input(_cuentaController, "CBU / Alias / CVU", Icons.vignette),
-            ]),
             const SizedBox(height: 25),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -1041,7 +1441,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               onPressed: _registrar,
               child: const Text(
                 "GUARDAR CONFIGURACIÓN",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ],
