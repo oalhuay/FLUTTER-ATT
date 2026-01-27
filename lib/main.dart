@@ -146,6 +146,7 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   int _indiceActual = 0;
+  bool _sidebarAbierto = true;
   dynamic
   _lavaderoSeleccionado; // Acá guardamos el lavadero que toques en el mapa
   // Controladores para poder editar el texto en el panel derecho
@@ -193,15 +194,45 @@ class _MainLayoutState extends State<MainLayout> {
 
           return Row(
             children: [
-              // COLUMNA 1: SIDEBAR (Solo se muestra fijo en Desktop)
-              if (!esMovil)
-                Container(
-                  width: 250,
-                  color: const Color(0xFF1E1E2D),
-                  child: _buildContenidoSidebar(),
+              // COLUMNA 1: SIDEBAR ANIMADO (Ahora sí se desliza real hacia la izquierda)
+              AnimatedContainer(
+                duration: const Duration(milliseconds: 400),
+                curve: Curves.easeInOutQuart,
+                // El ancho cambia de 250 a 0, activando el efecto de deslizamiento
+                width: (!esMovil && _sidebarAbierto) ? 250 : 0,
+                child: ClipRect(
+                  child: OverflowBox(
+                    minWidth: 250,
+                    maxWidth: 250,
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: 250,
+                      color: const Color(0xFF1E1E2D),
+                      child: Stack(
+                        children: [
+                          _buildContenidoSidebar(),
+                          // BOTÓN DE CERRAR (X) A LA IZQUIERDA
+                          Positioned(
+                            top: 10,
+                            left: 10,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.white60,
+                                size: 22,
+                              ),
+                              onPressed: () =>
+                                  setState(() => _sidebarAbierto = false),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
+              ),
 
-              // COLUMNA 2: CONTENIDO CENTRAL (Mapa + Herramientas)
+              // COLUMNA 2: CONTENIDO CENTRAL (Se expande automáticamente)
               Expanded(
                 child: Stack(
                   children: [
@@ -213,11 +244,44 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     ),
 
-                    // --- BARRA SUPERIOR INTEGRADA ---
-                    if (_indiceActual == 0)
-                      Positioned(
+                    // --- BOTÓN PARA VOLVER A MOSTRAR EL SIDEBAR (Animado con la barra) ---
+                    if (!esMovil && _indiceActual == 0)
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOutQuart,
                         top: 20,
-                        left: 20,
+                        // Si está abierto o NO estamos en el mapa, lo escondemos a la izquierda
+                        left: (_sidebarAbierto || _indiceActual != 0)
+                            ? -60
+                            : 15,
+                        child: Container(
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF1E1E2D),
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(color: Colors.black26, blurRadius: 5),
+                            ],
+                          ),
+                          child: IconButton(
+                            icon: const Icon(
+                              Icons.chevron_right,
+                              color: Colors.white,
+                            ),
+                            onPressed: () =>
+                                setState(() => _sidebarAbierto = true),
+                            tooltip: "Mostrar menú",
+                          ),
+                        ),
+                      ),
+
+                    // --- BARRA SUPERIOR INTEGRADA (AnimatedPositioned para que el margen sea fluido) ---
+                    if (_indiceActual == 0)
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOutQuart,
+                        top: 20,
+                        // Ajusta el margen izquierdo dinámicamente según el estado del sidebar
+                        left: esMovil ? 20 : (_sidebarAbierto ? 20 : 65),
                         right: 20,
                         child: Row(
                           children: [
@@ -243,7 +307,7 @@ class _MainLayoutState extends State<MainLayout> {
                                 },
                               ),
 
-                            // 1. BOTÓN ADD TURNO
+                            // 1. BOTÓN ADD TURNO (Solo en PC/Tablet)
                             if (!esMovil) ...[
                               ElevatedButton.icon(
                                 style: ElevatedButton.styleFrom(
@@ -1330,6 +1394,15 @@ class _PerfilScreenState extends State<PerfilScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mi Perfil"),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (context) => const MainLayout()),
+              (route) => false,
+            );
+          },
+        ),
         backgroundColor: const Color(0xFFEF4444),
         foregroundColor: Colors.white,
       ),
