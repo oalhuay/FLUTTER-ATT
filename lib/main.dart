@@ -256,7 +256,7 @@ class _MainLayoutState extends State<MainLayout> {
                                 ),
                                 icon: const Icon(Icons.add, size: 18),
                                 label: const Text(
-                                  "Add Turno",
+                                  "Busqueda Rápido",
                                   style: TextStyle(fontWeight: FontWeight.bold),
                                 ),
                                 onPressed: () {},
@@ -1060,47 +1060,17 @@ class _MapScreenState extends State<MapScreen> {
           // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
           // --- PANEL DE BOTONES FACHEROS ---
           Positioned(
-            // Lo bajamos un poco (top: 100) para que no tape el Avatar de arriba
-            top: 100,
+            top: 100, // Bajado para no tapar el Avatar
             right: 15,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // --- BOTÓN ADD TURNO (Solo símbolo + para móvil) ---
-                if (MediaQuery.of(context).size.width < 950) ...[
-                  Container(
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF3ABEF9), // Rojo ATT!
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(color: Colors.black26, blurRadius: 8),
-                      ],
-                    ),
-                    child: IconButton(
-                      icon: const Icon(
-                        Icons.add,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                      onPressed: () {
-                        // Aquí va tu lógica para añadir turno
-                      },
-                    ),
-                  ),
-                  const SizedBox(
-                    height: 15,
-                  ), // Espacio entre el + y los controles
-                ],
-
-                // Botón GPS
                 _botonCircular(
                   icon: Icons.my_location,
                   onPressed: () =>
                       _animatedMapMove(const LatLng(-34.098, -59.028), 15),
                 ),
                 const SizedBox(height: 12),
-
-                // Botones de Zoom
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -1135,6 +1105,34 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
+          // --- BLOQUE 2: BOTÓN "+" DE AÑADIR TURNO (ABAJO A LA DERECHA) ---
+          // Solo aparece en la versión móvil/tablet
+          if (MediaQuery.of(context).size.width < 950)
+            Positioned(
+              bottom: 30, // Posición clásica de pulgar
+              right: 20,
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF3ABEF9), // Rojo ATT!
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black38,
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.add, color: Colors.white, size: 35),
+                  onPressed: () {
+                    // Aquí tu lógica para añadir turno
+                  },
+                ),
+              ),
+            ),
         ],
       ),
     );
