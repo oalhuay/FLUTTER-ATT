@@ -173,229 +173,300 @@ class _MainLayoutState extends State<MainLayout> {
 
   @override
   Widget build(BuildContext context) {
+    // Usamos MediaQuery para saber si la pantalla es de móvil/tablet
+    final bool esMovil = MediaQuery.of(context).size.width < 950;
+
     return Scaffold(
-      body: Row(
-        // <-- Esta es la clave para las 3 columnas
-        children: [
-          // COLUMNA 1: SIDEBAR (Menú lateral oscuro)
-          Container(
-            width: 250,
-            color: const Color(0xFF1E1E2D), // Azul oscuro pro
-            child: Column(
-              children: [
-                const SizedBox(height: 50),
-                // --- NUEVO LOGO ESTILO PREMIUM ---
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // El círculo celeste con el auto blanco
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF3ABEF9), // Celeste ATT!
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.directions_car_filled,
-                          color: Colors.white,
-                          size: 28,
-                        ),
+      // 1. EL DRAWER: Solo se activa en pantallas chicas
+      drawer: esMovil
+          ? Drawer(
+              backgroundColor: const Color(0xFF1E1E2D),
+              child:
+                  _buildContenidoSidebar(), // Esta función contendrá el logo y botones
+            )
+          : null,
+      body: LayoutBuilder(
+        builder: (context, constraints) {
+          // Umbral para el panel derecho fijo
+          bool esPantallaChica = constraints.maxWidth < 1100;
+
+          return Row(
+            children: [
+              // COLUMNA 1: SIDEBAR (Solo se muestra fijo en Desktop)
+              if (!esMovil)
+                Container(
+                  width: 250,
+                  color: const Color(0xFF1E1E2D),
+                  child: _buildContenidoSidebar(),
+                ),
+
+              // COLUMNA 2: CONTENIDO CENTRAL (Mapa + Herramientas)
+              Expanded(
+                child: Stack(
+                  children: [
+                    Container(
+                      color: const Color(0xFFF5F7F9),
+                      child: IndexedStack(
+                        index: _indiceActual,
+                        children: _paginas,
                       ),
-                      const SizedBox(width: 12),
-                      // El Texto ATT!
-                      RichText(
-                        text: TextSpan(
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 1.1,
-                          ),
+                    ),
+
+                    // --- BARRA SUPERIOR INTEGRADA ---
+                    if (_indiceActual == 0)
+                      Positioned(
+                        top: 20,
+                        left: 20,
+                        right: 20,
+                        child: Row(
                           children: [
-                            const TextSpan(
-                              text: "ATT",
-                              style: TextStyle(color: Colors.white),
+                            // BOTÓN HAMBURGUESA: Solo aparece en móvil
+                            if (esMovil)
+                              Builder(
+                                builder: (context) {
+                                  return Container(
+                                    margin: const EdgeInsets.only(right: 10),
+                                    decoration: const BoxDecoration(
+                                      color: Colors.white,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: IconButton(
+                                      icon: const Icon(
+                                        Icons.menu,
+                                        color: Color(0xFF1E1E2D),
+                                      ),
+                                      onPressed: () =>
+                                          Scaffold.of(context).openDrawer(),
+                                    ),
+                                  );
+                                },
+                              ),
+
+                            // 1. BOTÓN ADD TURNO
+                            if (!esMovil) ...[
+                              ElevatedButton.icon(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF3ABEF9),
+                                  foregroundColor: Colors.white,
+                                  shape: const StadiumBorder(),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                    vertical: 12,
+                                  ),
+                                ),
+                                icon: const Icon(Icons.add, size: 18),
+                                label: const Text(
+                                  "Add Turno",
+                                  style: TextStyle(fontWeight: FontWeight.bold),
+                                ),
+                                onPressed: () {},
+                              ),
+                              const SizedBox(width: 15),
+                            ],
+
+                            // 2. BUSCADOR CENTRAL
+                            Expanded(
+                              child: Container(
+                                height: 45,
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(0.1),
+                                      blurRadius: 8,
+                                    ),
+                                  ],
+                                ),
+                                child: const TextField(
+                                  decoration: InputDecoration(
+                                    hintText: "Search lavadero...",
+                                    prefixIcon: Icon(
+                                      Icons.search,
+                                      color: Colors.grey,
+                                      size: 20,
+                                    ),
+                                    border: InputBorder.none,
+                                    contentPadding: EdgeInsets.symmetric(
+                                      vertical: 10,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
-                            const TextSpan(
-                              text: "!",
-                              style: TextStyle(
-                                color: Color(0xFF3ABEF9),
-                              ), // El Celeste de ATT!
+                            const SizedBox(width: 15),
+
+                            // 3. LA VARITA MÁGICA
+                            Container(
+                              decoration: const BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                              ),
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.auto_fix_high,
+                                  color: Color(0xFF3ABEF9),
+                                ),
+                                onPressed: () => mapScreenKey.currentState
+                                    ?.generarLavaderosAutomaticos(),
+                                tooltip: "Generar datos de prueba",
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+
+                            // 4. EL AVATAR
+                            GestureDetector(
+                              onTap: () => setState(() => _indiceActual = 2),
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: Colors.white,
+                                    width: 2,
+                                  ),
+                                  boxShadow: const [
+                                    BoxShadow(
+                                      color: Colors.black12,
+                                      blurRadius: 4,
+                                    ),
+                                  ],
+                                ),
+                                child: CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: const Color(0xFF3ABEF9),
+                                  backgroundImage:
+                                      supabase
+                                              .auth
+                                              .currentUser
+                                              ?.userMetadata?['avatar_url'] !=
+                                          null
+                                      ? NetworkImage(
+                                          supabase
+                                              .auth
+                                              .currentUser!
+                                              .userMetadata!['avatar_url'],
+                                        )
+                                      : null,
+                                  child:
+                                      supabase
+                                              .auth
+                                              .currentUser
+                                              ?.userMetadata?['avatar_url'] ==
+                                          null
+                                      ? const Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                        )
+                                      : null,
+                                ),
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 40),
-                _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
-                _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
-                _itemMenuLateral(Icons.person, "Mi Perfil", 2),
-                const Spacer(),
-                const Text(
-                  "v1.0.8",
-                  style: TextStyle(color: Colors.white24, fontSize: 10),
-                ),
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
 
-          // COLUMNA 2: CONTENIDO CENTRAL (Mapa + Herramientas Flotantes)
-          Expanded(
-            child: Stack(
-              children: [
-                Container(
-                  color: const Color(0xFFF5F7F9),
-                  child: IndexedStack(index: _indiceActual, children: _paginas),
-                ),
-
-                // --- BARRA SUPERIOR INTEGRADA (Buscador + Varita + Avatar) ---
-                if (_indiceActual == 0)
-                  Positioned(
-                    top: 20,
-                    left: 20,
-                    right: 20,
-                    child: Row(
-                      children: [
-                        // 1. BOTÓN ADD TURNO
-                        ElevatedButton.icon(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF3ABEF9),
-                            foregroundColor: Colors.white,
-                            shape: const StadiumBorder(),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                          ),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: const Text(
-                            "Add Turno",
-                            style: TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          onPressed: () {},
-                        ),
-                        const SizedBox(width: 15),
-
-                        // 2. BUSCADOR CENTRAL
-                        Expanded(
+                    // PANEL FLOTANTE: Aparece solo en móvil cuando hay selección
+                    if (esPantallaChica && _lavaderoSeleccionado != null)
+                      Positioned(
+                        right: 15,
+                        top: 80,
+                        bottom: 20,
+                        width: 330,
+                        child: Material(
+                          elevation: 10,
+                          borderRadius: BorderRadius.circular(20),
                           child: Container(
-                            height: 45,
                             decoration: BoxDecoration(
                               color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.1),
-                                  blurRadius: 8,
-                                ),
-                              ],
+                              borderRadius: BorderRadius.circular(20),
                             ),
-                            child: TextField(
-                              decoration: InputDecoration(
-                                hintText: "Search lavadero...",
-                                prefixIcon: const Icon(
-                                  Icons.search,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                border: InputBorder.none,
-                                contentPadding: const EdgeInsets.symmetric(
-                                  vertical: 10,
-                                ),
-                              ),
-                            ),
+                            child: _buildPanelInformacion(),
                           ),
                         ),
-                        const SizedBox(width: 15),
-
-                        // 3. LA VARITA MÁGICA (Sigue funcionando igual)
-                        Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            icon: const Icon(
-                              Icons.auto_fix_high,
-                              color: Color(0xFF3ABEF9),
-                            ),
-                            onPressed: () {
-                              // Ejecuta la función del mapa
-                              mapScreenKey.currentState
-                                  ?.generarLavaderosAutomaticos();
-                            },
-                            tooltip: "Generar datos de prueba",
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-
-                        // 4. EL AVATAR CLICKEABLE (Te lleva al perfil)
-                        GestureDetector(
-                          onTap: () => setState(() => _indiceActual = 2),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
-                              boxShadow: [
-                                BoxShadow(color: Colors.black12, blurRadius: 4),
-                              ],
-                            ),
-                            child: CircleAvatar(
-                              radius: 20,
-                              backgroundColor: const Color(0xFF3ABEF9),
-                              backgroundImage:
-                                  supabase
-                                          .auth
-                                          .currentUser
-                                          ?.userMetadata?['avatar_url'] !=
-                                      null
-                                  ? NetworkImage(
-                                      supabase
-                                          .auth
-                                          .currentUser!
-                                          .userMetadata!['avatar_url'],
-                                    )
-                                  : null,
-                              child:
-                                  supabase
-                                          .auth
-                                          .currentUser
-                                          ?.userMetadata?['avatar_url'] ==
-                                      null
-                                  ? const Icon(
-                                      Icons.person,
-                                      color: Colors.white,
-                                    )
-                                  : null,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          // COLUMNA 3: PANEL DERECHO (El CRUD)
-          Container(
-            width: 350,
-            decoration: BoxDecoration(
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 10,
+                      ),
+                  ],
                 ),
-              ],
-            ),
-            child: _buildPanelInformacion(),
-          ),
-        ],
+              ),
+
+              // COLUMNA 3: PANEL DERECHO FIJO (Solo en Desktop)
+              if (!esPantallaChica)
+                Container(
+                  width: 350,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  child: _buildPanelInformacion(),
+                ),
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  // Mueve aquí el contenido que tenías antes en el Sidebar
+  Widget _buildContenidoSidebar() {
+    return Column(
+      children: [
+        const SizedBox(height: 50),
+        // --- LOGO ATT! ---
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Color(0xFF3ABEF9),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.directions_car_filled,
+                  color: Colors.white,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 12),
+              RichText(
+                text: const TextSpan(
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                  ),
+                  children: [
+                    TextSpan(
+                      text: "ATT",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                    TextSpan(
+                      text: "!",
+                      style: TextStyle(color: Color(0xFF3ABEF9)),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 40),
+        _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
+        _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
+        _itemMenuLateral(Icons.person, "Mi Perfil", 2),
+        const Spacer(),
+        const Text(
+          "v1.0.8",
+          style: TextStyle(color: Colors.white24, fontSize: 10),
+        ),
+        const SizedBox(height: 20),
+      ],
     );
   }
 
@@ -989,17 +1060,47 @@ class _MapScreenState extends State<MapScreen> {
           // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
           // --- PANEL DE BOTONES FACHEROS ---
           Positioned(
-            bottom: 20,
+            // Lo bajamos un poco (top: 100) para que no tape el Avatar de arriba
+            top: 100,
             right: 15,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
+                // --- BOTÓN ADD TURNO (Solo símbolo + para móvil) ---
+                if (MediaQuery.of(context).size.width < 950) ...[
+                  Container(
+                    decoration: const BoxDecoration(
+                      color: Color(0xFF3ABEF9), // Rojo ATT!
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(color: Colors.black26, blurRadius: 8),
+                      ],
+                    ),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.add,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                      onPressed: () {
+                        // Aquí va tu lógica para añadir turno
+                      },
+                    ),
+                  ),
+                  const SizedBox(
+                    height: 15,
+                  ), // Espacio entre el + y los controles
+                ],
+
+                // Botón GPS
                 _botonCircular(
                   icon: Icons.my_location,
                   onPressed: () =>
                       _animatedMapMove(const LatLng(-34.098, -59.028), 15),
                 ),
                 const SizedBox(height: 12),
+
+                // Botones de Zoom
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.white,
@@ -1008,7 +1109,6 @@ class _MapScreenState extends State<MapScreen> {
                       BoxShadow(
                         color: Colors.black.withOpacity(0.2),
                         blurRadius: 6,
-                        offset: const Offset(0, 2),
                       ),
                     ],
                   ),
@@ -1217,7 +1317,8 @@ class _PerfilScreenState extends State<PerfilScreen> {
   @override
   Widget build(BuildContext context) {
     final usuario = supabase.auth.currentUser;
-    if (_cargando)return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    if (_cargando)
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
 
     return Scaffold(
       appBar: AppBar(
