@@ -158,6 +158,7 @@ class _MainLayoutState extends State<MainLayout> {
       onIrAPerfil: () => setState(() => _indiceActual = 2),
       // Esta línea es la conexión mágica con el panel derecho
       onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
+      onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
     ),
     const MisTurnosScreen(),
     const PerfilScreen(),
@@ -389,7 +390,7 @@ class _MainLayoutState extends State<MainLayout> {
               ),
 
               // COLUMNA 3: PANEL DERECHO FIJO (Solo en Desktop)
-              if (!esPantallaChica)
+              if (!esPantallaChica && _lavaderoSeleccionado != null)
                 Container(
                   width: 350,
                   decoration: BoxDecoration(
@@ -760,13 +761,15 @@ class _MainLayoutState extends State<MainLayout> {
 // --- PANTALLA DE MAPA ---
 class MapScreen extends StatefulWidget {
   final VoidCallback? onIrAPerfil;
-  final Function(dynamic)? onSelectLavadero; // <--- ESTO ES LO QUE TE FALTA
+  final Function(dynamic)? onSelectLavadero;
+  final VoidCallback? onDeselccionar;
 
   const MapScreen({
     super.key,
     this.onIrAPerfil,
     this.onSelectLavadero,
-  }); // <--- Y ESTO TAMBIÉN
+    this.onDeselccionar, // <--- AGREGA ESTA LÍNEA AQUÍ ADENTRO
+  });
 
   @override
   State<MapScreen> createState() => _MapScreenState();
@@ -1046,9 +1049,15 @@ class _MapScreenState extends State<MapScreen> {
         children: [
           FlutterMap(
             mapController: _mapController,
-            options: const MapOptions(
-              initialCenter: LatLng(-34.098, -59.028),
+            options: MapOptions(
+              initialCenter: const LatLng(-34.098, -59.028),
               initialZoom: 14,
+              // ESTA FUNCIÓN SE ACTIVA AL TOCAR CUALQUIER PARTE VACÍA DEL MAPA
+              onTap: (tapPosition, point) {
+                if (widget.onDeselccionar != null) {
+                  widget.onDeselccionar!();
+                }
+              },
             ),
             children: [
               TileLayer(
