@@ -6,6 +6,7 @@ import 'package:latlong2/latlong.dart';
 import 'reserva_screen.dart';
 import 'splash_screen.dart';
 import 'mis_turnos_screen.dart';
+import 'registro_lavadero_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -147,8 +148,39 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   int _indiceActual = 0;
   bool _sidebarAbierto = true;
-  dynamic
-  _lavaderoSeleccionado; // Acá guardamos el lavadero que toques en el mapa
+  dynamic _lavaderoSeleccionado;
+
+  // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
+  String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
+
+  @override
+  void initState() {
+    super.initState();
+    _obtenerRolActual(); // Buscamos el rol en la base de datos al arrancar
+
+    // Escuchar si el usuario cambia (ej: si cierra sesión y entra con otro)
+    supabase.auth.onAuthStateChange.listen((data) {
+      if (mounted) {
+        _obtenerRolActual();
+        setState(() {});
+      }
+    });
+  }
+
+  Future<void> _obtenerRolActual() async {
+    final user = supabase.auth.currentUser;
+    if (user != null) {
+      final data = await supabase
+          .from('perfiles_usuarios')
+          .select('rol')
+          .eq('id', user.id)
+          .maybeSingle();
+      if (data != null && mounted) {
+        setState(() => _rolUsuario = data['rol'] ?? 'pendiente');
+      }
+    }
+  }
+
   // Controladores para poder editar el texto en el panel derecho
   final TextEditingController _nombreCtrl = TextEditingController();
   final TextEditingController _direccionCtrl = TextEditingController();
@@ -164,14 +196,6 @@ class _MainLayoutState extends State<MainLayout> {
     const MisTurnosScreen(),
     const PerfilScreen(),
   ];
-
-  @override
-  void initState() {
-    super.initState();
-    supabase.auth.onAuthStateChange.listen((data) {
-      if (mounted) setState(() {});
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -525,6 +549,11 @@ class _MainLayoutState extends State<MainLayout> {
         _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
         _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
         _itemMenuLateral(Icons.person, "Mi Perfil", 2),
+
+        // --- PASO 3: EL BOTÓN DE REGISTRO PARA DUEÑOS ---
+        if (_rolUsuario == 'lavadero')
+          _itemMenuLateral(Icons.add_business, "Configurar Lavadero", 99),
+
         const Spacer(),
         const Text(
           "v1.0.8",
@@ -555,9 +584,21 @@ class _MainLayoutState extends State<MainLayout> {
         selected: seleccionado,
 
         onTap: () {
-          if (index == 0)
-            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-          setState(() => _indiceActual = index);
+          // --- NUEVA LÓGICA DE NAVEGACIÓN ---
+          if (index == 99) {
+            // Si es el botón de configurar, abrimos la pantalla de registro
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const RegistroLavaderoScreen(),
+              ),
+            );
+          } else {
+            // Si son los botones normales, cambiamos de pestaña
+            if (index == 0)
+              mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+            setState(() => _indiceActual = index);
+          }
         },
 
         leading: Icon(
@@ -1394,15 +1435,6 @@ class _PerfilScreenState extends State<PerfilScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Mi Perfil"),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            Navigator.of(context).pushAndRemoveUntil(
-              MaterialPageRoute(builder: (context) => const MainLayout()),
-              (route) => false,
-            );
-          },
-        ),
         backgroundColor: const Color(0xFFEF4444),
         foregroundColor: Colors.white,
       ),
