@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importante para abrir el link del Storage
 import 'main.dart';
+
 class MisTurnosScreen extends StatefulWidget {
   // 1. Agregamos la variable para la orden de volver
   final VoidCallback? onVolver;
@@ -13,8 +14,19 @@ class MisTurnosScreen extends StatefulWidget {
 }
 
 class _MisTurnosScreenState extends State<MisTurnosScreen> {
+  // --- VARIABLES PARA PAGINACIÓN Y FILTROS ---
+  final ScrollController _scrollController = ScrollController();
+  List<dynamic> _misTurnos = []; // Lista donde acumulamos los turnos
+  String _filtroActual =
+      'activo'; // Puede ser: 'activo', 'completado', 'cancelado'
+
+  int _paginaActual = 0;
+  final int _porPagina = 10; // Cuántos turnos traemos por tanda
+  bool _cargandoMas = false; // Para mostrar el circulito abajo
+  bool _hayMasDatos =
+      true; // Para saber si ya llegamos al final de la base de datos
+
   final supabase = Supabase.instance.client;
-  List<dynamic> misTurnos = [];
   bool cargando = true;
 
   String ultimaActualizacion = "---";
@@ -30,7 +42,7 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
   @override
   void initState() {
     super.initState();
-    _cargarMisTurnos();
+    _cargarMisTurnos(); //Carga inicial
   }
 
   @override
@@ -43,7 +55,7 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
   // --- CANCELACIÓN OPTIMISTA ---
   Future<void> _cancelarTurno(dynamic idTurno) async {
     setState(() {
-      misTurnos.removeWhere((t) => t['id'].toString() == idTurno.toString());
+      _misTurnos.removeWhere((t) => t['id'].toString() == idTurno.toString());
     });
 
     try {
@@ -74,16 +86,26 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
   }
 
   Future<void> _cargarMisTurnos() async {
+    if (!mounted) return;
     setState(() {
       cargando = true;
       botonHabilitado = false;
+      _paginaActual = 0; // Reiniciamos a la primera página
+      _hayMasDatos = true;
+      _misTurnos = []; // Vaciamos la lista para traer datos nuevos
     });
 
     try {
+      // Traemos del 0 al 9 (los primeros 10)
+      final desde = 0;
+      final hasta = _porPagina - 1;
+
       final data = await supabase
           .from('turnos')
           .select()
-          .order('hora', ascending: true);
+          .eq('estado', _filtroActual) // <--- FILTRO DINÁMICO
+          .order('hora', ascending: true)
+          .range(desde, hasta); // <--- PAGINACIÓN
 
       final ahora = DateTime.now();
       _horaUltimaPeticion = ahora;
@@ -92,22 +114,50 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
 
       if (mounted) {
         setState(() {
-          misTurnos = data;
+          _misTurnos = data;
           ultimaActualizacion = horaFormateada;
           cargando = false;
           segundosRestantes = 5;
           _colorEstado = Colors.green;
+          // Si trajo menos de 10, es que ya no hay más en la base de datos
+          if (data.length < _porPagina) _hayMasDatos = false;
         });
         _iniciarTemporizadorBloqueo();
         _iniciarSemaforo();
       }
     } catch (e) {
+      if (mounted) setState(() => cargando = false);
+    }
+  }
+
+  Future<void> _cargarMasTurnos() async {
+    if (_cargandoMas || !_hayMasDatos) return;
+
+    setState(() => _cargandoMas = true);
+
+    try {
+      _paginaActual++;
+      final desde = _paginaActual * _porPagina;
+      final hasta = desde + _porPagina - 1;
+
+      final data = await supabase
+          .from('turnos')
+          .select()
+          .eq('estado', _filtroActual)
+          .order('hora', ascending: true)
+          .range(desde, hasta);
+
       if (mounted) {
         setState(() {
-          cargando = false;
-          botonHabilitado = true;
+          _misTurnos.addAll(
+            data,
+          ); // Agregamos los nuevos al final de los actuales
+          _cargandoMas = false;
+          if (data.length < _porPagina) _hayMasDatos = false;
         });
       }
+    } catch (e) {
+      if (mounted) setState(() => _cargandoMas = false);
     }
   }
 
@@ -186,16 +236,32 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
               ],
             ),
           ),
+          // ==========================================
+          // PASO 4: INSERTAR FILTROS AQUÍ
+          // ==========================================
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            child: Row(
+              children: [
+                _buildFiltroChip("Activos", "activo"),
+                _buildFiltroChip("Completados", "completado"),
+                _buildFiltroChip("Cancelados", "cancelado"),
+              ],
+            ),
+          ),
 
+          // ==========================================
           Expanded(
             child: cargando
                 ? const Center(child: CircularProgressIndicator())
-                : misTurnos.isEmpty
+                : _misTurnos.isEmpty
                 ? const Center(child: Text("No tienes turnos reservados."))
                 : ListView.builder(
-                    itemCount: misTurnos.length,
+                    controller: _scrollController, // Sensor de scroll
+                    itemCount: _misTurnos.length,
                     itemBuilder: (context, index) {
-                      final turno = misTurnos[index];
+                      final turno = _misTurnos[index];
                       return Card(
                         elevation: 2,
                         margin: const EdgeInsets.symmetric(
@@ -352,6 +418,27 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                   ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildFiltroChip(String etiqueta, String valor) {
+    bool seleccionado = _filtroActual == valor;
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        label: Text(etiqueta),
+        selected: seleccionado,
+        selectedColor: const Color(0xFFEF4444),
+        labelStyle: TextStyle(
+          color: seleccionado ? Colors.white : Colors.black,
+        ),
+        onSelected: (bool selected) {
+          if (selected && _filtroActual != valor) {
+            setState(() => _filtroActual = valor);
+            _cargarMisTurnos(); // Al cambiar filtro, recargamos desde la pág 0
+          }
+        },
       ),
     );
   }
