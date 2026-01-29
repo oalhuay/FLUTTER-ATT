@@ -21,7 +21,8 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
       'activo'; // Puede ser: 'activo', 'completado', 'cancelado'
 
   int _paginaActual = 0;
-  final int _porPagina = 10; // Cuántos turnos traemos por tanda
+  int _totalRegistros = 0; // Para saber el total y armar los botones
+  final int _porPagina = 7; // 7 turnos traemos por tanda
   bool _cargandoMas = false; // Para mostrar el circulito abajo
   bool _hayMasDatos =
       true; // Para saber si ya llegamos al final de la base de datos
@@ -90,22 +91,30 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
     setState(() {
       cargando = true;
       botonHabilitado = false;
-      _paginaActual = 0; // Reiniciamos a la primera página
-      _hayMasDatos = true;
-      _misTurnos = []; // Vaciamos la lista para traer datos nuevos
+      // IMPORTANTE: Mantenemos la página actual para el slicing
     });
 
     try {
-      // Traemos del 0 al 9 (los primeros 10)
-      final desde = 0;
-      final hasta = _porPagina - 1;
+      // Calculamos el rango basado en la página seleccionada
+      final desde = _paginaActual * _porPagina;
+      final hasta = desde + _porPagina - 1;
 
-      final data = await supabase
+      // Pedimos los datos + el conteo exacto
+      final response = await supabase
           .from('turnos')
-          .select()
-          .eq('estado', _filtroActual) // <--- FILTRO DINÁMICO
+          .select('*')
+          .eq('estado', _filtroActual)
           .order('hora', ascending: true)
-          .range(desde, hasta); // <--- PAGINACIÓN
+          .range(desde, hasta);
+
+      // 2. Para obtener el conteo en las versiones nuevas sin FetchOptions:
+      // Hacemos una petición rápida solo para el conteo total
+      final countResponse = await supabase
+          .from('turnos')
+          .select('id')
+          .eq('estado', _filtroActual);
+
+      final int total = countResponse.length;
 
       final ahora = DateTime.now();
       _horaUltimaPeticion = ahora;
@@ -114,13 +123,12 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
 
       if (mounted) {
         setState(() {
-          _misTurnos = data;
+          _misTurnos = response as List<dynamic>;
+          _totalRegistros = total;
           ultimaActualizacion = horaFormateada;
           cargando = false;
           segundosRestantes = 5;
           _colorEstado = Colors.green;
-          // Si trajo menos de 10, es que ya no hay más en la base de datos
-          if (data.length < _porPagina) _hayMasDatos = false;
         });
         _iniciarTemporizadorBloqueo();
         _iniciarSemaforo();
@@ -258,7 +266,9 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                 : _misTurnos.isEmpty
                 ? const Center(child: Text("No tienes turnos reservados."))
                 : ListView.builder(
-                    controller: _scrollController, // Sensor de scroll
+                    //controller: _scrollController, // Sensor de scroll
+                    physics:
+                        const BouncingScrollPhysics(), // Para que el scroll sea fluido
                     itemCount: _misTurnos.length,
                     itemBuilder: (context, index) {
                       final turno = _misTurnos[index];
@@ -417,6 +427,9 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                     },
                   ),
           ),
+          // --- AQUÍ PEGA ESTO ---
+          if (!cargando && _totalRegistros > 0)
+            _buildBotoneraPaginacion(), //La  botoneeeeeera
         ],
       ),
     );
@@ -435,10 +448,103 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
         ),
         onSelected: (bool selected) {
           if (selected && _filtroActual != valor) {
-            setState(() => _filtroActual = valor);
-            _cargarMisTurnos(); // Al cambiar filtro, recargamos desde la pág 0
+            setState(() {
+              _filtroActual = valor;
+              _paginaActual = 0; // <--- ESTO: Resetea al primer bloque
+            });
+            _cargarMisTurnos();
           }
         },
+      ),
+    );
+  }
+
+  Widget _buildBotoneraPaginacion() {
+    int totalPaginas = (_totalRegistros / _porPagina).ceil();
+
+    // Lógica de bloques de 3
+    int bloqueActual = (_paginaActual / 3).floor();
+    int inicioBloque = bloqueActual * 3;
+    int finBloque = (inicioBloque + 2 < totalPaginas)
+        ? inicioBloque + 2
+        : totalPaginas - 1;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(top: BorderSide(color: Colors.grey[200]!)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Flecha Izquierda <
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            onPressed: _paginaActual > 0
+                ? () {
+                    setState(() => _paginaActual--);
+                    _cargarMisTurnos();
+                  }
+                : null,
+          ),
+
+          // Números 1, 2, 3...
+          for (int i = inicioBloque; i <= finBloque; i++)
+            GestureDetector(
+              onTap: () {
+                setState(() => _paginaActual = i);
+                _cargarMisTurnos();
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: _paginaActual == i
+                      ? const Color(0xFFEF4444)
+                      : Colors.grey[200],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  "${i + 1}",
+                  style: TextStyle(
+                    color: _paginaActual == i ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+
+          // Tres puntitos ... (Si hay más bloques)
+          if (finBloque < totalPaginas - 1)
+            GestureDetector(
+              onTap: () {
+                setState(() => _paginaActual = finBloque + 1);
+                _cargarMisTurnos();
+              },
+              child: const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Text(
+                  "...",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+            ),
+
+          // Flecha Derecha >
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            onPressed: _paginaActual < totalPaginas - 1
+                ? () {
+                    setState(() => _paginaActual++);
+                    _cargarMisTurnos();
+                  }
+                : null,
+          ),
+        ],
       ),
     );
   }
