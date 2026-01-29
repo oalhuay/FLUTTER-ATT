@@ -1557,6 +1557,8 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
   final _tagController = TextEditingController();
+  final TextEditingController _precioController = TextEditingController();
+  Map<String, double> _preciosMap = {'Lavado': 0.0};
   final List<String> _servicios = [
     'Lavado',
     'Control de aire/ruedas',
@@ -1585,6 +1587,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         'latitud': double.parse(_latController.text),
         'longitud': double.parse(_lngController.text),
         'servicios': _servicios,
+        'servicios_precios': _preciosMap,
       });
       if (mounted) {
         ScaffoldMessenger.of(
@@ -1596,6 +1599,31 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("❌ Error: $e")));
+    }
+  }
+
+  void _agregarServicioConPrecio() {
+    final nombre = _tagController.text.trim();
+    // Intentamos convertir el texto a número
+    final precio = double.tryParse(_precioController.text) ?? 0.0;
+
+    if (nombre.isNotEmpty && precio > 0) {
+      setState(() {
+        if (!_servicios.contains(nombre)) {
+          _servicios.add(nombre);
+        }
+        // Vinculamos el nombre con su precio en el mapa JSON
+        _preciosMap[nombre] = precio;
+
+        _tagController.clear();
+        _precioController.clear();
+      });
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("⚠️ Ingresa un nombre y un precio válido"),
+        ),
+      );
     }
   }
 
@@ -1623,30 +1651,60 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               ),
             ]),
             const SizedBox(height: 15),
-            _cardSeccion("Servicios Ofrecidos", Icons.list_alt, [
+            _cardSeccion("Servicios y Precios", Icons.payments, [
+              // 1. Visualización de lo que ya se agregó
               Wrap(
                 spacing: 8.0,
-                children: _servicios
-                    .map(
-                      (s) => Chip(
-                        label: Text(s),
-                        onDeleted: s == 'Lavado'
-                            ? null
-                            : () => setState(() => _servicios.remove(s)),
-                      ),
-                    )
-                    .toList(),
+                runSpacing: 8.0,
+                children: _servicios.map((s) {
+                  final precio = _preciosMap[s] ?? 0.0;
+                  return Chip(
+                    label: Text("$s: \$${precio.toStringAsFixed(0)}"),
+                    backgroundColor: const Color(0xFF3ABEF9).withOpacity(0.1),
+                    onDeleted: s == 'Lavado'
+                        ? null
+                        : () {
+                            setState(() {
+                              _servicios.remove(s);
+                              _preciosMap.remove(s);
+                            });
+                          },
+                  );
+                }).toList(),
               ),
-              TextField(
-                controller: _tagController,
-                decoration: const InputDecoration(
-                  hintText: "Agregar servicio...",
-                ),
-                onSubmitted: (val) {
-                  if (val.isNotEmpty && !_servicios.contains(val))
-                    setState(() => _servicios.add(val));
-                  _tagController.clear();
-                },
+              const SizedBox(height: 20),
+
+              // 2. Formulario para agregar nuevo
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextField(
+                      controller: _tagController,
+                      decoration: const InputDecoration(
+                        labelText: "Servicio",
+                        hintText: "Ej: Motor",
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: _precioController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: "Precio \$"),
+                    ),
+                  ),
+                  const SizedBox(width: 5),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.add_circle,
+                      color: Color(0xFF3ABEF9),
+                      size: 35,
+                    ),
+                    onPressed: _agregarServicioConPrecio,
+                  ),
+                ],
               ),
             ]),
             const SizedBox(height: 15),

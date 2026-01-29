@@ -114,6 +114,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         child: Column(
           children: [
             // --- SECCIÓN 1: DATOS DEL LAVADERO ---
+            
             _buildSectionCard(
               title: "Datos del Lavadero",
               icon: Icons.local_car_wash,
