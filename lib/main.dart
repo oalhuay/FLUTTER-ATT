@@ -156,13 +156,21 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void initState() {
     super.initState();
-    _obtenerRolActual(); // Buscamos el rol en la base de datos al arrancar
+    _obtenerRolActual();
 
-    // Escuchar si el usuario cambia (ej: si cierra sesión y entra con otro)
     supabase.auth.onAuthStateChange.listen((data) {
       if (mounted) {
         _obtenerRolActual();
-        setState(() {});
+
+        // --- AGREGAMOS ESTA LÓGICA DE LIMPIEZA ---
+        // Si el usuario es nulo (cerró sesión), limpiamos la selección
+        if (supabase.auth.currentUser == null) {
+          setState(() {
+            _lavaderoSeleccionado = null;
+          });
+        } else {
+          setState(() {});
+        }
       }
     });
   }
@@ -185,17 +193,23 @@ class _MainLayoutState extends State<MainLayout> {
   final TextEditingController _nombreCtrl = TextEditingController();
   final TextEditingController _direccionCtrl = TextEditingController();
 
-  List<Widget> get _paginas => [
-    MapScreen(
-      key: mapScreenKey,
-      onIrAPerfil: () => setState(() => _indiceActual = 2),
-      // Esta línea es la conexión mágica con el panel derecho
-      onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
-      onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
-    ),
-    const MisTurnosScreen(),
-    const PerfilScreen(),
-  ];
+  List<Widget> get _paginas {
+    // Obtenemos el usuario actual CADA VEZ que se pide la lista de páginas
+    final user = supabase.auth.currentUser;
+
+    return [
+      MapScreen(
+        key: mapScreenKey,
+        onIrAPerfil: () => setState(() => _indiceActual = 2),
+        onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
+        onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
+      ),
+      // CAMBIAMOS ESTA LÍNEA (Le quitamos el const y ponemos el onVolver):
+      MisTurnosScreen(onVolver: () => setState(() => _indiceActual = 0)),
+
+      PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -455,7 +469,9 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
 
                     // PANEL FLOTANTE: Aparece solo en móvil cuando hay selección
-                    if (esPantallaChica && _lavaderoSeleccionado != null)
+                    if (esPantallaChica &&
+                        _lavaderoSeleccionado != null &&
+                        supabase.auth.currentUser != null)
                       Positioned(
                         right: 15,
                         top: 80,
@@ -478,7 +494,9 @@ class _MainLayoutState extends State<MainLayout> {
               ),
 
               // COLUMNA 3: PANEL DERECHO FIJO (Solo en Desktop)
-              if (!esPantallaChica && _lavaderoSeleccionado != null)
+              if (!esPantallaChica &&
+                  _lavaderoSeleccionado != null &&
+                  supabase.auth.currentUser != null)
                 Container(
                   width: 350,
                   decoration: BoxDecoration(
@@ -501,10 +519,13 @@ class _MainLayoutState extends State<MainLayout> {
 
   // Mueve aquí el contenido que tenías antes en el Sidebar
   Widget _buildContenidoSidebar() {
+    // --- PASO 1: VERIFICAR SESIÓN ACTIVA ---
+    final bool tieneSesion = supabase.auth.currentUser != null;
+
     return Column(
       children: [
         const SizedBox(height: 50),
-        // --- LOGO ATT! ---
+        // --- LOGO ATT! --- (Tu bloque de logo se mantiene igual)
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
@@ -546,12 +567,18 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
         const SizedBox(height: 40),
+
+        // --- BOTONES DEL MENÚ ---
         _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
-        _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
+
+        // --- BOTÓN MIS RESERVAS: Solo si tiene sesión ---
+        if (tieneSesion)
+          _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
+
         _itemMenuLateral(Icons.person, "Mi Perfil", 2),
 
-        // --- PASO 3: EL BOTÓN DE REGISTRO PARA DUEÑOS ---
-        if (_rolUsuario == 'lavadero')
+        // --- BOTÓN CONFIGURAR: Solo si tiene sesión Y es dueño ---
+        if (tieneSesion && _rolUsuario == 'lavadero')
           _itemMenuLateral(Icons.add_business, "Configurar Lavadero", 99),
 
         const Spacer(),
@@ -1369,7 +1396,9 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
 
 // --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
-  const PerfilScreen({super.key});
+  // 1. Agregamos esta línea para que acepte la función de volver
+  final VoidCallback? onVolver;
+  const PerfilScreen({super.key, this.onVolver});
   @override
   State<PerfilScreen> createState() => _PerfilScreenState();
 }
@@ -1412,7 +1441,20 @@ class _PerfilScreenState extends State<PerfilScreen> {
     }
   }
 
-  Future<void> _cerrarSesion() async => await supabase.auth.signOut();
+  Future<void> _cerrarSesion() async {
+    // 1. Solo cerramos la sesión.
+    // Al hacer esto, el 'listener' que tenés en MainLayout se activará solo.
+    await supabase.auth.signOut();
+
+    // 2. Opcional: Limpiamos lo visual si todavía estamos en esta pantalla
+    if (mounted) {
+      setState(() {
+        _rolUsuario = 'pendiente';
+        _patenteController.clear();
+      });
+    }
+  }
+
   Future<void> _guardarPatente() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -1437,6 +1479,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
         title: const Text("Mi Perfil"),
         backgroundColor: const Color(0xFFEF4444),
         foregroundColor: Colors.white,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onVolver, // <--- Solo llamamos a la función
+        ),
       ),
       body: Center(
         child: usuario == null

@@ -2,9 +2,11 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart'; // Importante para abrir el link del Storage
-
+import 'main.dart';
 class MisTurnosScreen extends StatefulWidget {
-  const MisTurnosScreen({super.key});
+  // 1. Agregamos la variable para la orden de volver
+  final VoidCallback? onVolver;
+  const MisTurnosScreen({super.key, this.onVolver});
 
   @override
   State<MisTurnosScreen> createState() => _MisTurnosScreenState();
@@ -147,6 +149,11 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
         title: const Text("Mis Reservas ATT!"),
         backgroundColor: const Color(0xFFEF4444),
         foregroundColor: Colors.white,
+        // --- USAMOS EL NUEVO BOTÓN ---
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onVolver, // <--- Llama a la función que le pasamos
+        ),
       ),
       body: Column(
         children: [
