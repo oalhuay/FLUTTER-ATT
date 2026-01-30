@@ -1557,7 +1557,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _latController = TextEditingController();
   final _lngController = TextEditingController();
   final _tagController = TextEditingController();
-  final TextEditingController _precioController = TextEditingController();
+  final _precioController = TextEditingController();
   Map<String, double> _preciosMap = {'Lavado': 0.0};
   final List<String> _servicios = [
     'Lavado',
@@ -1576,6 +1576,17 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   Future<void> _registrar() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
+    if ((_preciosMap['Lavado'] ?? 0.0) <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "⚠️ Debes asignar un precio al Lavado antes de guardar",
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
     try {
       await supabase.from('lavaderos').insert({
         'dueño_id': user.id,
@@ -1629,6 +1640,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Verificamos si el precio de lavado es mayor a 0 para habilitar el resto
+    bool lavadoHabilitado = (_preciosMap['Lavado'] ?? 0.0) > 0;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF4F7F9),
       appBar: AppBar(
@@ -1640,6 +1654,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
+            // SECCIÓN 1: INFORMACIÓN BÁSICA
             _cardSeccion("Información del Negocio", Icons.store, [
               _input(_nombreController, "Nombre Comercial", Icons.badge),
               _input(_direccionController, "Dirección", Icons.location_on),
@@ -1651,63 +1666,167 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               ),
             ]),
             const SizedBox(height: 15),
-            _cardSeccion("Servicios y Precios", Icons.payments, [
-              // 1. Visualización de lo que ya se agregó
-              Wrap(
-                spacing: 8.0,
-                runSpacing: 8.0,
-                children: _servicios.map((s) {
-                  final precio = _preciosMap[s] ?? 0.0;
-                  return Chip(
-                    label: Text("$s: \$${precio.toStringAsFixed(0)}"),
-                    backgroundColor: const Color(0xFF3ABEF9).withOpacity(0.1),
-                    onDeleted: s == 'Lavado'
-                        ? null
-                        : () {
-                            setState(() {
-                              _servicios.remove(s);
-                              _preciosMap.remove(s);
-                            });
-                          },
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 20),
 
-              // 2. Formulario para agregar nuevo
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: _tagController,
-                      decoration: const InputDecoration(
-                        labelText: "Servicio",
-                        hintText: "Ej: Motor",
+            // SECCIÓN 2: SERVICIOS Y PRECIOS (MODIFICADA)
+            _cardSeccion("Servicios y Precios", Icons.payments, [
+              const Text(
+                "Llene el espacio inferior para añadir Servicios y Precios",
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF3ABEF9),
+                ),
+              ),
+              const SizedBox(height: 15),
+
+              // --- CAMPO OBLIGATORIO: PRECIO DE LAVADO ---
+              TextField(
+                keyboardType: TextInputType.number,
+                onChanged: (v) => setState(() {
+                  _preciosMap['Lavado'] = double.tryParse(v) ?? 0.0;
+                }),
+                decoration: InputDecoration(
+                  labelText: "Precio de Lavado (OBLIGATORIO) *",
+                  prefixText: "\$ ",
+                  labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderSide: const BorderSide(
+                      color: Color(0xFF3ABEF9),
+                      width: 2,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+
+              const Divider(height: 40),
+
+              // --- LÓGICA DE BLOQUEO Y LISTADO DE SERVICIOS ---
+              if (!lavadoHabilitado)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 10),
+                    child: Text(
+                      "⚠️ Asigne un precio al Lavado para habilitar los demás servicios.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: TextField(
-                      controller: _precioController,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: "Precio \$"),
-                    ),
+                )
+              else ...[
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "Servicios configurados (toque para editar precio):",
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
-                  const SizedBox(width: 5),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle,
-                      color: Color(0xFF3ABEF9),
-                      size: 35,
+                ),
+                const SizedBox(height: 10),
+
+                // Chips de todos los servicios (Default + Nuevos)
+                Wrap(
+                  spacing: 8.0,
+                  runSpacing: 8.0,
+                  children: _servicios.map((s) {
+                    final precio = _preciosMap[s] ?? 0.0;
+                    final bool tienePrecio = precio > 0;
+
+                    return InputChip(
+                      // Muestra el nombre y el precio si lo tiene
+                      label: Text(
+                        tienePrecio
+                            ? "$s: \$${precio.toStringAsFixed(0)}"
+                            : "Poner precio a $s",
+                        style: TextStyle(
+                          color: tienePrecio
+                              ? Colors.black87
+                              : Colors.orange.shade900,
+                          fontSize: 12,
+                        ),
+                      ),
+                      backgroundColor: tienePrecio
+                          ? const Color(0xFF3ABEF9).withOpacity(0.1)
+                          : Colors.orange.shade50,
+
+                      // Avatar con check o alerta
+                      avatar: Icon(
+                        tienePrecio ? Icons.check_circle : Icons.error_outline,
+                        size: 16,
+                        color: tienePrecio ? Colors.green : Colors.orange,
+                      ),
+
+                      // Al tocar el cuerpo del Chip (para editar)
+                      onPressed: () {
+                        setState(() {
+                          _tagController.text = s;
+                          _precioController.text = tienePrecio
+                              ? precio.toStringAsFixed(0)
+                              : "";
+                        });
+                      },
+
+                      // El botón de borrar (la X)
+                      onDeleted: s == 'Lavado'
+                          ? null // El lavado no se puede borrar
+                          : () {
+                              setState(() {
+                                _servicios.remove(s);
+                                _preciosMap.remove(s);
+                              });
+                            },
+                      deleteIconColor: Colors.redAccent,
+                    );
+                  }).toList(),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Formulario para agregar o actualizar precios
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 2,
+                      child: TextField(
+                        controller: _tagController,
+                        decoration: const InputDecoration(
+                          labelText: "Servicio",
+                          hintText: "Nombre del servicio",
+                        ),
+                      ),
                     ),
-                    onPressed: _agregarServicioConPrecio,
-                  ),
-                ],
-              ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: _precioController,
+                        keyboardType: TextInputType.number,
+                        decoration: const InputDecoration(
+                          labelText: "Precio \$",
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.add_circle,
+                        color: Color(0xFF3ABEF9),
+                        size: 35,
+                      ),
+                      onPressed: _agregarServicioConPrecio,
+                    ),
+                  ],
+                ),
+              ],
             ]),
             const SizedBox(height: 15),
+
+            // SECCIÓN 3: UBICACIÓN
             _cardSeccion("Ubicación exacta", Icons.pin_drop, [
               SizedBox(
                 height: 200,
@@ -1746,16 +1865,20 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               ),
             ]),
             const SizedBox(height: 25),
+
+            // BOTÓN DE GUARDADO
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
+                backgroundColor: lavadoHabilitado
+                    ? const Color(0xFFEF4444)
+                    : Colors.grey,
                 foregroundColor: Colors.white,
                 minimumSize: const Size(double.infinity, 60),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(15),
                 ),
               ),
-              onPressed: _registrar,
+              onPressed: lavadoHabilitado ? _registrar : null,
               child: const Text(
                 "GUARDAR CONFIGURACIÓN",
                 style: TextStyle(fontWeight: FontWeight.bold),
