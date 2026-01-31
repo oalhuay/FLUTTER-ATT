@@ -31,6 +31,21 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   ];
 
   final supabase = Supabase.instance.client;
+  // --- NUEVAS VARIABLES PARA HORARIOS ---
+  TimeOfDay _horaApertura = const TimeOfDay(hour: 9, minute: 0);
+  TimeOfDay _horaCierre = const TimeOfDay(hour: 18, minute: 0);
+  int _duracionTurno = 60; // Minutos por defecto
+
+  // Días de la semana seleccionables
+  final Map<String, bool> _diasLaborales = {
+    'Lun': true,
+    'Mar': true,
+    'Mie': true,
+    'Jue': true,
+    'Vie': true,
+    'Sab': false,
+    'Dom': false,
+  };
 
   bool _mostrarMapa = true;
   LatLng _puntoSeleccionado = const LatLng(-34.098, -59.028);
@@ -82,6 +97,14 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         'latitud': double.parse(_latController.text),
         'longitud': double.parse(_lngController.text),
         'servicios': _servicios, // Se envía la lista de tags
+        // --- NUEVOS CAMPOS ---
+        'hora_apertura': _horaApertura.format(context),
+        'hora_cierre': _horaCierre.format(context),
+        'duracion_estandar': _duracionTurno,
+        'dias_abierto': _diasLaborales.entries
+            .where((e) => e.value)
+            .map((e) => e.key)
+            .toList(),
       });
 
       if (mounted) {
@@ -114,7 +137,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         child: Column(
           children: [
             // --- SECCIÓN 1: DATOS DEL LAVADERO ---
-            
             _buildSectionCard(
               title: "Datos del Lavadero",
               icon: Icons.local_car_wash,
@@ -259,6 +281,96 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
 
             const SizedBox(height: 20),
 
+            // --- NUEVA SECCIÓN: HORARIOS DE ATENCIÓN ---
+            _buildSectionCard(
+              title: "Horarios y Disponibilidad",
+              icon: Icons.access_time,
+              children: [
+                const Text(
+                  "Defina el rango de atención y la duración de cada lavado.",
+                  style: TextStyle(fontSize: 12, color: Colors.grey),
+                ),
+                const SizedBox(height: 15),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _buildTimePicker(
+                      "Apertura",
+                      _horaApertura,
+                      (time) => setState(() => _horaApertura = time),
+                    ),
+                    _buildTimePicker(
+                      "Cierre",
+                      _horaCierre,
+                      (time) => setState(() => _horaCierre = time),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 20),
+                const Text(
+                  "Días de atención:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: _diasLaborales.keys.map((dia) {
+                    bool seleccionado = _diasLaborales[dia]!;
+                    return GestureDetector(
+                      onTap: () =>
+                          setState(() => _diasLaborales[dia] = !seleccionado),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: seleccionado
+                              ? const Color(0xFF3ABEF9)
+                              : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          dia,
+                          style: TextStyle(
+                            color: seleccionado ? Colors.white : Colors.black54,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+
+                const Divider(height: 30),
+                const Text(
+                  "Tiempo estimado por vehículo:",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                DropdownButtonFormField<int>(
+                  value: _duracionTurno,
+                  decoration: InputDecoration(
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  items: [30, 45, 60, 90, 120].map((int min) {
+                    return DropdownMenuItem(
+                      value: min,
+                      child: Text("$min minutos"),
+                    );
+                  }).toList(),
+                  onChanged: (val) => setState(() => _duracionTurno = val!),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 20),
+
             // --- SECCIÓN 3: REGISTRO BANCARIO ---
             _buildSectionCard(
               title: "Registro Bancario (Cobros)",
@@ -359,6 +471,59 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: Color(0xFF3ABEF9), width: 2),
         ),
+      ),
+    );
+  }
+
+  // NUEVO MÉTODO (_buildTimePicker)
+  Widget _buildTimePicker(
+    String label,
+    TimeOfDay time,
+    Function(TimeOfDay) onSelect,
+  ) {
+    return InkWell(
+      onTap: () async {
+        final picked = await showTimePicker(
+          context: context,
+          initialTime: time,
+          builder: (context, child) {
+            return Theme(
+              data: Theme.of(context).copyWith(
+                colorScheme: const ColorScheme.light(
+                  primary: Color(0xFF3ABEF9),
+                  onPrimary: Colors.white,
+                  onSurface: Colors.black,
+                ),
+              ),
+              child: child!,
+            );
+          },
+        );
+        if (picked != null) onSelect(picked);
+      },
+      child: Column(
+        children: [
+          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 5),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: const Color(0xFF3ABEF9).withOpacity(0.5),
+              ),
+            ),
+            child: Text(
+              time.format(context),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Color(0xFF3ABEF9),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
