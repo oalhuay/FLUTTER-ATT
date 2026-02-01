@@ -9,6 +9,7 @@ import 'mis_turnos_screen.dart';
 import 'registro_lavadero_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -1412,17 +1413,40 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
 
 // --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
-  // 1. Agregamos esta línea para que acepte la función de volver
   final VoidCallback? onVolver;
   const PerfilScreen({super.key, this.onVolver});
+
   @override
   State<PerfilScreen> createState() => _PerfilScreenState();
 }
 
 class _PerfilScreenState extends State<PerfilScreen> {
-  final TextEditingController _patenteController = TextEditingController();
-  String _rolUsuario = 'pendiente';
+  // --- CONTROLADORES DE DATOS ---
+  final _nombreController = TextEditingController();
+  final _apellidoController = TextEditingController(); // AGREGAR ESTE
+  final _telefonoController = TextEditingController();
+  final _ciudadController = TextEditingController();
+  final _fechaNacController = TextEditingController();
+
+  // Garage(cliente)
+  final _patenteController = TextEditingController();
+  final _marcaController = TextEditingController();
+  final _colorController = TextEditingController();
+
+  // DUEÑO (Lavadero) - AGREGAR ESTOS 3
+  final _cuitController = TextEditingController();
+  final _cpController = TextEditingController();
+  final _descripcionController = TextEditingController();
+
+  final supabase = Supabase.instance.client;
+  String _rolUsuario = 'cliente';
   bool _cargando = true;
+  bool _estaEditando = false;
+
+  // Colores Oficiales ATT! 2040
+  final Color azulATT = const Color(0xFF3ABEF9);
+  final Color rojoATT = const Color(0xFFEF4444);
+  final Color fondoSoft = const Color(0xFFF0F4F8);
 
   @override
   void initState() {
@@ -1432,127 +1456,696 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
   Future<void> _cargarDatosPerfil() async {
     final user = supabase.auth.currentUser;
-    if (user != null) {
-      try {
-        final data = await supabase
-            .from('perfiles_usuarios')
-            .select()
-            .eq('id', user.id)
-            .maybeSingle();
-        if (mounted) {
-          setState(() {
-            if (data != null) {
-              _patenteController.text = data['patente'] ?? '';
-              _rolUsuario = data['rol'] ?? 'pendiente';
-            }
-            _cargando = false;
-          });
-        }
-      } catch (e) {
-        if (mounted) setState(() => _cargando = false);
-      }
-    } else {
-      // Si no hay usuario, también hay que frenar la carga
+    if (user == null) {
       if (mounted) setState(() => _cargando = false);
+      return;
+    }
+
+    try {
+      final data = await supabase
+          .from('perfiles_usuarios')
+          .select()
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (mounted) {
+        setState(() {
+          if (data != null) {
+            _rolUsuario = data['rol'] ?? 'cliente';
+            _nombreController.text =
+                data['nombre'] ?? user.userMetadata?['full_name'] ?? '';
+            _apellidoController.text = data['apellido'] ?? ''; // SQL: apellido
+            _telefonoController.text = data['telefono'] ?? '';
+            _ciudadController.text = data['ciudad'] ?? '';
+            _fechaNacController.text = data['fecha_nacimiento'] ?? '';
+            _patenteController.text = data['patente'] ?? '';
+            _marcaController.text = data['marca_modelo'] ?? '';
+            _colorController.text = data['color_vehiculo'] ?? '';
+            // Campos de Dueño
+            _cuitController.text = data['cuil_cuit'] ?? '';
+            _cpController.text = data['codigo_postal'] ?? '';
+            _descripcionController.text = data['descripcion_negocio'] ?? '';
+          }
+          _cargando = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _cargando = false);
+
+      // 🚨 ESTO ES CLAVE: Mirá la consola de VS Code/Android Studio
+      // Te va a decir "column cuil_cuit does not exist" o algo similar.
+      debugPrint("❌ ERROR DE SUPABASE: $e");
+
+      _mostrarAlerta("❌ Error al guardar datos", rojoATT);
+    }
+  }
+
+  Future<void> _actualizarPerfil() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    setState(() => _cargando = true);
+
+    // 1. Datos base (Comunes)
+    Map<String, dynamic> updates = {
+      'nombre': _nombreController.text,
+      'apellido': _apellidoController.text,
+      'telefono': _telefonoController.text,
+      'ciudad': _ciudadController.text,
+      'fecha_nacimiento': _fechaNacController.text,
+    };
+
+    // 2. Datos según Rol (Evita errores de columnas)
+    if (_rolUsuario == 'cliente') {
+      updates.addAll({
+        'patente': _patenteController.text.toUpperCase(),
+        'marca_modelo': _marcaController.text,
+        'color_vehiculo': _colorController.text,
+      });
+    } else if (_rolUsuario == 'dueño') {
+      updates.addAll({
+        'cuil_cuit': _cuitController.text,
+        'codigo_postal': _cpController.text,
+        'descripcion_negocio': _descripcionController.text,
+      });
+    }
+
+    try {
+      await supabase
+          .from('perfiles_usuarios')
+          .update(updates)
+          .eq('id', user.id);
+
+      if (mounted) {
+        setState(() {
+          _estaEditando = false;
+          _cargando = false;
+        });
+        _mostrarAlerta("✨ Perfil ATT! sincronizado", Colors.green);
+      }
+    } catch (e) {
+      if (mounted) setState(() => _cargando = false);
+      _mostrarAlerta("❌ Error al guardar datos", rojoATT);
     }
   }
 
   Future<void> _cerrarSesion() async {
-    // 1. Solo cerramos la sesión.
-    // Al hacer esto, el 'listener' que tenés en MainLayout se activará solo.
     await supabase.auth.signOut();
-
-    // 2. Opcional: Limpiamos lo visual si todavía estamos en esta pantalla
     if (mounted) {
-      setState(() {
-        _rolUsuario = 'pendiente';
-        _patenteController.clear();
-      });
+      widget.onVolver?.call();
     }
-  }
-
-  Future<void> _guardarPatente() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
-    await supabase
-        .from('perfiles_usuarios')
-        .update({'patente': _patenteController.text.toUpperCase()})
-        .eq('id', user.id);
-    if (mounted)
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("✅ Patente guardada")));
   }
 
   @override
   Widget build(BuildContext context) {
-    final usuario = supabase.auth.currentUser;
-    if (_cargando)
+    final usuarioAuth = supabase.auth.currentUser;
+
+    if (_cargando) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Mi Perfil"),
-        backgroundColor: const Color(0xFFEF4444),
-        foregroundColor: Colors.white,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: widget.onVolver, // <--- Solo llamamos a la función
+      backgroundColor: fondoSoft,
+      body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
+        slivers: [
+          // HEADER BENTO 2040
+          SliverAppBar(
+            expandedHeight: 120,
+            pinned: true,
+            elevation: 0,
+            backgroundColor: Colors.white,
+            leading: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Colors.black87,
+                size: 20,
+              ),
+              onPressed: widget.onVolver,
+            ),
+            actions: [
+              if (usuarioAuth != null)
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: IconButton(
+                    onPressed: () {
+                      if (_estaEditando)
+                        _actualizarPerfil();
+                      else
+                        setState(() => _estaEditando = true);
+                    },
+                    icon: Icon(
+                      _estaEditando
+                          ? Icons.check_circle_rounded
+                          : Icons.edit_note_rounded,
+                      color: _estaEditando ? Colors.green : azulATT,
+                      size: 32,
+                    ),
+                  ),
+                ),
+            ],
+            flexibleSpace: FlexibleSpaceBar(
+              centerTitle: true,
+              title: Text(
+                "MI PERFIL",
+                style: TextStyle(
+                  color: azulATT,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 14,
+                  letterSpacing: 2,
+                ),
+              ),
+            ),
+          ),
+
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                if (usuarioAuth == null)
+                  _buildLoginBento()
+                else ...[
+                  // IDENTIDAD VISUAL
+                  _buildIdentityHeader(usuarioAuth),
+                  const SizedBox(height: 24),
+
+                  // MÓDULO 1: DATOS PERSONALES
+                  _buildBentoCard(
+                    title: "Información Personal",
+                    icon: Icons.person_outline_rounded,
+                    child: Column(
+                      children: [
+                        Row(
+                          // NOMBRE Y APELLIDO EN LA MISMA FILA
+                          children: [
+                            Expanded(
+                              child: _buildField(
+                                _nombreController,
+                                "Nombre",
+                                Icons.face_rounded,
+                                _estaEditando,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildField(
+                                _apellidoController,
+                                "Apellido",
+                                Icons.person_search_rounded,
+                                _estaEditando,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: _buildField(
+                                _telefonoController,
+                                "Teléfono",
+                                Icons.phone_android_rounded,
+                                _estaEditando,
+                                type: TextInputType.phone,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: _buildField(
+                                _ciudadController,
+                                "Ciudad",
+                                Icons.location_city_rounded,
+                                _estaEditando,
+                              ),
+                            ),
+                          ],
+                        ),
+                        _buildField(
+                          _fechaNacController,
+                          "Fecha de Nacimiento",
+                          Icons.cake_rounded,
+                          _estaEditando,
+                          isDate: true,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  // MÓDULO 2: ESPECÍFICO SEGÚN ROL
+                  if (_rolUsuario == 'cliente')
+                    _buildBentoCard(
+                      title: "Mi Garage Digital",
+                      icon: Icons.directions_car_filled_rounded,
+                      child: Column(
+                        children: [
+                          _buildField(
+                            _patenteController,
+                            "Patente",
+                            Icons.pin_rounded,
+                            _estaEditando,
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildField(
+                                  _marcaController,
+                                  "Marca y Modelo",
+                                  Icons.minor_crash_rounded,
+                                  _estaEditando,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _buildField(
+                                  _colorController,
+                                  "Color",
+                                  Icons.palette_rounded,
+                                  _estaEditando,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (_rolUsuario == 'dueño')
+                    _buildBentoCard(
+                      title: "Información del Lavadero",
+                      icon: Icons.storefront_rounded,
+                      child: Column(
+                        children: [
+                          _buildField(
+                            _cuitController,
+                            "CUIL / CUIT",
+                            Icons.badge_rounded,
+                            _estaEditando,
+                            type: TextInputType.number,
+                          ),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _buildField(
+                                  _cpController,
+                                  "Cod. Postal",
+                                  Icons.local_post_office_rounded,
+                                  _estaEditando,
+                                  type: TextInputType.number,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              const Spacer(), // Espacio para diseño bento desparejo
+                            ],
+                          ),
+                          // CAMPO DE DESCRIPCIÓN
+                          Padding(
+                            padding: const EdgeInsets.only(top: 8),
+                            child: TextField(
+                              controller: _descripcionController,
+                              enabled: _estaEditando,
+                              maxLines: 3,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: _estaEditando
+                                    ? Colors.black87
+                                    : Colors.black45,
+                              ),
+                              decoration: InputDecoration(
+                                labelText: "Descripción del Negocio",
+                                alignLabelWithHint: true,
+                                filled: true,
+                                fillColor: _estaEditando
+                                    ? azulATT.withOpacity(0.05)
+                                    : fondoSoft.withOpacity(0.3),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(15),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                  // MÓDULO 3: PAGOS GLASSMORHPISM
+                  if (_rolUsuario == 'cliente')
+                    _buildBentoCard(
+                      title: "Métodos de Pago",
+                      icon: Icons.account_balance_wallet_rounded,
+                      child: Column(
+                        children: [
+                          _buildTarjetaGlass("4567", "Visa"),
+                          const SizedBox(height: 16),
+                          _buildBentoButton(
+                            "GESTIONAR TARJETAS",
+                            Icons.add_card_rounded,
+                            azulATT,
+                            () {
+                              _mostrarAlerta(
+                                "Función disponible próximamente",
+                                azulATT,
+                              );
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  const SizedBox(height: 16),
+
+                  // ACCIONES FINALES
+                  _buildBentoCard(
+                    child: _actionRow(
+                      Icons.logout_rounded,
+                      "Cerrar Sesión",
+                      rojoATT,
+                      onTap: _cerrarSesion,
+                    ),
+                  ),
+                ],
+              ]),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- COMPONENTES BENTO 2040 ---
+
+  Widget _buildBentoCard({
+    required Widget child,
+    String? title,
+    IconData? icon,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (title != null) ...[
+            Row(
+              children: [
+                Icon(icon, size: 14, color: azulATT),
+                const SizedBox(width: 8),
+                Text(
+                  title.toUpperCase(),
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.black26,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ],
+            ),
+            const Divider(height: 24, color: Color(0xFFF1F5F9)),
+          ],
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildField(
+    TextEditingController ctrl,
+    String label,
+    IconData icon,
+    bool edit, {
+    bool isDate = false,
+    TextInputType type = TextInputType.text,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: ctrl,
+        enabled: edit,
+        readOnly: isDate,
+        keyboardType: type,
+        onTap: isDate && edit ? () => _pickDate() : null,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.bold,
+          color: edit ? Colors.black87 : Colors.black45,
+        ),
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(
+            icon,
+            size: 18,
+            color: edit ? azulATT : Colors.black12,
+          ),
+          filled: true,
+          fillColor: edit
+              ? azulATT.withOpacity(0.05)
+              : fondoSoft.withOpacity(0.3),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(15),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
-      body: Center(
-        child: usuario == null
-            ? ElevatedButton(
-                onPressed: () =>
-                    supabase.auth.signInWithOAuth(OAuthProvider.google),
-                child: const Text("Entrar con Google"),
-              )
-            : Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
+    );
+  }
+
+  Widget _buildIdentityHeader(User user) {
+    return Center(
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 45,
+            backgroundColor: azulATT.withOpacity(0.1),
+            backgroundImage: NetworkImage(
+              user.userMetadata?['avatar_url'] ?? '',
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+            decoration: BoxDecoration(
+              color: _rolUsuario == 'cliente'
+                  ? azulATT.withOpacity(0.1)
+                  : rojoATT.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              _rolUsuario.toUpperCase(),
+              style: TextStyle(
+                color: _rolUsuario == 'cliente' ? azulATT : rojoATT,
+                fontWeight: FontWeight.w900,
+                fontSize: 10,
+                letterSpacing: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTarjetaGlass(String ultimoCuatro, String marca) {
+    Color colorBase = marca.toUpperCase() == 'VISA'
+        ? const Color(0xFF1A1F71)
+        : const Color(0xFFEB001B);
+    return Container(
+      height: 120,
+      width: double.infinity,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: LinearGradient(
+          colors: [colorBase, colorBase.withOpacity(0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: colorBase.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Stack(
+        children: [
+          Positioned(
+            right: -20,
+            top: -20,
+            child: CircleAvatar(
+              radius: 50,
+              backgroundColor: Colors.white.withOpacity(0.1),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    CircleAvatar(
-                      radius: 40,
-                      backgroundImage: NetworkImage(
-                        usuario.userMetadata?['avatar_url'] ?? '',
-                      ),
+                    Icon(
+                      Icons.contactless_rounded,
+                      color: Colors.white.withOpacity(0.8),
+                      size: 28,
                     ),
-                    const SizedBox(height: 10),
                     Text(
-                      usuario.userMetadata?['full_name'] ?? 'Usuario',
+                      marca.toUpperCase(),
                       style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontStyle: FontStyle.italic,
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Divider(height: 40),
-                    Text(
-                      "MODO: ${_rolUsuario.toUpperCase()}",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    if (_rolUsuario == 'cliente')
-                      TextField(
-                        controller: _patenteController,
-                        decoration: InputDecoration(
-                          labelText: "Tu Patente",
-                          suffixIcon: IconButton(
-                            icon: const Icon(Icons.save),
-                            onPressed: _guardarPatente,
-                          ),
-                        ),
-                      ),
-                    const Spacer(),
-                    TextButton(
-                      onPressed: _cerrarSesion,
-                      child: const Text(
-                        "Cerrar Sesión",
-                        style: TextStyle(color: Colors.red),
                       ),
                     ),
                   ],
                 ),
-              ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "•••• •••• •••• $ultimoCuatro",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      "MÉTODO ATT! PREDETERMINADO",
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.6),
+                        fontSize: 8,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
-} // <--- CIERRE DE LA CLASE PERFIL
+
+  Widget _buildBentoButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(15),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 16, color: color),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w900,
+                fontSize: 11,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _actionRow(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    return ListTile(
+      onTap: onTap,
+      leading: Icon(icon, color: color),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
+        ),
+      ),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: color.withOpacity(0.3),
+      ),
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+
+  Widget _buildLoginBento() {
+    return _buildBentoCard(
+      child: Column(
+        children: [
+          const Icon(
+            Icons.lock_person_rounded,
+            size: 50,
+            color: Colors.black12,
+          ),
+          const SizedBox(height: 16),
+          const Text(
+            "Inicia sesión para ver tu perfil",
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () =>
+                supabase.auth.signInWithOAuth(OAuthProvider.google),
+            child: const Text("ENTRAR CON GOOGLE"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _pickDate() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now().subtract(const Duration(days: 6570)),
+      firstDate: DateTime(1940),
+      lastDate: DateTime.now(),
+      locale: const Locale("es", "AR"),
+    );
+    if (picked != null) {
+      setState(
+        () =>
+            _fechaNacController.text = DateFormat('yyyy-MM-dd').format(picked),
+      );
+    }
+  }
+
+  void _mostrarAlerta(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
