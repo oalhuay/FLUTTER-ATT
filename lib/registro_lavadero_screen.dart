@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
@@ -11,32 +15,28 @@ class RegistroLavaderoScreen extends StatefulWidget {
 }
 
 class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
-  // Controladores existentes
+  // --- CONTROLADORES CORE ---
   final _nombreController = TextEditingController();
   final _direccionController = TextEditingController();
-  final _latController = TextEditingController();
-  final _lngController = TextEditingController();
-
-  // NUEVOS Controladores según documentación
   final _telefonoController = TextEditingController();
   final _bancoController = TextEditingController();
   final _cuentaController = TextEditingController();
-
-  // --- LÓGICA DE SERVICIOS (TAGS) ---
   final _tagController = TextEditingController();
+  final _precioController = TextEditingController();
+
+  final supabase = Supabase.instance.client;
+  final MapController _mapController = MapController();
+
+  // --- ESTADO MANTENIDO ---
+  Map<String, double> _preciosMap = {'Lavado': 0.0};
   final List<String> _servicios = [
     'Lavado',
     'Control de aire/ruedas',
     'Venta de insumos',
   ];
-
-  final supabase = Supabase.instance.client;
-  // --- NUEVAS VARIABLES PARA HORARIOS ---
   TimeOfDay _horaApertura = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _horaCierre = const TimeOfDay(hour: 18, minute: 0);
-  int _duracionTurno = 60; // Minutos por defecto
-
-  // Días de la semana seleccionables
+  int _duracionTurno = 60;
   final Map<String, bool> _diasLaborales = {
     'Lun': true,
     'Mar': true,
@@ -47,26 +47,65 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     'Dom': false,
   };
 
-  bool _mostrarMapa = true;
   LatLng _puntoSeleccionado = const LatLng(-34.098, -59.028);
+  String _mensajeUbicacion = "";
+  bool _cargandoDireccion = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _actualizarControllers(_puntoSeleccionado);
+  // Paleta ATT! 2040
+  final Color azulATT = const Color(0xFF3ABEF9);
+  final Color rojoATT = const Color(0xFFEF4444);
+  final Color fondoSoft = const Color(0xFFF0F4F8);
+
+  // --- FUNCIONALIDAD DE DIRECCIÓN (MANTENIDA) ---
+  Future<void> _obtenerDireccionDesdeCoords(LatLng coords) async {
+    setState(() => _cargandoDireccion = true);
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1',
+      );
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'ATT_App_Web'},
+      );
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        final address = data['address'];
+        final String? road = address != null ? address['road'] : null;
+        final String? houseNumber = address != null
+            ? address['house_number']
+            : null;
+        final String? city = address != null
+            ? (address['city'] ?? address['town'] ?? address['village'])
+            : null;
+
+        setState(() {
+          if (road != null) {
+            String fullAddress = "$road ${houseNumber ?? ''}".trim();
+            _direccionController.text = fullAddress;
+            _mensajeUbicacion =
+                "✅ Dirección detectada: $fullAddress ${city != null ? '($city)' : ''}";
+          } else {
+            _mensajeUbicacion = "✅ Ubicación fijada manualmente";
+          }
+        });
+      }
+    } catch (e) {
+      setState(() => _mensajeUbicacion = "✅ Ubicación fijada");
+    } finally {
+      setState(() => _cargandoDireccion = false);
+    }
   }
 
-  void _actualizarControllers(LatLng punto) {
-    _latController.text = punto.latitude.toStringAsFixed(6);
-    _lngController.text = punto.longitude.toStringAsFixed(6);
-  }
-
-  // Método para añadir tags personalizados
-  void _addTag(String val) {
-    if (val.isNotEmpty && !_servicios.contains(val)) {
+  void _agregarServicioConPrecio() {
+    final nombre = _tagController.text.trim();
+    final precio = double.tryParse(_precioController.text) ?? 0.0;
+    if (nombre.isNotEmpty && precio > 0) {
       setState(() {
-        _servicios.add(val);
+        if (!_servicios.contains(nombre)) _servicios.add(nombre);
+        _preciosMap[nombre] = precio;
         _tagController.clear();
+        _precioController.clear();
       });
     }
   }
@@ -74,15 +113,8 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   Future<void> _registrar() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
-
-    if (_nombreController.text.isEmpty ||
-        _direccionController.text.isEmpty ||
-        _telefonoController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("⚠️ Por favor, completa los datos del lavadero"),
-        ),
-      );
+    if ((_preciosMap['Lavado'] ?? 0.0) <= 0) {
+      _mostrarAlerta("⚠️ Debes asignar un precio al Lavado", rojoATT);
       return;
     }
 
@@ -94,10 +126,10 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         'telefono': _telefonoController.text,
         'nombre_banco': _bancoController.text,
         'cuenta_bancaria': _cuentaController.text,
-        'latitud': double.parse(_latController.text),
-        'longitud': double.parse(_lngController.text),
-        'servicios': _servicios, // Se envía la lista de tags
-        // --- NUEVOS CAMPOS ---
+        'latitud': _puntoSeleccionado.latitude,
+        'longitud': _puntoSeleccionado.longitude,
+        'servicios': _servicios,
+        'servicios_precios': _preciosMap,
         'hora_apertura': _horaApertura.format(context),
         'hora_cierre': _horaCierre.format(context),
         'duracion_estandar': _duracionTurno,
@@ -106,425 +138,574 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
             .map((e) => e.key)
             .toList(),
       });
-
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Lavadero registrado con éxito")),
-        );
+        _mostrarAlerta("✅ Lavadero configurado con éxito", Colors.green);
         Navigator.pop(context);
       }
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("❌ Error al guardar: $e")));
-      }
+      _mostrarAlerta("❌ Error al guardar: $e", rojoATT);
     }
+  }
+
+  void _mostrarAlerta(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    bool lavadoHabilitado = (_preciosMap['Lavado'] ?? 0.0) > 0;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F7F9),
-      appBar: AppBar(
-        title: const Text("Configurar mi Lavadero"),
-        backgroundColor: const Color(0xFF3ABEF9),
-        foregroundColor: Colors.white,
-        elevation: 0,
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            // --- SECCIÓN 1: DATOS DEL LAVADERO ---
-            _buildSectionCard(
-              title: "Datos del Lavadero",
-              icon: Icons.local_car_wash,
-              children: [
-                _buildField(
-                  _nombreController,
-                  "Nombre Comercial",
-                  Icons.storefront,
+      backgroundColor: fondoSoft,
+      body: CustomScrollView(
+        slivers: [
+          // HEADER BENTO 2040
+          SliverAppBar(
+            expandedHeight: 120,
+            pinned: true,
+            elevation: 0,
+            backgroundColor: Colors.white,
+            flexibleSpace: FlexibleSpaceBar(
+              centerTitle: true,
+              title: Text(
+                "CONFIGURACIÓN ATT!",
+                style: TextStyle(
+                  color: azulATT,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                  letterSpacing: 1.5,
                 ),
-                const SizedBox(height: 15),
-                _buildField(
-                  _direccionController,
-                  "Dirección (Calle y altura)",
-                  Icons.location_on,
-                ),
-                const SizedBox(height: 15),
-                _buildField(
-                  _telefonoController,
-                  "Teléfono de contacto",
-                  Icons.phone,
-                  type: TextInputType.phone,
-                ),
-              ],
+              ),
             ),
+          ),
 
-            const SizedBox(height: 20),
-
-            // --- NUEVA SECCIÓN: SERVICIOS OFRECIDOS (TAGS) ---
-            _buildSectionCard(
-              title: "Servicios Ofrecidos",
-              icon: Icons.list_alt,
-              children: [
-                const Text(
-                  "Define tus servicios. Escribe y presiona Enter para añadir.",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 15),
-                Wrap(
-                  spacing: 8.0,
-                  runSpacing: 8.0,
-                  children: _servicios.map((s) {
-                    final bool esFijo = s == 'Lavado';
-                    return Chip(
-                      label: Text(
-                        s,
-                        style: TextStyle(
-                          color: esFijo ? Colors.white : Colors.black87,
-                        ),
-                      ),
-                      backgroundColor: esFijo
-                          ? const Color(0xFF3ABEF9)
-                          : Colors.white,
-                      side: BorderSide(
-                        color: const Color(0xFF3ABEF9).withOpacity(0.5),
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      onDeleted: esFijo
-                          ? null
-                          : () => setState(() => _servicios.remove(s)),
-                      deleteIconColor: Colors.redAccent,
-                    );
-                  }).toList(),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: _tagController,
-                  decoration: InputDecoration(
-                    hintText: "Ej: Encerado, Pulido...",
-                    prefixIcon: const Icon(
-                      Icons.add_circle_outline,
-                      color: Color(0xFF3ABEF9),
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  onSubmitted: _addTag,
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // --- SECCIÓN 2: UBICACIÓN GEOGRÁFICA ---
-            _buildSectionCard(
-              title: "Ubicación Geográfica",
-              icon: Icons.map,
-              children: [
-                const Text(
-                  "Toca el mapa para posicionar el marcador exacto",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 10),
-                Container(
-                  height: 250,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(15),
-                    border: Border.all(
-                      color: const Color(0xFF3ABEF9).withOpacity(0.3),
-                    ),
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: _puntoSeleccionado,
-                        initialZoom: 15,
-                        onTap: (tapPosition, point) {
-                          setState(() {
-                            _puntoSeleccionado = point;
-                            _actualizarControllers(point);
-                          });
-                        },
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate:
-                              'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        ),
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: _puntoSeleccionado,
-                              width: 50,
-                              height: 50,
-                              child: const Icon(
-                                Icons.location_on,
-                                color: Color(0xFFEF4444),
-                                size: 45,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(height: 20),
-
-            // --- NUEVA SECCIÓN: HORARIOS DE ATENCIÓN ---
-            _buildSectionCard(
-              title: "Horarios y Disponibilidad",
-              icon: Icons.access_time,
-              children: [
-                const Text(
-                  "Defina el rango de atención y la duración de cada lavado.",
-                  style: TextStyle(fontSize: 12, color: Colors.grey),
-                ),
-                const SizedBox(height: 15),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+          SliverPadding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                // 1. DATOS DEL NEGOCIO
+                _buildBentoCard(
+                  title: "Datos del Lavadero",
+                  icon: Icons.store_rounded,
                   children: [
-                    _buildTimePicker(
-                      "Apertura",
-                      _horaApertura,
-                      (time) => setState(() => _horaApertura = time),
+                    _buildModernField(
+                      _nombreController,
+                      "Nombre Comercial",
+                      Icons.badge_outlined,
                     ),
-                    _buildTimePicker(
-                      "Cierre",
-                      _horaCierre,
-                      (time) => setState(() => _horaCierre = time),
+                    _buildModernField(
+                      _direccionController,
+                      "Dirección (detectada)",
+                      Icons.location_on_outlined,
+                      isReadOnly: true,
+                      suffix: _cargandoDireccion
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : null,
+                    ),
+                    _buildModernField(
+                      _telefonoController,
+                      "Teléfono",
+                      Icons.phone_android_rounded,
+                      type: TextInputType.phone,
                     ),
                   ],
                 ),
+                const SizedBox(height: 16),
 
-                const SizedBox(height: 20),
-                const Text(
-                  "Días de atención:",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: _diasLaborales.keys.map((dia) {
-                    bool seleccionado = _diasLaborales[dia]!;
-                    return GestureDetector(
-                      onTap: () =>
-                          setState(() => _diasLaborales[dia] = !seleccionado),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
+                // 2. MAPA INTERACTIVO (CON BOTONES RECUPERADOS)
+                _buildBentoCard(
+                  title: "Ubicación en el Mapa",
+                  icon: Icons.map_rounded,
+                  children: [
+                    Stack(
+                      children: [
+                        Container(
+                          height: 350,
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: Colors.black.withOpacity(0.05),
+                            ),
+                          ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(24),
+                            child: FlutterMap(
+                              mapController: _mapController,
+                              options: MapOptions(
+                                initialCenter: _puntoSeleccionado,
+                                initialZoom: 15,
+                              ),
+                              children: [
+                                TileLayer(
+                                  urlTemplate:
+                                      'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                                ),
+                                DragMarkers(
+                                  markers: [
+                                    DragMarker(
+                                      point: _puntoSeleccionado,
+                                      size: const Size(80, 80),
+                                      offset: const Offset(0, -35),
+                                      builder: (ctx, pos, isDragging) =>
+                                          MouseRegion(
+                                            cursor: isDragging
+                                                ? SystemMouseCursors.grabbing
+                                                : SystemMouseCursors
+                                                      .grab, // <--- MANITO
+                                            child: Icon(
+                                              Icons.location_on,
+                                              color: isDragging
+                                                  ? azulATT
+                                                  : rojoATT,
+                                              size: 60,
+                                            ),
+                                          ),
+                                      onDragEnd: (details, point) {
+                                        setState(
+                                          () => _puntoSeleccionado = point,
+                                        );
+                                        _obtenerDireccionDesdeCoords(point);
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        decoration: BoxDecoration(
-                          color: seleccionado
-                              ? const Color(0xFF3ABEF9)
-                              : Colors.grey[200],
-                          borderRadius: BorderRadius.circular(8),
+
+                        // --- BOTONES DE CONTROL FLOTANTES ---
+                        Positioned(
+                          right: 15,
+                          bottom: 15,
+                          child: Column(
+                            children: [
+                              _mapBtn(Icons.add_rounded, () {
+                                _mapController.move(
+                                  _mapController.camera.center,
+                                  _mapController.camera.zoom + 1,
+                                );
+                              }, color: azulATT),
+                              _mapBtn(Icons.remove_rounded, () {
+                                _mapController.move(
+                                  _mapController.camera.center,
+                                  _mapController.camera.zoom - 1,
+                                );
+                              }, color: azulATT),
+                              const SizedBox(height: 8),
+                              _mapBtn(Icons.my_location_rounded, () {
+                                _mapController.move(_puntoSeleccionado, 17);
+                              }, color: rojoATT),
+                            ],
+                          ),
                         ),
-                        child: Text(
-                          dia,
-                          style: TextStyle(
-                            color: seleccionado ? Colors.white : Colors.black54,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                      ],
+                    ),
+                    if (_mensajeUbicacion.isNotEmpty)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            _mensajeUbicacion,
+                            style: const TextStyle(
+                              color: Colors.green,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
                           ),
                         ),
                       ),
-                    );
-                  }).toList(),
+                  ],
                 ),
+                const SizedBox(height: 16),
 
-                const Divider(height: 30),
-                const Text(
-                  "Tiempo estimado por vehículo:",
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<int>(
-                  value: _duracionTurno,
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+                // 3. SERVICIOS Y PRECIOS
+                _buildBentoCard(
+                  title: "Servicios y Precios",
+                  icon: Icons.payments_rounded,
+                  children: [
+                    TextField(
+                      keyboardType: TextInputType.number,
+                      onChanged: (v) => setState(
+                        () => _preciosMap['Lavado'] = double.tryParse(v) ?? 0.0,
+                      ),
+                      decoration: InputDecoration(
+                        labelText: "Precio Lavado Básico *",
+                        prefixIcon: const Icon(Icons.water_drop_rounded),
+                        prefixText: "\$ ",
+                        filled: true,
+                        fillColor: fondoSoft.withOpacity(0.5),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(15),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
                     ),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  items: [30, 45, 60, 90, 120].map((int min) {
-                    return DropdownMenuItem(
-                      value: min,
-                      child: Text("$min minutos"),
-                    );
-                  }).toList(),
-                  onChanged: (val) => setState(() => _duracionTurno = val!),
+                    if (!lavadoHabilitado)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 12),
+                        child: Text(
+                          "⚠️ Define el precio base para habilitar extras",
+                          style: TextStyle(
+                            color: Colors.orange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      )
+                    else ...[
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: _servicios.map((s) {
+                          final p = _preciosMap[s] ?? 0.0;
+                          return Chip(
+                            label: Text(
+                              "$s: \$${p.toStringAsFixed(0)}",
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            onDeleted: s == 'Lavado'
+                                ? null
+                                : () => setState(() => _servicios.remove(s)),
+                            deleteIconColor: rojoATT,
+                            backgroundColor: azulATT.withOpacity(0.1),
+                            side: BorderSide.none,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const Divider(height: 32),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildModernField(
+                              _tagController,
+                              "Nuevo Servicio",
+                              Icons.add_box_rounded,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildModernField(
+                              _precioController,
+                              "Precio",
+                              Icons.attach_money_rounded,
+                              type: TextInputType.number,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          IconButton.filled(
+                            onPressed: _agregarServicioConPrecio,
+                            style: IconButton.styleFrom(
+                              backgroundColor: azulATT,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                            ),
+                            icon: const Icon(
+                              Icons.add_rounded,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ),
-              ],
-            ),
+                const SizedBox(height: 16),
 
-            const SizedBox(height: 20),
-
-            // --- SECCIÓN 3: REGISTRO BANCARIO ---
-            _buildSectionCard(
-              title: "Registro Bancario (Cobros)",
-              icon: Icons.account_balance,
-              children: [
-                _buildField(
-                  _bancoController,
-                  "Nombre de Banco",
-                  Icons.account_balance_wallet,
+                // 4. OPERACIÓN (HORARIOS)
+                _buildBentoCard(
+                  title: "Horarios y Jornada",
+                  icon: Icons.history_toggle_off_rounded,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _timePickerBox(
+                          "Apertura",
+                          _horaApertura,
+                          (t) => setState(() => _horaApertura = t),
+                        ),
+                        _timePickerBox(
+                          "Cierre",
+                          _horaCierre,
+                          (t) => setState(() => _horaCierre = t),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                    const Text(
+                      "DÍAS LABORALES",
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.black26,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      alignment: WrapAlignment.center,
+                      children: _diasLaborales.keys.map((d) {
+                        bool isSel = _diasLaborales[d]!;
+                        return FilterChip(
+                          label: Text(
+                            d,
+                            style: TextStyle(
+                              color: isSel ? Colors.white : Colors.black87,
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          selected: isSel,
+                          onSelected: (v) =>
+                              setState(() => _diasLaborales[d] = v),
+                          selectedColor: azulATT,
+                          checkmarkColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 15),
-                _buildField(
-                  _cuentaController,
-                  "Cuenta Bancaria (CBU/Alias)",
-                  Icons.credit_card,
+                const SizedBox(height: 16),
+
+                // 5. BANCO
+                _buildBentoCard(
+                  title: "Cobros y Pagos",
+                  icon: Icons.account_balance_rounded,
+                  children: [
+                    _buildModernField(
+                      _bancoController,
+                      "Nombre de Banco",
+                      Icons.account_balance_wallet_rounded,
+                    ),
+                    _buildModernField(
+                      _cuentaController,
+                      "CBU o Alias",
+                      Icons.credit_card_rounded,
+                    ),
+                  ],
                 ),
-              ],
-            ),
-
-            const SizedBox(height: 30),
-
-            // --- BOTÓN DE GUARDADO ---
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFFEF4444),
-                foregroundColor: Colors.white,
-                minimumSize: const Size(double.infinity, 60),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
-                elevation: 4,
-              ),
-              onPressed: _registrar,
-              child: const Text(
-                "GUARDAR CONFIGURACIÓN",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(height: 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSectionCard({
-    required String title,
-    required IconData icon,
-    required List<Widget> children,
-  }) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(icon, color: const Color(0xFF3ABEF9), size: 22),
-                const SizedBox(width: 10),
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-            const Divider(height: 30),
-            ...children,
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildField(
-    TextEditingController controller,
-    String label,
-    IconData icon, {
-    TextInputType type = TextInputType.text,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: type,
-      decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF3ABEF9), size: 20),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey.shade300),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF3ABEF9), width: 2),
-        ),
-      ),
-    );
-  }
-
-  // NUEVO MÉTODO (_buildTimePicker)
-  Widget _buildTimePicker(
-    String label,
-    TimeOfDay time,
-    Function(TimeOfDay) onSelect,
-  ) {
-    return InkWell(
-      onTap: () async {
-        final picked = await showTimePicker(
-          context: context,
-          initialTime: time,
-          builder: (context, child) {
-            return Theme(
-              data: Theme.of(context).copyWith(
-                colorScheme: const ColorScheme.light(
-                  primary: Color(0xFF3ABEF9),
-                  onPrimary: Colors.white,
-                  onSurface: Colors.black,
-                ),
-              ),
-              child: child!,
-            );
-          },
-        );
-        if (picked != null) onSelect(picked);
-      },
-      child: Column(
-        children: [
-          Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 5),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(
-                color: const Color(0xFF3ABEF9).withOpacity(0.5),
-              ),
-            ),
-            child: Text(
-              time.format(context),
-              style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFF3ABEF9),
-              ),
+              ]),
             ),
           ),
         ],
       ),
+
+      // BOTÓN DE ACCIÓN GLASSMOPRHISM
+      bottomSheet: Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.9),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 20),
+          ],
+        ),
+        child: SafeArea(
+          child: ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: lavadoHabilitado ? rojoATT : Colors.black12,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 65),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(22),
+              ),
+              elevation: 0,
+            ),
+            onPressed: lavadoHabilitado ? _registrar : null,
+            child: const Text(
+              "FINALIZAR CONFIGURACIÓN",
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+            ),
+          ),
+        ),
+      ),
     );
+  }
+
+  // --- COMPONENTES BENTO AUXILIARES ---
+
+  Widget _buildBentoCard({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: azulATT),
+              const SizedBox(width: 8),
+              Text(
+                title.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.black38,
+                  letterSpacing: 1.1,
+                ),
+              ),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 12),
+            child: Divider(height: 1, color: Color(0xFFF1F5F9)),
+          ),
+          ...children,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernField(
+    TextEditingController ctrl,
+    String label,
+    IconData icon, {
+    TextInputType type = TextInputType.text,
+    bool isReadOnly = false,
+    Widget? suffix,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: ctrl,
+        keyboardType: type,
+        readOnly: isReadOnly,
+        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: Icon(icon, size: 18, color: azulATT.withOpacity(0.5)),
+          suffixIcon: suffix,
+          filled: true,
+          fillColor: fondoSoft.withOpacity(0.5),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide.none,
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: azulATT, width: 1.5),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _timePickerBox(
+    String label,
+    TimeOfDay time,
+    Function(TimeOfDay) onSelect,
+  ) {
+    return MouseRegion(
+      // <--- PASO A: AGREGÁS ESTO
+      cursor: SystemMouseCursors.click, // <--- PASO B: ACTIVÁS LA MANITO
+      child: InkWell(
+        onTap: () async {
+          final p = await showTimePicker(context: context, initialTime: time);
+          if (p != null) onSelect(p);
+        },
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w900,
+                color: Colors.black26,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+              decoration: BoxDecoration(
+                color: azulATT.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Text(
+                time.format(context),
+                style: TextStyle(
+                  color: azulATT,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 16,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    ); // <--- PASO C: CERRÁS EL MOUSEREGION ACÁ
+  }
+
+  // --- BOTONES FACHEROS CON MANITO :) ---
+  Widget _mapBtn(
+    IconData icon,
+    VoidCallback onTap, {
+    Color color = Colors.black87,
+  }) {
+    return MouseRegion(
+      // <--- AGREGÁS ESTA LÍNEA
+      cursor: SystemMouseCursors.click, // <--- ESTO ACTIVA LA MANITO
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(15),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.1),
+                blurRadius: 8,
+                offset: const Offset(0, 4),
+              ),
+            ],
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
+          ),
+          child: Icon(icon, size: 22, color: color),
+        ),
+      ),
+    ); // <--- CERRÁS EL MOUSEREGION ACÁ
   }
 }

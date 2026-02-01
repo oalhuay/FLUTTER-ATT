@@ -7,9 +7,14 @@ import 'reserva_screen.dart';
 import 'splash_screen.dart';
 import 'mis_turnos_screen.dart';
 import 'registro_lavadero_screen.dart';
+import 'package:intl/date_symbol_data_local.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // ESTA ES LA LÍNEA CLAVE: Inicializa los nombres de días y meses en español
+  await initializeDateFormatting('es', null);
 
   await Supabase.initialize(
     url: 'https://oaudxvhroedmtpwrityk.supabase.co',
@@ -29,6 +34,17 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('es', 'AR'), // Español Argentina
+        Locale('en', 'US'), // Inglés por si las dudas
+      ],
+      locale: const Locale('es', 'AR'), // Forzamos el idioma
+      // ... resto de tu código
       debugShowCheckedModeBanner: false,
       title: 'ATT!: A Todo Trapo',
       theme: ThemeData(
