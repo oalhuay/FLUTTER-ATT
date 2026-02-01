@@ -6,6 +6,7 @@ import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:intl/intl.dart';
+import 'dart:async';
 
 class RegistroLavaderoScreen extends StatefulWidget {
   const RegistroLavaderoScreen({super.key});
@@ -50,7 +51,10 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   LatLng _puntoSeleccionado = const LatLng(-34.098, -59.028);
   String _mensajeUbicacion = "";
   bool _cargandoDireccion = false;
-
+  bool _esManual = false;
+  List<dynamic> _sugerencias = [];
+  bool _buscandoSugerencias = false;
+  Timer? _debounce;
   // Paleta ATT! 2040
   final Color azulATT = const Color(0xFF3ABEF9);
   final Color rojoATT = const Color(0xFFEF4444);
@@ -58,7 +62,12 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
 
   // --- FUNCIONALIDAD DE DIRECCIÓN (MANTENIDA) ---
   Future<void> _obtenerDireccionDesdeCoords(LatLng coords) async {
-    setState(() => _cargandoDireccion = true);
+    bool _esManual = false;
+    setState(() {
+      _cargandoDireccion = true;
+      _esManual = false; // Al mover el mapa, reseteamos a modo detección
+    });
+
     try {
       final url = Uri.parse(
         'https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.latitude}&lon=${coords.longitude}&zoom=18&addressdetails=1',
@@ -71,6 +80,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
         final address = data['address'];
+
         final String? road = address != null ? address['road'] : null;
         final String? houseNumber = address != null
             ? address['house_number']
@@ -83,10 +93,11 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
           if (road != null) {
             String fullAddress = "$road ${houseNumber ?? ''}".trim();
             _direccionController.text = fullAddress;
+            _esManual = false; // Confirmamos que es detectada
             _mensajeUbicacion =
                 "✅ Dirección detectada: $fullAddress ${city != null ? '($city)' : ''}";
           } else {
-            _mensajeUbicacion = "✅ Ubicación fijada manualmente";
+            _mensajeUbicacion = "📍 Ubicación fijada en el mapa";
           }
         });
       }
@@ -94,6 +105,44 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
       setState(() => _mensajeUbicacion = "✅ Ubicación fijada");
     } finally {
       setState(() => _cargandoDireccion = false);
+    }
+  }
+
+  Future<void> _buscarDireccionManual(String query) async {
+    if (query.length < 3) return; // Bajamos a 3 caracteres para más agilidad
+
+    setState(() => _buscandoSugerencias = true);
+
+    // Coordenadas aproximadas de Zárate para dar prioridad (Bounded box)
+    // [Lat min, Lon min, Lat max, Lon max]
+    const viewbox = "-59.13,-34.15,-58.98,-34.05";
+
+    try {
+      final url = Uri.parse(
+        'https://nominatim.openstreetmap.org/search'
+        '?q=${Uri.encodeComponent(query)}'
+        '&format=json'
+        '&limit=5'
+        '&countrycodes=ar' // <--- LIMITA SOLO A ARGENTINA
+        '&viewbox=$viewbox' // <--- PRIORIZA TU CIUDAD
+        '&bounded=0' // Ponemos 0 para que si no encuentra en Zárate, busque en el resto de AR
+        '&addressdetails=1',
+      );
+
+      final response = await http.get(
+        url,
+        headers: {'User-Agent': 'ATT_App_Zarate'},
+      );
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _sugerencias = json.decode(response.body);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error en búsqueda: $e");
+    } finally {
+      setState(() => _buscandoSugerencias = false);
     }
   }
 
@@ -199,19 +248,116 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                       "Nombre Comercial",
                       Icons.badge_outlined,
                     ),
-                    _buildModernField(
-                      _direccionController,
-                      "Dirección (detectada)",
-                      Icons.location_on_outlined,
-                      isReadOnly: true,
-                      suffix: _cargandoDireccion
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : null,
+
+                    // --- SECCIÓN DE DIRECCIÓN CON AUTOCOMPLETADO POR ETIQUETAS ---
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildModernField(
+                          _direccionController,
+                          "Dirección ${_esManual ? '(Manual)' : '(Detectada)'}",
+                          Icons.location_on_outlined,
+                          hint: "Ejemplo: Juan B. Justo 1225",
+                          isReadOnly: false,
+                          onChanged: (valor) {
+                            setState(() => _esManual = true);
+
+                            // Lógica de Debounce: espera 500ms después de que el usuario deja de escribir
+                            if (_debounce?.isActive ?? false)
+                              _debounce!.cancel();
+                            _debounce = Timer(
+                              const Duration(milliseconds: 500),
+                              () {
+                                if (valor.trim().isNotEmpty) {
+                                  _buscarDireccionManual(valor);
+                                } else {
+                                  setState(
+                                    () => _sugerencias = [],
+                                  ); // Limpia si borra todo
+                                }
+                              },
+                            );
+                          },
+                          onSubmitted: (valor) {
+                            setState(() {
+                              _esManual = true;
+                              _mensajeUbicacion =
+                                  "✅ Ubicación fijada manualmente";
+                              _sugerencias =
+                                  []; // Limpia sugerencias al dar enter
+                            });
+                          },
+                          suffix: _cargandoDireccion || _buscandoSugerencias
+                              ? const SizedBox(
+                                  width: 20,
+                                  height: 20,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : _esManual
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.refresh_rounded,
+                                    color: Colors.orange,
+                                    size: 20,
+                                  ),
+                                  onPressed: () {
+                                    _obtenerDireccionDesdeCoords(
+                                      _puntoSeleccionado,
+                                    );
+                                  },
+                                  tooltip: "Volver a detectar por GPS",
+                                )
+                              : null,
+                        ),
+                        // ETIQUETAS DE AUTOCOMPLETADO (Chips)
+                        if (_sugerencias.isNotEmpty && _esManual)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 12, left: 4),
+                            child: Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: _sugerencias.map((lugar) {
+                                return ActionChip(
+                                  backgroundColor: azulATT.withOpacity(0.1),
+                                  side: BorderSide(
+                                    color: azulATT.withOpacity(0.1),
+                                  ),
+                                  label: Text(
+                                    // Esta lógica toma solo la primera parte (calle y altura)
+                                    // y le suma la ciudad si es que no es Zárate para diferenciar.
+                                    _limpiarNombreLugar(lugar),
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: azulATT,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  onPressed: () {
+                                    final lat = double.parse(lugar['lat']);
+                                    final lon = double.parse(lugar['lon']);
+                                    final nuevaPos = LatLng(lat, lon);
+
+                                    setState(() {
+                                      _puntoSeleccionado = nuevaPos;
+                                      _direccionController.text =
+                                          lugar['display_name'];
+                                      _sugerencias = [];
+                                      _esManual = false;
+                                      _mensajeUbicacion =
+                                          "✅ Ubicación seleccionada del buscador";
+                                    });
+
+                                    _mapController.move(nuevaPos, 17);
+                                  },
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                      ],
                     ),
+
                     _buildModernField(
                       _telefonoController,
                       "Teléfono",
@@ -222,7 +368,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // 2. MAPA INTERACTIVO (CON BOTONES RECUPERADOS)
+                // 2. MAPA INTERACTIVO
                 _buildBentoCard(
                   title: "Ubicación en el Mapa",
                   icon: Icons.map_rounded,
@@ -244,6 +390,10 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                               options: MapOptions(
                                 initialCenter: _puntoSeleccionado,
                                 initialZoom: 15,
+                                onTap: (tapPosition, point) {
+                                  setState(() => _puntoSeleccionado = point);
+                                  _obtenerDireccionDesdeCoords(point);
+                                },
                               ),
                               children: [
                                 TileLayer(
@@ -255,21 +405,26 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                                     DragMarker(
                                       point: _puntoSeleccionado,
                                       size: const Size(80, 80),
-                                      offset: const Offset(0, -35),
-                                      builder: (ctx, pos, isDragging) =>
-                                          MouseRegion(
-                                            cursor: isDragging
-                                                ? SystemMouseCursors.grabbing
-                                                : SystemMouseCursors
-                                                      .grab, // <--- MANITO
-                                            child: Icon(
-                                              Icons.location_on,
-                                              color: isDragging
-                                                  ? azulATT
-                                                  : rojoATT,
-                                              size: 60,
-                                            ),
+                                      // --- EL REMEDIO SANTO ---
+                                      // Al usar topCenter, le decimos a Flutter que el "anclaje" al mapa
+                                      // no sea el medio del cuadrado, sino la parte superior.
+                                      // Esto empuja toda la caja hacia arriba de forma natural.
+                                      alignment: Alignment.topCenter,
+                                      builder: (ctx, pos, isDragging) {
+                                        return MouseRegion(
+                                          cursor: isDragging
+                                              ? SystemMouseCursors.grabbing
+                                              : SystemMouseCursors.click,
+                                          child: Icon(
+                                            Icons.location_on,
+                                            color: isDragging
+                                                ? azulATT
+                                                : rojoATT,
+                                            size:
+                                                80, // Ocupa todo el Size para que el área de clic sea perfecta
                                           ),
+                                        );
+                                      },
                                       onDragEnd: (details, point) {
                                         setState(
                                           () => _puntoSeleccionado = point,
@@ -283,8 +438,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                             ),
                           ),
                         ),
-
-                        // --- BOTONES DE CONTROL FLOTANTES ---
                         Positioned(
                           right: 15,
                           bottom: 15,
@@ -605,6 +758,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     TextInputType type = TextInputType.text,
     bool isReadOnly = false,
     Widget? suffix,
+    String? hint,
+    Function(String)? onChanged, // Agregar esto
+    Function(String)? onSubmitted, // Agregar esto
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
@@ -612,11 +768,16 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         controller: ctrl,
         keyboardType: type,
         readOnly: isReadOnly,
+        onChanged: onChanged, // Vincular
+        onSubmitted: onSubmitted, // Vincular
+        onTapOutside: (event) => FocusManager.instance.primaryFocus
+            ?.unfocus(), // Cierra teclado al tocar fuera
         style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
           labelText: label,
           prefixIcon: Icon(icon, size: 18, color: azulATT.withOpacity(0.5)),
           suffixIcon: suffix,
+          hintText: hint,
           filled: true,
           fillColor: fondoSoft.withOpacity(0.5),
           border: OutlineInputBorder(
@@ -707,5 +868,18 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         ),
       ),
     ); // <--- CERRÁS EL MOUSEREGION ACÁ
+  }
+
+  String _limpiarNombreLugar(dynamic lugar) {
+    var nombreCompleto = lugar['display_name'].toString();
+    var partes = nombreCompleto.split(',');
+
+    // Si tiene calle y altura, solemos querer los primeros dos elementos
+    if (partes.length > 1) {
+      return "${partes[0].trim()} ${partes[1].trim()}".length > 25
+          ? partes[0].trim()
+          : "${partes[0].trim()} ${partes[1].trim()}";
+    }
+    return partes[0];
   }
 }
