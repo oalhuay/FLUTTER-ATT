@@ -753,22 +753,40 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
 
-              // COLUMNA 3: PANEL DERECHO FIJO (Solo en Desktop)
-              // COLUMNA 3: PANEL DERECHO DINÁMICO
+              // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
               if (!esPantallaChica && supabase.auth.currentUser != null)
-                Container(
-                  width: 350,
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 600),
+                  curve: Curves.easeInOutQuart,
+                  // El ancho es 350 si hay algo que mostrar, sino es 0
+                  width:
+                      (_lavaderoSeleccionado != null ||
+                          (_rolUsuario == 'cliente' &&
+                              _searchController.text.isNotEmpty))
+                      ? 350
+                      : 0,
                   decoration: BoxDecoration(
                     color: Colors.white,
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.05),
                         blurRadius: 10,
+                        offset: const Offset(
+                          -5,
+                          0,
+                        ), // Sombra hacia la izquierda
                       ),
                     ],
                   ),
-                  child:
-                      _buildContenidoPanelDerecho(), // Llamamos a una función organizadora
+                  // ClipRect evita que el contenido se vea "amontonado" mientras se cierra
+                  child: ClipRect(
+                    child: OverflowBox(
+                      minWidth: 350,
+                      maxWidth: 350,
+                      alignment: Alignment.centerLeft,
+                      child: _buildContenidoPanelDerecho(),
+                    ),
+                  ),
                 ),
             ],
           );
@@ -1380,6 +1398,7 @@ class _MapScreenState extends State<MapScreen> {
     // Esta línea le avisa al Dashboard qué lavadero tocaste
     if (widget.onSelectLavadero != null) widget.onSelectLavadero!(l);
     // ... el resto de tu código del showModalBottomSheet ...
+    if (_userRol == 'cliente') return;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
