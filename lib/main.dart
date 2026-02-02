@@ -168,7 +168,9 @@ class _MainLayoutState extends State<MainLayout> {
 
   // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
   String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
-
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _todosLosLavaderos = []; // Lista maestra
+  List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
   @override
   void initState() {
     super.initState();
@@ -205,23 +207,50 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
+  void _filtrarBusqueda(String query) {
+    final input = query.toLowerCase();
+
+    setState(() {
+      if (input.isEmpty) {
+        _lavaderosFiltrados = List.from(_todosLosLavaderos);
+      } else {
+        _lavaderosFiltrados = _todosLosLavaderos.where((l) {
+          final nombre = (l['razon_social'] ?? '').toString().toLowerCase();
+          final direccion = (l['direccion'] ?? '').toString().toLowerCase();
+
+          // 1. Filtro por nombre o calle
+          bool coincideTexto =
+              nombre.contains(input) || direccion.contains(input);
+
+          // 2. Filtro por distancia (opcional si el mapa tiene centro)
+          // Por ahora priorizamos el texto para que veas que funciona
+          return coincideTexto;
+        }).toList();
+      }
+
+      // Le mandamos la lista filtrada al mapa para que redibuje los puntos
+      mapScreenKey.currentState?.actualizarMarkersExternos(_lavaderosFiltrados);
+    });
+  }
+
   // Controladores para poder editar el texto en el panel derecho
   final TextEditingController _nombreCtrl = TextEditingController();
   final TextEditingController _direccionCtrl = TextEditingController();
 
   List<Widget> get _paginas {
-    // Obtenemos el usuario actual CADA VEZ que se pide la lista de páginas
-
     return [
       MapScreen(
         key: mapScreenKey,
         onIrAPerfil: () => setState(() => _indiceActual = 2),
         onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
         onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
+        // --- CAPTURAMOS LOS DATOS AQUÍ ---
+        onLavaderosCargados: (lista) {
+          _todosLosLavaderos = lista;
+          _lavaderosFiltrados = lista;
+        },
       ),
-      // CAMBIAMOS ESTA LÍNEA (Le quitamos el const y ponemos el onVolver):
       MisTurnosScreen(onVolver: () => setState(() => _indiceActual = 0)),
-
       PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
     ];
   }
@@ -396,16 +425,37 @@ class _MainLayoutState extends State<MainLayout> {
                                     ),
                                   ],
                                 ),
-                                child: const TextField(
+                                child: TextField(
+                                  controller: _searchController,
+                                  onChanged:
+                                      _filtrarBusqueda, // Nombre correcto
                                   decoration: InputDecoration(
                                     hintText: "Search lavadero...",
-                                    prefixIcon: Icon(
+                                    prefixIcon: const Icon(
                                       Icons.search,
                                       color: Colors.grey,
                                       size: 20,
                                     ),
+                                    // La "X" solo aparece si el usuario escribió algo
+                                    suffixIcon:
+                                        _searchController.text.isNotEmpty
+                                        ? IconButton(
+                                            icon: const Icon(
+                                              Icons.clear,
+                                              size: 18,
+                                            ),
+                                            onPressed: () {
+                                              setState(() {
+                                                _searchController.clear();
+                                                _filtrarBusqueda(
+                                                  '',
+                                                ); // Nombre correcto
+                                              });
+                                            },
+                                          )
+                                        : null,
                                     border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(
+                                    contentPadding: const EdgeInsets.symmetric(
                                       vertical: 10,
                                     ),
                                   ),
@@ -917,12 +967,13 @@ class MapScreen extends StatefulWidget {
   final VoidCallback? onIrAPerfil;
   final Function(dynamic)? onSelectLavadero;
   final VoidCallback? onDeselccionar;
-
+  final Function(List<dynamic>)? onLavaderosCargados;
   const MapScreen({
     super.key,
     this.onIrAPerfil,
     this.onSelectLavadero,
     this.onDeselccionar, // <--- AGREGA ESTA LÍNEA AQUÍ ADENTRO
+    this.onLavaderosCargados,
   });
 
   @override
@@ -935,6 +986,21 @@ class _MapScreenState extends State<MapScreen> {
 
   // CONTROLADOR DEL MAPA PARA EL ZOOM Y GPS
   final MapController _mapController = MapController();
+  void actualizarMarkersExternos(List<dynamic> listaFiltrada) {
+    if (!mounted) return;
+
+    setState(() {
+      _markers = listaFiltrada.map((l) {
+        return Marker(
+          point: LatLng(l['latitud'], l['longitud']),
+          width: 200,
+          height: 250,
+          alignment: Alignment.topCenter,
+          child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
+        );
+      }).toList();
+    });
+  }
 
   @override
   void initState() {
@@ -1010,9 +1076,13 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> cargarLavaderosDeSupabase() async {
-    _checkUserRol();
     final data = await supabase.from('lavaderos').select();
     if (mounted) {
+      // ESTA LÍNEA ES LA CLAVE: Envía los datos al MainLayout
+      if (widget.onLavaderosCargados != null) {
+        widget.onLavaderosCargados!(data as List);
+      }
+
       setState(() {
         _markers = (data as List).map((l) {
           return Marker(
