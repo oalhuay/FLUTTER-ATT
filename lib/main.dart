@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -212,8 +212,6 @@ class _MainLayoutState extends State<MainLayout> {
 
   List<Widget> get _paginas {
     // Obtenemos el usuario actual CADA VEZ que se pide la lista de páginas
-    final user = supabase.auth.currentUser;
-
     return [
       MapScreen(
         key: mapScreenKey,
@@ -926,7 +924,6 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   List<Marker> _markers = [];
-  RealtimeChannel? _channel;
   String _userRol = 'pendiente';
 
   // CONTROLADOR DEL MAPA PARA EL ZOOM Y GPS
@@ -955,15 +952,6 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _suscribirARealtime() {
-    _channel = supabase
-        .channel('public:lavaderos')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'lavaderos',
-          callback: (payload) => cargarLavaderosDeSupabase(),
-        )
-        .subscribe();
   }
 
   // --- FUNCIÓN PARA MOVIMIENTO SUAVE (PEGAR AQUÍ) ---
