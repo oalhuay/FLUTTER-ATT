@@ -193,6 +193,26 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
+  Widget _buildContenidoPanelDerecho() {
+    // CASO 1: Si es Dueño de Lavadero -> Siempre ve el panel de edición si hay algo seleccionado
+    if (_rolUsuario == 'lavadero') {
+      return _buildPanelInformacion();
+    }
+
+    // CASO 2: Si es Cliente -> Ve resultados de búsqueda o el detalle para reservar
+    if (_rolUsuario == 'cliente') {
+      // Si ya tocó un lavadero específico, vemos el detalle para que pueda "Solicitar Turno"
+      if (_lavaderoSeleccionado != null) {
+        return _buildPanelInformacion();
+      }
+      // Si no seleccionó nada pero está buscando, vemos las tarjetitas
+      return _buildResultadosBusqueda();
+    }
+
+    // Por defecto (si el rol es pendiente o desconocido)
+    return const Center(child: CircularProgressIndicator());
+  }
+
   Future<void> _obtenerRolActual() async {
     final user = supabase.auth.currentUser;
     if (user != null) {
@@ -253,6 +273,116 @@ class _MainLayoutState extends State<MainLayout> {
   // Controladores para poder editar el texto en el panel derecho
   final TextEditingController _nombreCtrl = TextEditingController();
   final TextEditingController _direccionCtrl = TextEditingController();
+  Widget _buildResultadosBusqueda() {
+    if (_searchController.text.isEmpty) {
+      return const Center(child: Text("Busca un lavadero para ver resultados"));
+    }
+
+    if (_lavaderosFiltrados.isEmpty) {
+      return const Center(child: Text("No se encontraron resultados"));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(20),
+          child: Text(
+            "RESULTADOS CERCANOS",
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: Colors.grey,
+              fontSize: 12,
+            ),
+          ),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 15),
+            itemCount: _lavaderosFiltrados.length > 5
+                ? 5
+                : _lavaderosFiltrados.length,
+            itemBuilder: (context, index) {
+              final l = _lavaderosFiltrados[index];
+              return _buildTargetaBusqueda(l);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTargetaBusqueda(dynamic l) {
+    return GestureDetector(
+      onTap: () {
+        setState(() => _lavaderoSeleccionado = l);
+        mapScreenKey.currentState?.moverAMarcador(
+          LatLng(l['latitud'], l['longitud']),
+        );
+      },
+      child: Container(
+        height: 120,
+        margin: const EdgeInsets.only(bottom: 15),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(15),
+          image: DecorationImage(
+            image: NetworkImage(
+              'https://picsum.photos/seed/${l['id']}/400/200',
+            ),
+            fit: BoxFit.cover,
+            colorFilter: ColorFilter.mode(
+              Colors.black.withOpacity(0.4),
+              BlendMode.darken,
+            ),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(15),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.end,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l['razon_social'],
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    l['direccion'] ?? 'Zárate',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF3ABEF9),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Text(
+                      "\$2500",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   List<Widget> get _paginas {
     return [
@@ -264,8 +394,9 @@ class _MainLayoutState extends State<MainLayout> {
         // --- CAPTURAMOS LOS DATOS AQUÍ ---
         onLavaderosCargados: (lista) {
           setState(() {
-            _todosLosLavaderos =
-                _deduplicarLavaderos(List.from(lista)); // Copia limpia
+            _todosLosLavaderos = _deduplicarLavaderos(
+              List.from(lista),
+            ); // Copia limpia
             _lavaderosFiltrados = List.from(_todosLosLavaderos);
           });
         },
@@ -623,9 +754,8 @@ class _MainLayoutState extends State<MainLayout> {
               ),
 
               // COLUMNA 3: PANEL DERECHO FIJO (Solo en Desktop)
-              if (!esPantallaChica &&
-                  _lavaderoSeleccionado != null &&
-                  supabase.auth.currentUser != null)
+              // COLUMNA 3: PANEL DERECHO DINÁMICO
+              if (!esPantallaChica && supabase.auth.currentUser != null)
                 Container(
                   width: 350,
                   decoration: BoxDecoration(
@@ -637,7 +767,8 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     ],
                   ),
-                  child: _buildPanelInformacion(),
+                  child:
+                      _buildContenidoPanelDerecho(), // Llamamos a una función organizadora
                 ),
             ],
           );
@@ -781,22 +912,23 @@ class _MainLayoutState extends State<MainLayout> {
   }
   // --- HASTA AQUÍ ---
 
-  // Función para el panel de detalles a la derecha
-  // Función para el panel de detalles a la derecha (Ahora es un CRUD)
   Widget _buildPanelInformacion() {
     if (_lavaderoSeleccionado == null) {
       return const Center(
         child: Text(
-          "Seleccioná un lavadero\nen el mapa para editar",
+          "Seleccioná un lavadero\nen el mapa para ver detalle",
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey),
         ),
       );
     }
 
-    // Cargamos los datos actuales en los cuadritos de texto
+    // Cargamos los datos actuales en los controladores
     _nombreCtrl.text = _lavaderoSeleccionado['razon_social'] ?? '';
     _direccionCtrl.text = _lavaderoSeleccionado['direccion'] ?? '';
+
+    // Determinamos si el usuario puede editar (solo rol lavadero)
+    bool esDueno = _rolUsuario == 'lavadero';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -820,95 +952,121 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           const SizedBox(height: 25),
 
-          const Text(
-            "EDITAR INFORMACIÓN",
-            style: TextStyle(
+          // Título dinámico según el rol
+          Text(
+            esDueno ? "GESTIONAR MI NEGOCIO" : "DETALLES DEL LAVADERO",
+            style: const TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.bold,
               color: Colors.grey,
+              letterSpacing: 1.2,
             ),
           ),
           const SizedBox(height: 20),
 
-          // 2. CAMPOS EDITABLES
-          _inputPanel("Nombre del Negocio", _nombreCtrl),
+          // 2. CAMPOS DE INFORMACIÓN
+          // Si es dueño, los campos son editables. Si es cliente, son de solo lectura.
+          _inputPanel("Nombre del Negocio", _nombreCtrl, habilitado: esDueno),
           const SizedBox(height: 15),
-          _inputPanel("Dirección", _direccionCtrl),
+          _inputPanel("Dirección", _direccionCtrl, habilitado: esDueno),
 
           const SizedBox(height: 30),
 
-          // 3. BOTONES Update / Cancel
-          // 3. BOTONES Update / Borrar / Cancel
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF3ABEF9),
-                    foregroundColor: Colors.white,
+          // 3. BOTONES DE ACCIÓN (Diferenciados por Rol)
+          if (esDueno) ...[
+            // VISTA PARA DUEÑOS: Update y Borrar
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3ABEF9),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onPressed: () => _actualizarLavaderoEnSupabase(),
+                    child: const Text("Update Info"),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: Colors.red),
+                  onPressed: () => _confirmarBorrado(),
+                  tooltip: "Eliminar Lavadero",
+                ),
+                const SizedBox(width: 8),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Colors.grey),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(8),
                     ),
                   ),
-                  onPressed: () => _actualizarLavaderoEnSupabase(),
-                  child: const Text("Update"),
-                ),
-              ),
-              const SizedBox(width: 8),
-              // --- ICONO DE BORRAR ---
-              IconButton(
-                icon: const Icon(Icons.delete_outline, color: Colors.red),
-                onPressed: () => _confirmarBorrado(),
-                tooltip: "Eliminar Lavadero",
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.grey),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  onPressed: () => setState(() => _lavaderoSeleccionado = null),
+                  child: const Text(
+                    "Cancel",
+                    style: TextStyle(color: Colors.grey),
                   ),
                 ),
-                onPressed: () => setState(() => _lavaderoSeleccionado = null),
-                child: const Text(
-                  "Cancel",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ],
-          ),
-
-          const Divider(height: 50),
-
-          // Botón de Reserva (para el cliente)
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-              minimumSize: const Size(double.infinity, 50),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              ],
             ),
-            icon: const Icon(Icons.calendar_today, size: 18),
-            label: const Text("SOLICITAR TURNO"),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ReservaScreen(lavadero: _lavaderoSeleccionado),
+          ] else ...[
+            // VISTA PARA CLIENTES: Botón de Reserva destacado
+            const Divider(height: 10),
+            const SizedBox(height: 10),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFFEF4444),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 55),
+                elevation: 2,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-              );
-            },
-          ),
+              ),
+              icon: const Icon(Icons.calendar_today, size: 20),
+              label: const Text(
+                "SOLICITAR TURNO AHORA",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        ReservaScreen(lavadero: _lavaderoSeleccionado),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 15),
+            // Botón secundario para volver a los resultados
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 45),
+                side: const BorderSide(color: Color(0xFF3ABEF9)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => setState(() => _lavaderoSeleccionado = null),
+              child: const Text("VOLVER AL LISTADO"),
+            ),
+          ],
         ],
       ),
     );
   }
 
-  // Widget para crear los cuadritos de texto lindos en el panel
-  Widget _inputPanel(String label, TextEditingController ctrl) {
+  // Helper modificado para soportar el estado 'readOnly'
+  Widget _inputPanel(
+    String label,
+    TextEditingController ctrl, {
+    bool habilitado = true,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -923,9 +1081,14 @@ class _MainLayoutState extends State<MainLayout> {
         const SizedBox(height: 5),
         TextField(
           controller: ctrl,
+          enabled: habilitado, // Controla si el usuario puede escribir
+          style: TextStyle(
+            color: habilitado ? Colors.black87 : Colors.black54,
+            fontWeight: habilitado ? FontWeight.normal : FontWeight.bold,
+          ),
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.grey[100],
+            fillColor: habilitado ? Colors.grey[100] : Colors.blueGrey[50],
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide.none,
@@ -933,6 +1096,11 @@ class _MainLayoutState extends State<MainLayout> {
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 10,
+            ),
+            // Si no está habilitado, no mostramos el cursor
+            disabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(8),
+              borderSide: BorderSide(color: Colors.grey.shade300),
             ),
           ),
         ),
