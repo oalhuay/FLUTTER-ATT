@@ -165,12 +165,72 @@ class _MainLayoutState extends State<MainLayout> {
   int _indiceActual = 0;
   bool _sidebarAbierto = true;
   dynamic _lavaderoSeleccionado;
+  bool _filtroPrecio = false;
+  bool _filtroRating = false;
+  bool _filtroDistancia = false;
+  void _aplicarOrdenamiento() {
+    setState(() {
+      if (_filtroPrecio) {
+        // Asumiendo un precio base de 2500 o el que traiga el objeto
+        _lavaderosFiltrados.sort(
+          (a, b) => (a['precio'] ?? 2500).compareTo(b['precio'] ?? 2500),
+        );
+      }
+      if (_filtroRating) {
+        // Ordena de mayor a menor rating
+        _lavaderosFiltrados.sort(
+          (a, b) => (b['rating'] ?? 0.0).compareTo(a['rating'] ?? 0.0),
+        );
+      }
+      if (_filtroDistancia) {
+        // Aquí podrías usar la lógica de Haversine que mencionamos antes
+        // Por ahora ordenamos por un campo 'distancia' ficticio o real
+        _lavaderosFiltrados.sort(
+          (a, b) => (a['distancia'] ?? 0.0).compareTo(b['distancia'] ?? 0.0),
+        );
+      }
+    });
+  }
 
   // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
   String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _todosLosLavaderos = []; // Lista maestra
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
+  List<dynamic> _obtenerListaOrdenada() {
+    List<dynamic> lista = List.from(_lavaderosFiltrados);
+
+    // Aplicamos los criterios (se pueden combinar)
+    lista.sort((a, b) {
+      int cmp = 0;
+
+      // 1. Prioridad: Distancia (si está activo)
+      if (_filtroDistancia) {
+        // Por ahora comparamos latitud como simulacro de distancia
+        cmp = a['latitud'].compareTo(b['latitud']);
+        if (cmp != 0) return cmp;
+      }
+
+      // 2. Prioridad: Rating (Suponiendo que tienes un campo 'rating')
+      if (_filtroRating) {
+        double ratingA = (a['rating'] ?? 0.0).toDouble();
+        double ratingB = (b['rating'] ?? 0.0).toDouble();
+        cmp = ratingB.compareTo(ratingA); // De mayor a menor
+        if (cmp != 0) return cmp;
+      }
+
+      // 3. Prioridad: Precio
+      if (_filtroPrecio) {
+        // Simulacro: comparamos por ID para variar el orden hasta que tengas 'precio' en DB
+        cmp = a['id'].compareTo(b['id']);
+      }
+
+      return cmp;
+    });
+
+    return lista.take(5).toList(); // Mantenemos tu límite de 5 tarjetas rápidas
+  }
+
   @override
   void initState() {
     super.initState();
@@ -281,34 +341,99 @@ class _MainLayoutState extends State<MainLayout> {
     if (_lavaderosFiltrados.isEmpty) {
       return const Center(child: Text("No se encontraron resultados"));
     }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // --- BOTONES DE FILTRADO (ETIQUETAS) ---
+        Padding(
+          padding: const EdgeInsets.fromLTRB(15, 10, 15, 15),
+          child: Wrap(
+            spacing: 8,
+            children: [
+              _buildEtiquetaFiltro(
+                "Menor Precio",
+                Icons.payments_outlined,
+                _filtroPrecio,
+                () {
+                  setState(() => _filtroPrecio = !_filtroPrecio);
+                },
+              ),
+              _buildEtiquetaFiltro(
+                "Mejor Rating",
+                Icons.star_outline,
+                _filtroRating,
+                () {
+                  setState(() => _filtroRating = !_filtroRating);
+                },
+              ),
+              _buildEtiquetaFiltro(
+                "Más Cerca",
+                Icons.near_me_outlined,
+                _filtroDistancia,
+                () {
+                  setState(() => _filtroDistancia = !_filtroDistancia);
+                },
+              ),
+            ],
+          ),
+        ),
+
         const Padding(
-          padding: EdgeInsets.all(20),
+          padding: EdgeInsets.symmetric(horizontal: 20),
           child: Text(
-            "RESULTADOS CERCANOS",
+            "RESULTADOS",
             style: TextStyle(
               fontWeight: FontWeight.bold,
               color: Colors.grey,
-              fontSize: 12,
+              fontSize: 10,
             ),
           ),
         ),
+
         Expanded(
           child: ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 15),
-            itemCount: _lavaderosFiltrados.length > 5
-                ? 5
-                : _lavaderosFiltrados.length,
+            padding: const EdgeInsets.all(15),
+            itemCount: _obtenerListaOrdenada()
+                .length, // Usamos la nueva función de orden
             itemBuilder: (context, index) {
-              final l = _lavaderosFiltrados[index];
+              final l = _obtenerListaOrdenada()[index];
               return _buildTargetaBusqueda(l);
             },
           ),
         ),
       ],
+    );
+  }
+
+  // Widget auxiliar para las etiquetas
+  Widget _buildEtiquetaFiltro(
+    String texto,
+    IconData icono,
+    bool activo,
+    VoidCallback onTap,
+  ) {
+    return FilterChip(
+      label: Text(
+        texto,
+        style: TextStyle(
+          fontSize: 11,
+          color: activo ? Colors.white : Colors.black87,
+        ),
+      ),
+      avatar: Icon(
+        icono,
+        size: 16,
+        color: activo ? Colors.white : const Color(0xFF3ABEF9),
+      ),
+      selected: activo,
+      onSelected: (_) => onTap(),
+      selectedColor: const Color(0xFF3ABEF9),
+      checkmarkColor: Colors.white,
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: activo ? Colors.transparent : Colors.black12),
+      ),
     );
   }
 
