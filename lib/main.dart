@@ -223,23 +223,31 @@ class _MainLayoutState extends State<MainLayout> {
         });
       }
 
-      // 2. EL FILTRO MAESTRO: Usamos un Set para asegurar que cada ID aparezca UNA sola vez
-      final Set<dynamic> idsVistos = {};
-      _lavaderosFiltrados = coincidencias.where((l) {
-        final id = l['id'];
-        if (idsVistos.contains(id)) {
-          return false; // Si ya lo vimos, lo descartamos
-        } else {
-          idsVistos.add(
-            id,
-          ); // Si es nuevo, lo guardamos en el set y lo mostramos
-          return true;
-        }
-      }).toList();
+      // 2. Evitamos duplicados en la lista de resultados
+      _lavaderosFiltrados = _deduplicarLavaderos(coincidencias.toList());
 
       // 3. Actualizamos los markers del mapa
       mapScreenKey.currentState?.actualizarMarkersExternos(_lavaderosFiltrados);
     });
+  }
+
+  List<dynamic> _deduplicarLavaderos(List<dynamic> lista) {
+    final Map<String, dynamic> unicos = {};
+    for (final l in lista) {
+      final id = l['id'];
+      final String key;
+      if (id != null) {
+        key = 'id:$id';
+      } else {
+        final nombre = (l['razon_social'] ?? '').toString().toLowerCase();
+        final direccion = (l['direccion'] ?? '').toString().toLowerCase();
+        final lat = (l['latitud'] ?? '').toString();
+        final lon = (l['longitud'] ?? '').toString();
+        key = 'txt:$nombre|$direccion|$lat|$lon';
+      }
+      unicos.putIfAbsent(key, () => l);
+    }
+    return unicos.values.toList();
   }
 
   // Controladores para poder editar el texto en el panel derecho
@@ -256,8 +264,9 @@ class _MainLayoutState extends State<MainLayout> {
         // --- CAPTURAMOS LOS DATOS AQUÍ ---
         onLavaderosCargados: (lista) {
           setState(() {
-            _todosLosLavaderos = List.from(lista); // Creamos una copia limpia
-            _lavaderosFiltrados = List.from(lista);
+            _todosLosLavaderos =
+                _deduplicarLavaderos(List.from(lista)); // Copia limpia
+            _lavaderosFiltrados = List.from(_todosLosLavaderos);
           });
         },
       ),
