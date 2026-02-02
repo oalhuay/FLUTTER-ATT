@@ -257,7 +257,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                           _direccionController,
                           "Dirección ${_esManual ? '(Manual)' : '(Detectada)'}",
                           Icons.location_on_outlined,
-                          hint: "Ejemplo: Juan B. Justo 1225",
+                          hint: "Ejemplo: 1225 Juan B. Justo",
                           isReadOnly: false,
                           onChanged: (valor) {
                             setState(() => _esManual = true);
