@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -643,8 +642,9 @@ class _MainLayoutState extends State<MainLayout> {
             );
           } else {
             // Si son los botones normales, cambiamos de pestaña
-            if (index == 0)
+            if (index == 0) {
               mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+            }
             setState(() => _indiceActual = index);
           }
         },
@@ -836,7 +836,7 @@ class _MainLayoutState extends State<MainLayout> {
             'direccion': _direccionCtrl.text,
           })
           .eq('id', _lavaderoSeleccionado['id']);
-
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("✅ Lavadero actualizado correctamente"),
@@ -847,6 +847,7 @@ class _MainLayoutState extends State<MainLayout> {
       // Esto hace que el mapa se refresque solo y muestre el nuevo nombre
       mapScreenKey.currentState?.cargarLavaderosDeSupabase();
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("❌ Error al actualizar: $e"),
@@ -889,7 +890,7 @@ class _MainLayoutState extends State<MainLayout> {
           .from('lavaderos')
           .delete()
           .eq('id', _lavaderoSeleccionado['id']);
-
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("🗑️ Lavadero eliminado"),
@@ -1592,10 +1593,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   padding: const EdgeInsets.only(right: 8.0),
                   child: IconButton(
                     onPressed: () {
-                      if (_estaEditando)
+                      if (_estaEditando) {
                         _actualizarPerfil();
-                      else
+                      } else {
                         setState(() => _estaEditando = true);
+                      }
                     },
                     icon: Icon(
                       _estaEditando

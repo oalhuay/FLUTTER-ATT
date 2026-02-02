@@ -138,8 +138,9 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
       Color nuevoColor = diferencia <= 30
           ? Colors.green
           : (diferencia <= 60 ? Colors.amber : Colors.red);
-      if (mounted && _colorEstado != nuevoColor)
+      if (mounted && _colorEstado != nuevoColor) {
         setState(() => _colorEstado = nuevoColor);
+      }
     });
   }
 
@@ -399,11 +400,12 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                     azulATT,
                     () async {
                       final url = Uri.parse(turno['url_comprobante']);
-                      if (await canLaunchUrl(url))
+                      if (await canLaunchUrl(url)) {
                         await launchUrl(
                           url,
                           mode: LaunchMode.externalApplication,
                         );
+                      }
                     },
                   ),
                 if (_filtroActual == 'activo') ...[

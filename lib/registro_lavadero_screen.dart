@@ -28,7 +28,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final MapController _mapController = MapController();
 
   // --- ESTADO MANTENIDO ---
-  Map<String, double> _preciosMap = {'Lavado': 0.0};
+  final Map<String, double> _preciosMap = {'Lavado': 0.0};
   final List<String> _servicios = [
     'Lavado',
     'Control de aire/ruedas',
@@ -36,7 +36,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   ];
   TimeOfDay _horaApertura = const TimeOfDay(hour: 9, minute: 0);
   TimeOfDay _horaCierre = const TimeOfDay(hour: 18, minute: 0);
-  int _duracionTurno = 60;
+  final int _duracionTurno = 60;
   final Map<String, bool> _diasLaborales = {
     'Lun': true,
     'Mar': true,
@@ -261,8 +261,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                             setState(() => _esManual = true);
 
                             // Lógica de Debounce: espera 500ms después de que el usuario deja de escribir
-                            if (_debounce?.isActive ?? false)
+                            if (_debounce?.isActive ?? false) {
                               _debounce!.cancel();
+                            }
                             _debounce = Timer(
                               const Duration(milliseconds: 500),
                               () {
