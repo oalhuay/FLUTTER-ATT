@@ -212,7 +212,6 @@ class _MainLayoutState extends State<MainLayout> {
 
   List<Widget> get _paginas {
     // Obtenemos el usuario actual CADA VEZ que se pide la lista de páginas
-    final user = supabase.auth.currentUser;
 
     return [
       MapScreen(
@@ -931,7 +930,6 @@ class MapScreen extends StatefulWidget {
 
 class _MapScreenState extends State<MapScreen> {
   List<Marker> _markers = [];
-  RealtimeChannel? _channel;
   String _userRol = 'pendiente';
 
   // CONTROLADOR DEL MAPA PARA EL ZOOM Y GPS
@@ -960,7 +958,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _suscribirARealtime() {
-    var _channel = supabase
+    supabase
         .channel('public:lavaderos')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,

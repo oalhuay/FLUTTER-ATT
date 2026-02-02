@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'dart:async';
 
 class RegistroLavaderoScreen extends StatefulWidget {
@@ -62,10 +61,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
 
   // --- FUNCIONALIDAD DE DIRECCIÓN (MANTENIDA) ---
   Future<void> _obtenerDireccionDesdeCoords(LatLng coords) async {
-    bool _esManual = false;
     setState(() {
       _cargandoDireccion = true;
-      _esManual = false; // Al mover el mapa, reseteamos a modo detección
+// Al mover el mapa, reseteamos a modo detección
     });
 
     try {
@@ -93,7 +91,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
           if (road != null) {
             String fullAddress = "$road ${houseNumber ?? ''}".trim();
             _direccionController.text = fullAddress;
-            _esManual = false; // Confirmamos que es detectada
+// Confirmamos que es detectada
             _mensajeUbicacion =
                 "✅ Dirección detectada: $fullAddress ${city != null ? '($city)' : ''}";
           } else {
