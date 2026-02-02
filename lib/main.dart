@@ -474,7 +474,7 @@ class _MainLayoutState extends State<MainLayout> {
                     Container(
                       color: const Color(0xFFF5F7F9),
                       child: IndexedStack(
-                        index: _indiceActual,
+                        index: _indiceActual == 100 ? 3 : _indiceActual,
                         children: _paginas,
                       ),
                     ),
@@ -908,8 +908,8 @@ class _MainLayoutState extends State<MainLayout> {
               mapScreenKey.currentState?.cargarLavaderosDeSupabase();
 
             setState(() {
-              // Si el índice es 100 (Mis Clientes), mostramos la página 3 de la lista
-              _indiceActual = (index == 100) ? 3 : index;
+              // IMPORTANTE: Ahora guardamos el índice real (0, 1, 2 o 100)
+              _indiceActual = index;
             });
           }
         },
@@ -1213,39 +1213,80 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
-  // --- PANTALLA BENTO: MIS CLIENTES ---
+  // --- PANTALLA BENTO CORREGIDA: MIS CLIENTES ---
   Widget _buildPantallaMisClientes() {
     return Container(
       color: const Color(0xFFF5F7F9),
       child: Column(
         children: [
-          const SizedBox(
-            height: 60,
-          ), // Espacio para que no lo tape la barra superior
+          // --- CABECERA BLANCA CON TÍTULO Y FLECHA ---
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.black87,
+                    size: 20,
+                  ),
+                  onPressed: () =>
+                      setState(() => _indiceActual = 0), // Vuelve al mapa
+                ),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      "MIS CLIENTES",
+                      style: TextStyle(
+                        color: Color(0xFF3ABEF9),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(
+                  width: 40,
+                ), // Balance visual para el botón de volver
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // --- BLOQUES BENTO DE ESTADÍSTICAS ---
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
                 _tarjetaMiniBento(
                   "Total Clientes",
-                  "128",
+                  "0",
                   Icons.people,
                   const Color(0xFF3ABEF9),
                 ),
                 const SizedBox(width: 15),
                 _tarjetaMiniBento(
                   "Frecuentes",
-                  "42",
+                  "0",
                   Icons.auto_awesome,
                   Colors.amber,
                 ),
               ],
             ),
           ),
+
           const SizedBox(height: 20),
+
+          // --- BLOQUE BENTO PRINCIPAL ---
           Expanded(
             child: Container(
-              margin: const EdgeInsets.all(24),
+              margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
@@ -1271,26 +1312,24 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Expanded(
-                    child: ListView(
-                      children: [
-                        _filaClienteBento(
-                          "Lionel Messi",
-                          "AF 123 BK",
-                          "Audi Q7",
-                        ),
-                        _filaClienteBento(
-                          "Antonela Roccuzzo",
-                          "AA 555 RR",
-                          "Mini Cooper",
-                        ),
-                        _filaClienteBento(
-                          "Cristiano Ronaldo",
-                          "CR 007 SI",
-                          "Bugatti Chiron",
-                        ),
-                      ],
+                  const Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.person_search_rounded,
+                            size: 50,
+                            color: Colors.black12,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            "Sin clientes registrados\nLos clientes aparecerán cuando soliciten turnos.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ],
