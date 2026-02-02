@@ -200,35 +200,22 @@ class _MainLayoutState extends State<MainLayout> {
   List<dynamic> _obtenerListaOrdenada() {
     List<dynamic> lista = List.from(_lavaderosFiltrados);
 
-    // Aplicamos los criterios (se pueden combinar)
     lista.sort((a, b) {
-      int cmp = 0;
+      // ... (Filtros de Distancia y Rating se mantienen igual)
 
-      // 1. Prioridad: Distancia (si está activo)
-      if (_filtroDistancia) {
-        // Por ahora comparamos latitud como simulacro de distancia
-        cmp = a['latitud'].compareTo(b['latitud']);
-        if (cmp != 0) return cmp;
-      }
-
-      // 2. Prioridad: Rating (Suponiendo que tienes un campo 'rating')
-      if (_filtroRating) {
-        double ratingA = (a['rating'] ?? 0.0).toDouble();
-        double ratingB = (b['rating'] ?? 0.0).toDouble();
-        cmp = ratingB.compareTo(ratingA); // De mayor a menor
-        if (cmp != 0) return cmp;
-      }
-
-      // 3. Prioridad: Precio
+      // 3. Prioridad: Menor Precio (Comparando el campo 'Lavado' dentro del JSON)
       if (_filtroPrecio) {
-        // Simulacro: comparamos por ID para variar el orden hasta que tengas 'precio' en DB
-        cmp = a['id'].compareTo(b['id']);
-      }
+        // Obtenemos los precios convirtiéndolos a double para comparar correctamente
+        final precioA = (a['servicios_precios']?['Lavado'] ?? 0).toDouble();
+        final precioB = (b['servicios_precios']?['Lavado'] ?? 0).toDouble();
 
-      return cmp;
+        int cmp = precioA.compareTo(precioB);
+        if (cmp != 0) return cmp;
+      }
+      return 0;
     });
 
-    return lista.take(5).toList(); // Mantenemos tu límite de 5 tarjetas rápidas
+    return lista.take(5).toList();
   }
 
   @override
@@ -339,7 +326,7 @@ class _MainLayoutState extends State<MainLayout> {
     }
 
     if (_lavaderosFiltrados.isEmpty) {
-      return const Center(child: Text("No se encontraron resultados"));
+      return const Center(child: Text("Porfavor elija un lavadero o vuelva a intentar"));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -482,6 +469,7 @@ class _MainLayoutState extends State<MainLayout> {
                     l['direccion'] ?? 'Zárate',
                     style: const TextStyle(color: Colors.white70, fontSize: 12),
                   ),
+                  // Dentro de _buildTargetaBusqueda(dynamic l)
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -491,9 +479,10 @@ class _MainLayoutState extends State<MainLayout> {
                       color: const Color(0xFF3ABEF9),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
-                      "\$2500",
-                      style: TextStyle(
+                    child: Text(
+                      // Accedemos al mapa 'servicios_precios' y buscamos la clave 'Lavado'
+                      "\$${l['servicios_precios']?['Lavado'] ?? '---'}",
+                      style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
