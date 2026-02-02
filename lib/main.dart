@@ -637,8 +637,9 @@ class _MainLayoutState extends State<MainLayout> {
             );
           } else {
             // Si son los botones normales, cambiamos de pestaña
-            if (index == 0)
+            if (index == 0) {
               mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+            }
             setState(() => _indiceActual = index);
           }
         },
@@ -831,6 +832,8 @@ class _MainLayoutState extends State<MainLayout> {
           })
           .eq('id', _lavaderoSeleccionado['id']);
 
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("✅ Lavadero actualizado correctamente"),
@@ -838,9 +841,12 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       );
 
-      // Esto hace que el mapa se refresque solo y muestre el nuevo nombre
+      // Esto hace que el mapa se refresque solo
       mapScreenKey.currentState?.cargarLavaderosDeSupabase();
     } catch (e) {
+      // También chequeamos antes de mostrar el error
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("❌ Error al actualizar: $e"),
@@ -884,6 +890,9 @@ class _MainLayoutState extends State<MainLayout> {
           .delete()
           .eq('id', _lavaderoSeleccionado['id']);
 
+      // Validamos si el widget sigue en el árbol después de la espera
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text("🗑️ Lavadero eliminado"),
@@ -892,9 +901,13 @@ class _MainLayoutState extends State<MainLayout> {
       );
 
       setState(() => _lavaderoSeleccionado = null); // Cerramos el panel derecho
+
       mapScreenKey.currentState
           ?.cargarLavaderosDeSupabase(); // Refrescamos el mapa
     } catch (e) {
+      // También validamos antes de mostrar el error
+      if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("❌ Error al borrar: $e"),
@@ -951,8 +964,7 @@ class _MapScreenState extends State<MapScreen> {
     }
   }
 
-  void _suscribirARealtime() {
-  }
+  void _suscribirARealtime() {}
 
   // --- FUNCIÓN PARA MOVIMIENTO SUAVE (PEGAR AQUÍ) ---
   void _animatedMapMove(LatLng destLocation, double destZoom) {
@@ -1577,10 +1589,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   padding: const EdgeInsets.only(right: 8.0),
                   child: IconButton(
                     onPressed: () {
-                      if (_estaEditando)
+                      if (_estaEditando) {
                         _actualizarPerfil();
-                      else
+                      } else {
                         setState(() => _estaEditando = true);
+                      }
                     },
                     icon: Icon(
                       _estaEditando

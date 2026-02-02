@@ -189,8 +189,9 @@ class _ReservaScreenState extends State<ReservaScreen> {
                             selectableDayPredicate: _esDiaLaboral,
                             locale: const Locale("es", "AR"),
                           );
-                          if (picked != null)
+                          if (picked != null) {
                             setState(() => _fechaSeleccionada = picked);
+                          }
                         },
                         child: Container(
                           padding: const EdgeInsets.all(16),
@@ -288,8 +289,9 @@ class _ReservaScreenState extends State<ReservaScreen> {
                       StreamBuilder<List<Map<String, dynamic>>>(
                         stream: _turnosStream,
                         builder: (context, snapshot) {
-                          if (!snapshot.hasData)
+                          if (!snapshot.hasData) {
                             return const LinearProgressIndicator();
+                          }
                           final fechaIso = _fechaSeleccionada
                               .toIso8601String()
                               .split('T')[0];
