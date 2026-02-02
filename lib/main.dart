@@ -168,7 +168,9 @@ class _MainLayoutState extends State<MainLayout> {
 
   // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
   String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
-
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _todosLosLavaderos = []; // Lista maestra
+  List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
   @override
   void initState() {
     super.initState();
@@ -205,21 +207,60 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
+  void _filtrarBusqueda(String query) {
+    final input = query.trim().toLowerCase();
+
+    setState(() {
+      // 1. Creamos una lista temporal con las coincidencias de texto
+      Iterable<dynamic> coincidencias;
+      if (input.isEmpty) {
+        coincidencias = _todosLosLavaderos;
+      } else {
+        coincidencias = _todosLosLavaderos.where((l) {
+          final nombre = (l['razon_social'] ?? '').toString().toLowerCase();
+          final direccion = (l['direccion'] ?? '').toString().toLowerCase();
+          return nombre.contains(input) || direccion.contains(input);
+        });
+      }
+
+      // 2. EL FILTRO MAESTRO: Usamos un Set para asegurar que cada ID aparezca UNA sola vez
+      final Set<dynamic> idsVistos = {};
+      _lavaderosFiltrados = coincidencias.where((l) {
+        final id = l['id'];
+        if (idsVistos.contains(id)) {
+          return false; // Si ya lo vimos, lo descartamos
+        } else {
+          idsVistos.add(
+            id,
+          ); // Si es nuevo, lo guardamos en el set y lo mostramos
+          return true;
+        }
+      }).toList();
+
+      // 3. Actualizamos los markers del mapa
+      mapScreenKey.currentState?.actualizarMarkersExternos(_lavaderosFiltrados);
+    });
+  }
+
   // Controladores para poder editar el texto en el panel derecho
   final TextEditingController _nombreCtrl = TextEditingController();
   final TextEditingController _direccionCtrl = TextEditingController();
 
   List<Widget> get _paginas {
-    // Obtenemos el usuario actual CADA VEZ que se pide la lista de páginas
-
     return [
       MapScreen(
         key: mapScreenKey,
         onIrAPerfil: () => setState(() => _indiceActual = 2),
         onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
         onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
+        // --- CAPTURAMOS LOS DATOS AQUÍ ---
+        onLavaderosCargados: (lista) {
+          setState(() {
+            _todosLosLavaderos = List.from(lista); // Creamos una copia limpia
+            _lavaderosFiltrados = List.from(lista);
+          });
+        },
       ),
-      // CAMBIAMOS ESTA LÍNEA (Le quitamos el const y ponemos el onVolver):
       MisTurnosScreen(onVolver: () => setState(() => _indiceActual = 0)),
       PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
       // --- NUEVA PANTALLA AQUÍ ---
@@ -329,93 +370,177 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
 
                     // --- BARRA SUPERIOR INTEGRADA (AnimatedPositioned para que el margen sea fluido) ---
+                    // --- BARRA SUPERIOR INTEGRADA (Buscador + Resultados) ---
                     if (_indiceActual == 0)
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 400),
                         curve: Curves.easeInOutQuart,
                         top: 20,
-                        // Ajusta el margen izquierdo dinámicamente según el estado del sidebar
                         left: esMovil ? 20 : (_sidebarAbierto ? 20 : 65),
                         right: 20,
                         child: Row(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start, // Alinea arriba
                           children: [
-                            // BOTÓN HAMBURGUESA: Solo aparece en móvil
+                            // Botón Menú (Solo móvil)
                             if (esMovil)
                               Builder(
-                                builder: (context) {
-                                  return Container(
-                                    margin: const EdgeInsets.only(right: 10),
-                                    decoration: const BoxDecoration(
-                                      color: Colors.white,
-                                      shape: BoxShape.circle,
+                                builder: (context) => Container(
+                                  margin: const EdgeInsets.only(right: 10),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.white,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.menu,
+                                      color: Color(0xFF1E1E2D),
                                     ),
-                                    child: IconButton(
-                                      icon: const Icon(
-                                        Icons.menu,
-                                        color: Color(0xFF1E1E2D),
-                                      ),
-                                      onPressed: () =>
-                                          Scaffold.of(context).openDrawer(),
-                                    ),
-                                  );
-                                },
-                              ),
-
-                            // 1. BOTÓN ADD TURNO (Solo en PC/Tablet)
-                            if (!esMovil) ...[
-                              ElevatedButton.icon(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: const Color(0xFF3ABEF9),
-                                  foregroundColor: Colors.white,
-                                  shape: const StadiumBorder(),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 12,
+                                    onPressed: () =>
+                                        Scaffold.of(context).openDrawer(),
                                   ),
                                 ),
-                                icon: const Icon(Icons.add, size: 18),
-                                label: const Text(
-                                  "Busqueda Rápido",
-                                  style: TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                onPressed: () {},
                               ),
-                              const SizedBox(width: 15),
-                            ],
 
-                            // 2. BUSCADOR CENTRAL
+                            // --- BUSCADOR CON LISTA DE RESULTADOS ---
                             Expanded(
-                              child: Container(
-                                height: 45,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(8),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.1),
-                                      blurRadius: 8,
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  // Cuadro de texto
+                                  Container(
+                                    height: 45,
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius:
+                                          _searchController.text.isNotEmpty &&
+                                              _lavaderosFiltrados.isNotEmpty
+                                          ? const BorderRadius.vertical(
+                                              top: Radius.circular(8),
+                                            )
+                                          : BorderRadius.circular(8),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.1),
+                                          blurRadius: 8,
+                                        ),
+                                      ],
                                     ),
-                                  ],
-                                ),
-                                child: const TextField(
-                                  decoration: InputDecoration(
-                                    hintText: "Search lavadero...",
-                                    prefixIcon: Icon(
-                                      Icons.search,
-                                      color: Colors.grey,
-                                      size: 20,
-                                    ),
-                                    border: InputBorder.none,
-                                    contentPadding: EdgeInsets.symmetric(
-                                      vertical: 10,
+                                    child: TextField(
+                                      controller: _searchController,
+                                      onChanged: _filtrarBusqueda,
+                                      decoration: InputDecoration(
+                                        hintText: "Search lavadero...",
+                                        prefixIcon: const Icon(
+                                          Icons.search,
+                                          color: Colors.grey,
+                                          size: 20,
+                                        ),
+                                        suffixIcon:
+                                            _searchController.text.isNotEmpty
+                                            ? IconButton(
+                                                icon: const Icon(
+                                                  Icons.clear,
+                                                  size: 18,
+                                                ),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _searchController.clear();
+                                                    _filtrarBusqueda('');
+                                                  });
+                                                },
+                                              )
+                                            : null,
+                                        border: InputBorder.none,
+                                        contentPadding:
+                                            const EdgeInsets.symmetric(
+                                              vertical: 10,
+                                            ),
+                                      ),
                                     ),
                                   ),
-                                ),
+
+                                  // Lista de resultados (Flotante)
+                                  if (_searchController.text.isNotEmpty &&
+                                      _lavaderosFiltrados.isNotEmpty &&
+                                      !(_lavaderosFiltrados.length == 1 &&
+                                          _lavaderosFiltrados[0]['razon_social'] ==
+                                              _searchController.text))
+                                    Container(
+                                      constraints: const BoxConstraints(
+                                        maxHeight: 250,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white,
+                                        borderRadius:
+                                            const BorderRadius.vertical(
+                                              bottom: Radius.circular(12),
+                                            ),
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: Colors.black.withOpacity(
+                                              0.1,
+                                            ),
+                                            blurRadius: 10,
+                                            offset: const Offset(0, 5),
+                                          ),
+                                        ],
+                                      ),
+                                      child: ListView.separated(
+                                        padding: EdgeInsets.zero,
+                                        shrinkWrap: true,
+                                        itemCount: _lavaderosFiltrados.length,
+                                        separatorBuilder: (_, __) =>
+                                            const Divider(height: 1),
+                                        itemBuilder: (context, index) {
+                                          final l = _lavaderosFiltrados[index];
+                                          return ListTile(
+                                            dense: true,
+                                            leading: const Icon(
+                                              Icons.location_on,
+                                              color: Color(0xFF3ABEF9),
+                                              size: 18,
+                                            ),
+                                            title: Text(
+                                              l['razon_social'],
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            subtitle: Text(
+                                              l['direccion'] ?? '',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            onTap: () {
+                                              setState(() {
+                                                _lavaderoSeleccionado = l;
+                                                _searchController.text =
+                                                    l['razon_social'];
+                                                _lavaderosFiltrados = [];
+                                                FocusScope.of(
+                                                  context,
+                                                ).unfocus();
+                                              });
+                                              mapScreenKey.currentState
+                                                  ?.moverAMarcador(
+                                                    LatLng(
+                                                      l['latitud'],
+                                                      l['longitud'],
+                                                    ),
+                                                  );
+                                            },
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                ],
                               ),
                             ),
+
                             const SizedBox(width: 15),
 
-                            // 3. LA VARITA MÁGICA
+                            // --- BOTONES LATERALES (Varita y Avatar) ---
                             Container(
                               decoration: const BoxDecoration(
                                 color: Colors.white,
@@ -428,62 +553,43 @@ class _MainLayoutState extends State<MainLayout> {
                                 ),
                                 onPressed: () => mapScreenKey.currentState
                                     ?.generarLavaderosAutomaticos(),
-                                tooltip: "Generar datos de prueba",
                               ),
                             ),
                             const SizedBox(width: 10),
-
-                            // 4. EL AVATAR
                             GestureDetector(
                               onTap: () => setState(() => _indiceActual = 2),
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.white,
-                                    width: 2,
-                                  ),
-                                  boxShadow: const [
-                                    BoxShadow(
-                                      color: Colors.black12,
-                                      blurRadius: 4,
-                                    ),
-                                  ],
-                                ),
-                                child: CircleAvatar(
-                                  radius: 20,
-                                  backgroundColor: const Color(0xFF3ABEF9),
-                                  backgroundImage:
-                                      supabase
-                                              .auth
-                                              .currentUser
-                                              ?.userMetadata?['avatar_url'] !=
-                                          null
-                                      ? NetworkImage(
-                                          supabase
-                                              .auth
-                                              .currentUser!
-                                              .userMetadata!['avatar_url'],
-                                        )
-                                      : null,
-                                  child:
-                                      supabase
-                                              .auth
-                                              .currentUser
-                                              ?.userMetadata?['avatar_url'] ==
-                                          null
-                                      ? const Icon(
-                                          Icons.person,
-                                          color: Colors.white,
-                                        )
-                                      : null,
-                                ),
+                              child: CircleAvatar(
+                                radius: 20,
+                                backgroundColor: const Color(0xFF3ABEF9),
+                                backgroundImage:
+                                    supabase
+                                            .auth
+                                            .currentUser
+                                            ?.userMetadata?['avatar_url'] !=
+                                        null
+                                    ? NetworkImage(
+                                        supabase
+                                            .auth
+                                            .currentUser!
+                                            .userMetadata!['avatar_url'],
+                                      )
+                                    : null,
+                                child:
+                                    supabase
+                                            .auth
+                                            .currentUser
+                                            ?.userMetadata?['avatar_url'] ==
+                                        null
+                                    ? const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                      )
+                                    : null,
                               ),
                             ),
                           ],
                         ),
                       ),
-
                     // PANEL FLOTANTE: Aparece solo en móvil cuando hay selección
                     if (esPantallaChica &&
                         _lavaderoSeleccionado != null &&
@@ -1013,12 +1119,13 @@ class MapScreen extends StatefulWidget {
   final VoidCallback? onIrAPerfil;
   final Function(dynamic)? onSelectLavadero;
   final VoidCallback? onDeselccionar;
-
+  final Function(List<dynamic>)? onLavaderosCargados;
   const MapScreen({
     super.key,
     this.onIrAPerfil,
     this.onSelectLavadero,
     this.onDeselccionar, // <--- AGREGA ESTA LÍNEA AQUÍ ADENTRO
+    this.onLavaderosCargados,
   });
 
   @override
@@ -1028,9 +1135,27 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   List<Marker> _markers = [];
   String _userRol = 'pendiente';
+  void moverAMarcador(LatLng posicion) {
+    _animatedMapMove(posicion, 16);
+  }
 
   // CONTROLADOR DEL MAPA PARA EL ZOOM Y GPS
   final MapController _mapController = MapController();
+  void actualizarMarkersExternos(List<dynamic> listaFiltrada) {
+    if (!mounted) return;
+
+    setState(() {
+      _markers = listaFiltrada.map((l) {
+        return Marker(
+          point: LatLng(l['latitud'], l['longitud']),
+          width: 200,
+          height: 250,
+          alignment: Alignment.topCenter,
+          child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
+        );
+      }).toList();
+    });
+  }
 
   @override
   void initState() {
@@ -1106,9 +1231,13 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> cargarLavaderosDeSupabase() async {
-    _checkUserRol();
     final data = await supabase.from('lavaderos').select();
     if (mounted) {
+      // ESTA LÍNEA ES LA CLAVE: Envía los datos al MainLayout
+      if (widget.onLavaderosCargados != null) {
+        widget.onLavaderosCargados!(data as List);
+      }
+
       setState(() {
         _markers = (data as List).map((l) {
           return Marker(
