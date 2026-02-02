@@ -5,7 +5,6 @@ import 'package:latlong2/latlong.dart';
 import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:intl/intl.dart';
 import 'dart:async';
 
 class RegistroLavaderoScreen extends StatefulWidget {
@@ -62,7 +61,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
 
   // --- FUNCIONALIDAD DE DIRECCIÓN (MANTENIDA) ---
   Future<void> _obtenerDireccionDesdeCoords(LatLng coords) async {
-    bool _esManual = false;
     setState(() {
       _cargandoDireccion = true;
       _esManual = false; // Al mover el mapa, reseteamos a modo detección
