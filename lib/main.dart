@@ -741,11 +741,14 @@ class _MainLayoutState extends State<MainLayout> {
           if (index == 99) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (context) => const RegistroLavaderoScreen()),
+              MaterialPageRoute(
+                builder: (context) => const RegistroLavaderoScreen(),
+              ),
             );
           } else {
-            if (index == 0) mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-            
+            if (index == 0)
+              mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+
             setState(() {
               // Si el índice es 100 (Mis Clientes), mostramos la página 3 de la lista
               _indiceActual = (index == 100) ? 3 : index;
@@ -1014,20 +1017,33 @@ class _MainLayoutState extends State<MainLayout> {
       );
     }
   }
+
   // --- PANTALLA BENTO: MIS CLIENTES ---
   Widget _buildPantallaMisClientes() {
     return Container(
       color: const Color(0xFFF5F7F9),
       child: Column(
         children: [
-          const SizedBox(height: 60), // Espacio para que no lo tape la barra superior
+          const SizedBox(
+            height: 60,
+          ), // Espacio para que no lo tape la barra superior
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
-                _tarjetaMiniBento("Total Clientes", "128", Icons.people, const Color(0xFF3ABEF9)),
+                _tarjetaMiniBento(
+                  "Total Clientes",
+                  "128",
+                  Icons.people,
+                  const Color(0xFF3ABEF9),
+                ),
                 const SizedBox(width: 15),
-                _tarjetaMiniBento("Frecuentes", "42", Icons.auto_awesome, Colors.amber),
+                _tarjetaMiniBento(
+                  "Frecuentes",
+                  "42",
+                  Icons.auto_awesome,
+                  Colors.amber,
+                ),
               ],
             ),
           ),
@@ -1039,7 +1055,12 @@ class _MainLayoutState extends State<MainLayout> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(30),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 20)],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 20,
+                  ),
+                ],
               ),
               child: Column(
                 children: [
@@ -1049,16 +1070,31 @@ class _MainLayoutState extends State<MainLayout> {
                       prefixIcon: const Icon(Icons.search, color: Colors.grey),
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
                   Expanded(
                     child: ListView(
                       children: [
-                        _filaClienteBento("Lionel Messi", "AF 123 BK", "Audi Q7"),
-                        _filaClienteBento("Antonela Roccuzzo", "AA 555 RR", "Mini Cooper"),
-                        _filaClienteBento("Cristiano Ronaldo", "CR 007 SI", "Bugatti Chiron"),
+                        _filaClienteBento(
+                          "Lionel Messi",
+                          "AF 123 BK",
+                          "Audi Q7",
+                        ),
+                        _filaClienteBento(
+                          "Antonela Roccuzzo",
+                          "AA 555 RR",
+                          "Mini Cooper",
+                        ),
+                        _filaClienteBento(
+                          "Cristiano Ronaldo",
+                          "CR 007 SI",
+                          "Bugatti Chiron",
+                        ),
                       ],
                     ),
                   ),
@@ -1071,7 +1107,12 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  Widget _tarjetaMiniBento(String titulo, String valor, IconData icono, Color color) {
+  Widget _tarjetaMiniBento(
+    String titulo,
+    String valor,
+    IconData icono,
+    Color color,
+  ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -1086,10 +1127,23 @@ class _MainLayoutState extends State<MainLayout> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(titulo, style: const TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.bold)),
-                Text(valor, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(
+                  titulo,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  valor,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ],
-            )
+            ),
           ],
         ),
       ),
@@ -1105,9 +1159,18 @@ class _MainLayoutState extends State<MainLayout> {
         borderRadius: BorderRadius.circular(15),
       ),
       child: ListTile(
-        leading: CircleAvatar(backgroundColor: const Color(0xFF3ABEF9), child: Text(nombre[0], style: const TextStyle(color: Colors.white))),
-        title: Text(nombre, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-        subtitle: Text("$auto • $patente", style: const TextStyle(fontSize: 12)),
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF3ABEF9),
+          child: Text(nombre[0], style: const TextStyle(color: Colors.white)),
+        ),
+        title: Text(
+          nombre,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: Text(
+          "$auto • $patente",
+          style: const TextStyle(fontSize: 12),
+        ),
         trailing: const Icon(Icons.chevron_right, color: Colors.black26),
       ),
     );
