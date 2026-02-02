@@ -632,7 +632,7 @@ class _ReservaScreenState extends State<ReservaScreen> {
                 ),
                 minimumSize: const Size(double.infinity, 45),
               ),
-              onPressed: () => PdfHelper.generarComprobante(
+              onPressed: () => PdfHelper.descargarComprobante(
                 nroFactura: factura['id']
                     .toString()
                     .substring(0, 8)

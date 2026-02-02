@@ -2,9 +2,47 @@ import 'dart:typed_data'; // Necesario para Uint8List
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
+// 1. PASO IMPORTANTE: Esta librería permite "hablar" con el navegador Chrome
+import 'dart:html' as html;
 
 class PdfHelper {
-  // 1. FUNCIÓN PARA OBTENER BYTES (Para subir a Storage)
+  // --- 1. FUNCIÓN PARA DESCARGAR (La que reemplaza a la impresión molesta) ---
+  static Future<void> descargarComprobante({
+    required String nroFactura,
+    required String lavadero,
+    required String fecha,
+    required String servicios,
+    required double total,
+  }) async {
+    // Generamos el documento usando tu función privada de abajo
+    final pdf = _construirDocumento(
+      nroFactura: nroFactura,
+      lavadero: lavadero,
+      fecha: fecha,
+      servicios: servicios,
+      total: total,
+    );
+
+    // Guardamos el PDF en una lista de bytes
+    final Uint8List bytes = await pdf.save();
+
+    // LÓGICA DE DESCARGA WEB:
+    // Creamos un "Blob" (un archivo virtual en la memoria del navegador)
+    final blob = html.Blob([bytes], 'application/pdf');
+
+    // Creamos una URL temporal para ese archivo
+    final url = html.Url.createObjectUrlFromBlob(blob);
+
+    // Creamos un link invisible, le ponemos nombre y le hacemos "click" solo
+    html.AnchorElement(href: url)
+      ..setAttribute("download", "ATT! COMPROBANTE $nroFactura.pdf")
+      ..click();
+
+    // Limpiamos la memoria
+    html.Url.revokeObjectUrl(url);
+  }
+
+  // --- 2. FUNCIÓN PARA OBTENER BYTES (La mantengo por si subís a Storage) ---
   static Future<Uint8List> obtenerBytesPDF({
     required String nroFactura,
     required String lavadero,
@@ -19,31 +57,10 @@ class PdfHelper {
       servicios: servicios,
       total: total,
     );
-    return pdf.save(); // Retorna los bytes crudos del PDF
+    return pdf.save();
   }
 
-  // 2. FUNCIÓN PARA IMPRIMIR (La que ya tenías)
-  static Future<void> generarComprobante({
-    required String nroFactura,
-    required String lavadero,
-    required String fecha,
-    required String servicios,
-    required double total,
-  }) async {
-    final pdf = _construirDocumento(
-      nroFactura: nroFactura,
-      lavadero: lavadero,
-      fecha: fecha,
-      servicios: servicios,
-      total: total,
-    );
-
-    await Printing.layoutPdf(
-      onLayout: (PdfPageFormat format) async => pdf.save(),
-    );
-  }
-
-  // --- FUNCIÓN PRIVADA PARA NO REPETIR EL DISEÑO ---
+  // --- 3. FUNCIÓN PRIVADA (Tu diseño original, no se toca nada) ---
   static pw.Document _construirDocumento({
     required String nroFactura,
     required String lavadero,
