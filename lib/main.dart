@@ -598,6 +598,11 @@ class _MainLayoutState extends State<MainLayout> {
         if (tieneSesion && _rolUsuario == 'lavadero')
           _itemMenuLateral(Icons.add_business, "Configurar Lavadero", 99),
 
+        // --- NUEVO BOTÓN: MIS CLIENTES (Solo para Dueños) ---
+        // Lo asignamos con el índice 100 para no chocar con los demás
+        if (tieneSesion && _rolUsuario == 'lavadero')
+          _itemMenuLateral(Icons.people_alt_rounded, "Mis Clientes", 100),
+
         const Spacer(),
         const Text(
           "v1.0.8",
@@ -955,7 +960,7 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _suscribirARealtime() {
-    _channel = supabase
+    var _channel = supabase
         .channel('public:lavaderos')
         .onPostgresChanges(
           event: PostgresChangeEvent.all,

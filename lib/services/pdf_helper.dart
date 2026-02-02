@@ -1,7 +1,6 @@
 import 'dart:typed_data'; // Necesario para Uint8List
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:printing/printing.dart';
 // 1. PASO IMPORTANTE: Esta librería permite "hablar" con el navegador Chrome
 import 'dart:html' as html;
 
@@ -10,7 +9,7 @@ class PdfHelper {
   static Future<void> descargarComprobante({
     required String nroFactura,
     required String lavadero,
-    required String fecha,
+    required String fecha, 
     required String servicios,
     required double total,
   }) async {
