@@ -598,6 +598,8 @@ class _MainLayoutState extends State<MainLayout> {
       ),
       MisTurnosScreen(onVolver: () => setState(() => _indiceActual = 0)),
       PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
+      // --- NUEVA PANTALLA AQUÍ ---
+      _buildPantallaMisClientes(),
     ];
   }
 
@@ -667,7 +669,7 @@ class _MainLayoutState extends State<MainLayout> {
                     Container(
                       color: const Color(0xFFF5F7F9),
                       child: IndexedStack(
-                        index: _indiceActual,
+                        index: _indiceActual == 100 ? 3 : _indiceActual,
                         children: _paginas,
                       ),
                     ),
@@ -1089,9 +1091,7 @@ class _MainLayoutState extends State<MainLayout> {
         selected: seleccionado,
 
         onTap: () {
-          // --- NUEVA LÓGICA DE NAVEGACIÓN ---
           if (index == 99) {
-            // Si es el botón de configurar, abrimos la pantalla de registro
             Navigator.push(
               context,
               MaterialPageRoute(
@@ -1099,11 +1099,13 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             );
           } else {
-            // Si son los botones normales, cambiamos de pestaña
-            if (index == 0) {
+            if (index == 0)
               mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-            }
-            setState(() => _indiceActual = index);
+
+            setState(() {
+              // IMPORTANTE: Ahora guardamos el índice real (0, 1, 2 o 100)
+              _indiceActual = index;
+            });
           }
         },
 
@@ -1404,6 +1406,203 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       );
     }
+  }
+
+  // --- PANTALLA BENTO CORREGIDA: MIS CLIENTES ---
+  Widget _buildPantallaMisClientes() {
+    return Container(
+      color: const Color(0xFFF5F7F9),
+      child: Column(
+        children: [
+          // --- CABECERA BLANCA CON TÍTULO Y FLECHA ---
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    color: Colors.black87,
+                    size: 20,
+                  ),
+                  onPressed: () =>
+                      setState(() => _indiceActual = 0), // Vuelve al mapa
+                ),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      "MIS CLIENTES",
+                      style: TextStyle(
+                        color: Color(0xFF3ABEF9),
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(
+                  width: 40,
+                ), // Balance visual para el botón de volver
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 24),
+
+          // --- BLOQUES BENTO DE ESTADÍSTICAS ---
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Row(
+              children: [
+                _tarjetaMiniBento(
+                  "Total Clientes",
+                  "0",
+                  Icons.people,
+                  const Color(0xFF3ABEF9),
+                ),
+                const SizedBox(width: 15),
+                _tarjetaMiniBento(
+                  "Frecuentes",
+                  "0",
+                  Icons.auto_awesome,
+                  Colors.amber,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          // --- BLOQUE BENTO PRINCIPAL ---
+          Expanded(
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.02),
+                    blurRadius: 20,
+                  ),
+                ],
+              ),
+              child: Column(
+                children: [
+                  TextField(
+                    decoration: InputDecoration(
+                      hintText: "Buscar por nombre o patente...",
+                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                  const Expanded(
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.person_search_rounded,
+                            size: 50,
+                            color: Colors.black12,
+                          ),
+                          SizedBox(height: 16),
+                          Text(
+                            "Sin clientes registrados\nLos clientes aparecerán cuando soliciten turnos.",
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.grey, fontSize: 14),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tarjetaMiniBento(
+    String titulo,
+    String valor,
+    IconData icono,
+    Color color,
+  ) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          children: [
+            Icon(icono, color: color, size: 30),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  titulo,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  valor,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _filaClienteBento(String nombre, String patente, String auto) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF3ABEF9),
+          child: Text(nombre[0], style: const TextStyle(color: Colors.white)),
+        ),
+        title: Text(
+          nombre,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: Text(
+          "$auto • $patente",
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: const Icon(Icons.chevron_right, color: Colors.black26),
+      ),
+    );
   }
 }
 
