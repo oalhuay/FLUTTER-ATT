@@ -3,8 +3,10 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MPService {
+  // TODO: Mover a una variable de entorno o Supabase Vault por seguridad
   final String _accessToken =
       "APP_USR-3237879502950879-012309-a6a9898d2fb9e8d05eee8e2d0d1a0adf-3154302970";
+
   final supabase = Supabase.instance.client;
 
   Future<String?> crearPreferencia({
@@ -12,7 +14,8 @@ class MPService {
     required double precio,
     required int cantidad,
   }) async {
-    final precioFinal = precio <= 0 ? 100.0 : precio;
+    // Evita que Mercado Pago rebote el pago por monto 0
+    final double precioFinal = precio <= 0 ? 1.0 : precio;
     final url = Uri.parse('https://api.mercadopago.com/checkout/preferences');
 
     try {
@@ -32,29 +35,32 @@ class MPService {
             },
           ],
           "back_urls": {
-            "success": "https://www.google.com/success",
-            "failure": "https://www.google.com/failure",
-            "pending": "https://www.google.com/pending",
+            "success": "localhost:3000/success",
+            "failure": "localhost:3000/failure",
+            "pending": "localhost:3000/pending",
           },
           "auto_return": "approved",
+          // Vinculamos el pago al usuario de Supabase para rastreo
           "external_reference": supabase.auth.currentUser?.id,
+          // Evita pagos duplicados con la misma intención
+          "binary_mode": true,
         }),
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        return data['init_point'];
+        return data['init_point']; // URL para abrir en el WebView o Navegador
       } else {
-        print("Error MP: ${response.body}");
+        print("Error API Mercado Pago: ${response.body}");
         return null;
       }
     } catch (e) {
-      print("Error conexión MP: $e");
+      print("Error de red/conexión MP: $e");
       return null;
     }
   }
 
-  // --- FUNCIÓN EVOLUCIONADA: REGISTRA Y DEVUELVE LA FILA PARA EL PDF ---
+  /// Registra la factura en Supabase y devuelve los datos completos (incluida la fecha real)
   Future<Map<String, dynamic>?> registrarFacturaLimpia({
     required String paymentId,
     required String status,
@@ -62,10 +68,9 @@ class MPService {
     required String servicios,
   }) async {
     try {
-      final userId = supabase.auth.currentUser?.id;
+      final user = supabase.auth.currentUser;
+      if (user == null) throw Exception("Usuario no autenticado");
 
-      // Usamos .select().single() para que nos devuelva el registro recién creado
-      // Esto nos da el 'id' generado por la DB y la 'fecha_emision' real.
       final response = await supabase
           .from('facturas')
           .insert({
@@ -74,15 +79,15 @@ class MPService {
             'forma_pago': 'mercadopago',
             'total': total,
             'servicios': servicios,
-            'user_id': userId,
+            'user_id': user.id,
+            // 'email_cliente': user.email, // Útil para el PDF
           })
           .select()
           .single();
 
-      print("✅ Factura registrada y retornada para comprobante");
       return response;
     } catch (e) {
-      print("❌ Error al registrar factura: $e");
+      print("❌ Error crítico al registrar en Supabase: $e");
       return null;
     }
   }

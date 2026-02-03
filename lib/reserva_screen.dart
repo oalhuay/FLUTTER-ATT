@@ -14,12 +14,13 @@ class ReservaScreen extends StatefulWidget {
   State<ReservaScreen> createState() => _ReservaScreenState();
 }
 
-class _ReservaScreenState extends State<ReservaScreen> {
+class _ReservaScreenState extends State<ReservaScreen>
+    with WidgetsBindingObserver {
   late Stream<List<Map<String, dynamic>>> _turnosStream;
   final List<String> _serviciosSeleccionados = ["Lavado"];
   double _totalAPagar = 0.0;
   String? _horaSeleccionada;
-
+  bool _esperandoPago = false;
   bool _estaProcesando = false;
   DateTime _fechaSeleccionada = DateTime.now();
 
@@ -32,6 +33,7 @@ class _ReservaScreenState extends State<ReservaScreen> {
   void initState() {
     super.initState();
     // Validación inicial de fecha laboral
+    WidgetsBinding.instance.addObserver(this);
     if (!_esDiaLaboral(_fechaSeleccionada)) {
       _fechaSeleccionada = _fechaSeleccionada.add(const Duration(days: 1));
       int safeGuard = 0;
@@ -42,6 +44,70 @@ class _ReservaScreenState extends State<ReservaScreen> {
     }
     _calcularTotal();
     _inicializarStream();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _esperandoPago) {
+      _finalizarReservaTrasPago();
+    }
+  }
+
+  Future<void> _finalizarReservaTrasPago() async {
+    setState(() => _esperandoPago = false); // Ya volvió, dejamos de esperar
+
+    // OPCIONAL: Aquí podrías llamar a una API de MP para verificar si el
+    // último pago de este usuario fue aprobado realmente.
+
+    try {
+      final mp = MPService();
+      // Ahora sí registramos en Supabase
+      final facturaData = await mp.registrarFacturaLimpia(
+        paymentId: "MP-${DateTime.now().millisecondsSinceEpoch}",
+        status: "approved",
+        total: _totalAPagar,
+        servicios: _serviciosSeleccionados.join(", "),
+      );
+
+      final response = await Supabase.instance.client
+          .from('turnos')
+          .insert({
+            'hora': _horaSeleccionada,
+            'fecha': _fechaSeleccionada.toIso8601String().split('T')[0],
+            'lavadero_nombre': widget.lavadero['razon_social'],
+            'user_id': Supabase.instance.client.auth.currentUser!.id,
+            'monto_pagado': _totalAPagar,
+            'servicios': _serviciosSeleccionados.join(", "),
+            'estado': 'activo',
+          })
+          .select()
+          .single();
+
+      if (facturaData != null) {
+        final pdfBytes = await PdfHelper.obtenerBytesPDF(
+          nroFactura: facturaData['id']
+              .toString()
+              .substring(0, 8)
+              .toUpperCase(),
+          lavadero: widget.lavadero['razon_social'],
+          fecha: facturaData['fecha_emision'].toString(),
+          servicios: facturaData['servicios'],
+          total: (facturaData['total'] as num).toDouble(),
+        );
+        await _subirComprobanteAStorage(response['id'].toString(), pdfBytes);
+        _mostrarExitoFinal(facturaData);
+      }
+    } catch (e) {
+      debugPrint("Error al finalizar: $e");
+    } finally {
+      setState(() => _estaProcesando = false);
+    }
   }
 
   void _inicializarStream() {
@@ -538,7 +604,12 @@ class _ReservaScreenState extends State<ReservaScreen> {
   void _procesarPagoYReserva(BuildContext context, String hora) async {
     final usuario = Supabase.instance.client.auth.currentUser;
     if (usuario == null) return;
-    setState(() => _estaProcesando = true);
+
+    setState(() {
+      _estaProcesando = true;
+      _esperandoPago = true; // Activamos la espera
+    });
+
     try {
       final mp = MPService();
       final urlPago = await mp.crearPreferencia(
@@ -546,52 +617,22 @@ class _ReservaScreenState extends State<ReservaScreen> {
         precio: _totalAPagar,
         cantidad: 1,
       );
+
       if (urlPago != null) {
+        // Abre Mercado Pago
         await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
 
-        final facturaData = await mp.registrarFacturaLimpia(
-          paymentId: "MP-${DateTime.now().millisecondsSinceEpoch}",
-          status: "approved",
-          total: _totalAPagar,
-          servicios: _serviciosSeleccionados.join(", "),
-        );
-
-        final response = await Supabase.instance.client
-            .from('turnos')
-            .insert({
-              'hora': hora,
-              'fecha': _fechaSeleccionada.toIso8601String().split('T')[0],
-              'lavadero_nombre': widget.lavadero['razon_social'],
-              'user_id': usuario.id,
-              'monto_pagado': _totalAPagar,
-              'servicios': _serviciosSeleccionados.join(", "),
-              'estado': 'activo',
-            })
-            .select()
-            .single();
-
-        if (facturaData != null) {
-          final pdfBytes = await PdfHelper.obtenerBytesPDF(
-            nroFactura: facturaData['id']
-                .toString()
-                .substring(0, 8)
-                .toUpperCase(),
-            lavadero: widget.lavadero['razon_social'],
-            fecha: facturaData['fecha_emision'].toString(),
-            servicios: facturaData['servicios'],
-            total: (facturaData['total'] as num).toDouble(),
-          );
-          await _subirComprobanteAStorage(response['id'].toString(), pdfBytes);
-        }
-
-        setState(() => _estaProcesando = false);
-        _mostrarExitoFinal(facturaData);
+        // IMPORTANTE: Aquí NO registramos nada.
+        // La app se queda en "Cargando" hasta que el usuario regrese.
       }
     } catch (e) {
-      setState(() => _estaProcesando = false);
+      setState(() {
+        _estaProcesando = false;
+        _esperandoPago = false;
+      });
     }
   }
 
