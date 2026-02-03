@@ -1582,6 +1582,7 @@ class _MapScreenState extends State<MapScreen> {
     _animatedMapMove(posicion, 16);
   }
 
+  dynamic _lavaderoHover;
   // CONTROLADOR DEL MAPA PARA EL ZOOM Y GPS
   final MapController _mapController = MapController();
   void actualizarMarkersExternos(List<dynamic> listaFiltrada) {
@@ -1682,13 +1683,36 @@ class _MapScreenState extends State<MapScreen> {
       }
 
       setState(() {
+        // En cargarLavaderosDeSupabase o actualizarMarkersExternos
         _markers = (data as List).map((l) {
           return Marker(
             point: LatLng(l['latitud'], l['longitud']),
-            width: 200,
-            height: 250,
-            alignment: Alignment.topCenter,
-            child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
+            width: 35, // Hitbox de ancho
+            height: 35, // Hitbox de alto
+            alignment:
+                Alignment.center, // Centra el hitbox en la coordenada GPS
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) => setState(() => _lavaderoHover = l),
+              onExit: (_) => setState(() => _lavaderoHover = null),
+              child: GestureDetector(
+                onTap: () => _mostrarCartel(l),
+                // --- LA SOLUCIÓN ESTÁ AQUÍ ---
+                child: OverflowBox(
+                  alignment: Alignment
+                      .center, // Fuerza al icono a centrarse sobre el hitbox
+                  maxWidth: 45,
+                  maxHeight: 45,
+                  child: Icon(
+                    Icons.location_on,
+                    color: _lavaderoHover?['id'] == l['id']
+                        ? const Color(0xFFEF4444)
+                        : const Color(0xFF3ABEF9),
+                    size: 45, // El icono visual sigue siendo grande
+                  ),
+                ),
+              ),
+            ),
           );
         }).toList();
       });
@@ -1864,17 +1888,147 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
+  Widget _buildPopupSoberano(dynamic l) {
+    double posX = 0;
+    double posY = 0;
+
+    if (l != null) {
+      try {
+        final point = _mapController.camera.latLngToScreenPoint(
+          LatLng(l['latitud'], l['longitud']),
+        );
+        posX = point.x.toDouble();
+        posY = point.y.toDouble();
+      } catch (e) {
+        return const SizedBox.shrink();
+      }
+    }
+
+    return Positioned(
+      left: posX - 90,
+      // Bajado de -170 a -150 para que esté más cerca del marcador
+      top: posY - 175,
+      child: IgnorePointer(
+        ignoring: true,
+        child: AnimatedOpacity(
+          opacity: l != null ? 1.0 : 0.0,
+          duration: const Duration(milliseconds: 200),
+          child: AnimatedScale(
+            scale: l != null ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOutBack,
+            child: Container(
+              width: 180,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 10,
+                    spreadRadius: 1,
+                  ),
+                ],
+                border: Border.all(color: const Color(0xFF3ABEF9), width: 2),
+              ),
+              child: l == null
+                  ? const SizedBox.shrink()
+                  : Column(
+                      mainAxisSize:
+                          MainAxisSize.min, // Ajusta el alto al contenido
+                      children: [
+                        // 1. IMAGEN
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Image.network(
+                            'https://picsum.photos/seed/${l['id']}/200/120',
+                            height: 80,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) =>
+                                Container(
+                                  height: 80,
+                                  color: Colors.grey[200],
+                                  child: const Icon(
+                                    Icons.image_not_supported,
+                                    size: 20,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        // 2. NOMBRE
+                        Text(
+                          l['razon_social'] ?? 'Lavadero',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                            color: Colors.black87,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        // 3. RATING Y ESTADO (Recuperados)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.star,
+                              size: 12,
+                              color: Colors.amber,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              "${(l['rating'] ?? 0.0).toDouble().toStringAsFixed(1)}",
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              "|",
+                              style: TextStyle(
+                                color: Colors.black12,
+                                fontSize: 10,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            const Text(
+                              "Disponible",
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.green,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
+          // CAPA 1: EL MAPA (Base de todo)
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: const LatLng(-34.098, -59.028),
               initialZoom: 14,
-              // ESTA FUNCIÓN SE ACTIVA AL TOCAR CUALQUIER PARTE VACÍA DEL MAPA
+              // Al tocar el fondo del mapa, deseleccionamos
               onTap: (tapPosition, point) {
                 if (widget.onDeselccionar != null) {
                   widget.onDeselccionar!();
@@ -1885,14 +2039,18 @@ class _MapScreenState extends State<MapScreen> {
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               ),
+              // Aquí se dibujan los iconos de ubicación (Gotas)
               MarkerLayer(markers: _markers),
             ],
           ),
 
-          // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
-          // --- PANEL DE BOTONES FACHEROS ---
+          // CAPA 2: EL POPUP MAESTRO (Se dibuja después del mapa para estar ENCIMA)
+          // Solo aparece si el mouse está sobre un marcador [_lavaderoHover]
+          _buildPopupSoberano(_lavaderoHover),
+
+          // CAPA 3: BOTONES DE INTERFAZ (Zoom, GPS, etc.)
           Positioned(
-            top: 100, // Bajado para no tapar el Avatar
+            top: 100,
             right: 15,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1937,34 +2095,6 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
-          // --- BLOQUE 2: BOTÓN "+" DE AÑADIR TURNO (ABAJO A LA DERECHA) ---
-          // Solo aparece en la versión móvil/tablet
-          if (MediaQuery.of(context).size.width < 950)
-            Positioned(
-              bottom: 30, // Posición clásica de pulgar
-              right: 20,
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF3ABEF9), // Rojo ATT!
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black38,
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.add, color: Colors.white, size: 35),
-                  onPressed: () {
-                    // Aquí tu lógica para añadir turno
-                  },
-                ),
-              ),
-            ),
         ],
       ),
     );
