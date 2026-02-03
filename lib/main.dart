@@ -169,30 +169,6 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroRating = false;
   bool _filtroDistancia = false;
   final LatLng _miUbicacionActual = const LatLng(-34.098, -59.028);
-  void _aplicarOrdenamiento() {
-    setState(() {
-      if (_filtroPrecio) {
-        // Asumiendo un precio base de 2500 o el que traiga el objeto
-        _lavaderosFiltrados.sort(
-          (a, b) => (a['precio'] ?? 2500).compareTo(b['precio'] ?? 2500),
-        );
-      }
-      if (_filtroRating) {
-        // Ordena de mayor a menor rating
-        _lavaderosFiltrados.sort(
-          (a, b) => (b['rating'] ?? 0.0).compareTo(a['rating'] ?? 0.0),
-        );
-      }
-      if (_filtroDistancia) {
-        // Aquí podrías usar la lógica de Haversine que mencionamos antes
-        // Por ahora ordenamos por un campo 'distancia' ficticio o real
-        _lavaderosFiltrados.sort(
-          (a, b) => (a['distancia'] ?? 0.0).compareTo(b['distancia'] ?? 0.0),
-        );
-      }
-    });
-  }
-
   // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
   String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
   final TextEditingController _searchController = TextEditingController();
@@ -825,7 +801,7 @@ class _MainLayoutState extends State<MainLayout> {
                                         padding: EdgeInsets.zero,
                                         shrinkWrap: true,
                                         itemCount: _lavaderosFiltrados.length,
-                                        separatorBuilder: (_, __) =>
+                                        separatorBuilder: (_, _) =>
                                             const Divider(height: 1),
                                         itemBuilder: (context, index) {
                                           final l = _lavaderosFiltrados[index];
@@ -927,6 +903,7 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     // PANEL FLOTANTE: Aparece solo en móvil cuando hay selección
                     if (esPantallaChica &&
+                        _indiceActual == 0 &&
                         _lavaderoSeleccionado != null &&
                         supabase.auth.currentUser != null)
                       Positioned(
@@ -951,15 +928,18 @@ class _MainLayoutState extends State<MainLayout> {
               ),
 
               // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
+              // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
               if (!esPantallaChica && supabase.auth.currentUser != null)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.easeInOutQuart,
-                  // El ancho es 350 si hay algo que mostrar, sino es 0
+                  // LA CLAVE ESTÁ AQUÍ:
+                  // Agregamos la condición "_indiceActual == 0" para que solo tenga ancho en el Mapa
                   width:
-                      (_lavaderoSeleccionado != null ||
-                          (_rolUsuario == 'cliente' &&
-                              _searchController.text.isNotEmpty))
+                      (_indiceActual == 0 &&
+                          (_lavaderoSeleccionado != null ||
+                              (_rolUsuario == 'cliente' &&
+                                  _searchController.text.isNotEmpty)))
                       ? 350
                       : 0,
                   decoration: BoxDecoration(
@@ -968,14 +948,10 @@ class _MainLayoutState extends State<MainLayout> {
                       BoxShadow(
                         color: Colors.black.withOpacity(0.05),
                         blurRadius: 10,
-                        offset: const Offset(
-                          -5,
-                          0,
-                        ), // Sombra hacia la izquierda
+                        offset: const Offset(-5, 0),
                       ),
                     ],
                   ),
-                  // ClipRect evita que el contenido se vea "amontonado" mientras se cierra
                   child: ClipRect(
                     child: OverflowBox(
                       minWidth: 350,
@@ -1099,8 +1075,9 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             );
           } else {
-            if (index == 0)
+            if (index == 0) {
               mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+            }
 
             setState(() {
               // IMPORTANTE: Ahora guardamos el índice real (0, 1, 2 o 100)
@@ -1575,32 +1552,6 @@ class _MainLayoutState extends State<MainLayout> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _filaClienteBento(String nombre, String patente, String auto) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
-        borderRadius: BorderRadius.circular(15),
-      ),
-      child: ListTile(
-        leading: CircleAvatar(
-          backgroundColor: const Color(0xFF3ABEF9),
-          child: Text(nombre[0], style: const TextStyle(color: Colors.white)),
-        ),
-        title: Text(
-          nombre,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-        ),
-        subtitle: Text(
-          "$auto • $patente",
-          style: const TextStyle(fontSize: 12),
-        ),
-        trailing: const Icon(Icons.chevron_right, color: Colors.black26),
       ),
     );
   }
