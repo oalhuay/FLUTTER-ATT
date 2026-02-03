@@ -192,6 +192,7 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
+  List<dynamic> _misClientesReales = [];
   // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
   String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
   final TextEditingController _searchController = TextEditingController();
@@ -199,6 +200,7 @@ class _MainLayoutState extends State<MainLayout> {
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
   List<dynamic> _obtenerListaOrdenada() {
     List<dynamic> lista = List.from(_lavaderosFiltrados);
+    // --- LISTA DE CLIENTES REALES ---
 
     // Aplicamos los criterios (se pueden combinar)
     lista.sort((a, b) {
@@ -281,8 +283,20 @@ class _MainLayoutState extends State<MainLayout> {
           .select('rol')
           .eq('id', user.id)
           .maybeSingle();
-      if (data != null && mounted) {
-        setState(() => _rolUsuario = data['rol'] ?? 'pendiente');
+
+      if (mounted) {
+        // SI DATA ES NULL O EL ROL NO ES 'cliente' NI 'lavadero', MANDAMOS A ELEGIR
+        if (data == null || data['rol'] == null || data['rol'] == 'pendiente') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const SeleccionRolScreen()),
+          );
+        } else {
+          setState(() {
+            _rolUsuario = data['rol'];
+          });
+          if (data['rol'] == 'lavadero') _cargarMisClientes();
+        }
       }
     }
   }
@@ -1030,7 +1044,9 @@ class _MainLayoutState extends State<MainLayout> {
             );
           } else {
             if (index == 0)
-              mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+              mapScreenKey.currentState
+                  ?.cargarLavaderosDeSupabase(); // la carga al hacer click
+            if (index == 100) _cargarMisClientes();
 
             setState(() {
               // IMPORTANTE: Ahora guardamos el índice real (0, 1, 2 o 100)
@@ -1097,6 +1113,35 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           const SizedBox(height: 25),
 
+          // --- SELLO DE AUTOR (DUEÑO) ---
+          if (_lavaderoSeleccionado['perfiles_usuarios'] != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3ABEF9).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.verified_user,
+                    size: 16,
+                    color: Color(0xFF3ABEF9),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Gestionado por: ${_lavaderoSeleccionado['perfiles_usuarios']['nombre'] ?? 'Dueño'} ${_lavaderoSeleccionado['perfiles_usuarios']['apellido'] ?? ''}",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF3ABEF9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Título dinámico según el rol
           Text(
             esDueno ? "GESTIONAR MI NEGOCIO" : "DETALLES DEL LAVADERO",
@@ -1338,13 +1383,81 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
+  Future<void> _cargarMisClientes() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      // 1. Buscamos tus lavaderos
+      final List<dynamic> lavaderosData = await supabase
+          .from('lavaderos')
+          .select('razon_social')
+          .eq('dueño_id', user.id);
+
+      if (lavaderosData.isNotEmpty) {
+        final nombresLavaderos = lavaderosData
+            .map((l) => l['razon_social'].toString())
+            .toList();
+        debugPrint("✅ Buscando clientes para: $nombresLavaderos");
+
+        // 2. Traemos los turnos.
+        // USAMOS 'ilike' para que no importe si es mayúscula o minúscula
+        // Y lo hacemos uno por uno para asegurar que las comillas no molesten
+        List<dynamic> todosLosTurnos = [];
+        for (String nombre in nombresLavaderos) {
+          final data = await supabase
+              .from('turnos')
+              .select('user_id')
+              .ilike(
+                'lavadero_nombre',
+                '%$nombre%',
+              ); // El % ayuda si hay espacios o comillas locas
+          todosLosTurnos.addAll(data);
+        }
+
+        if (todosLosTurnos.isEmpty) {
+          debugPrint(
+            "📊 Sigue sin encontrar nada. Revisá si 'lavadero_nombre' en Turnos coincide con 'razon_social' en Lavaderos.",
+          );
+          if (mounted) setState(() => _misClientesReales = []);
+          return;
+        }
+
+        // 3. Obtenemos los IDs de los clientes únicos
+        final idsClientes = todosLosTurnos
+            .map((t) => t['user_id']?.toString())
+            .where((id) => id != null)
+            .toSet()
+            .toList();
+
+        if (idsClientes.isNotEmpty) {
+          // 4. Traemos los perfiles
+          final List<dynamic> perfiles = await supabase
+              .from('perfiles_usuarios')
+              .select()
+              .filter('id', 'in', idsClientes);
+
+          debugPrint("👥 ¡POR FIN! Clientes encontrados: ${perfiles.length}");
+
+          if (mounted) {
+            setState(() {
+              _misClientesReales = perfiles;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("🚨 ERROR CARGANDO: $e");
+    }
+  }
+
   // --- PANTALLA BENTO CORREGIDA: MIS CLIENTES ---
   Widget _buildPantallaMisClientes() {
     return Container(
       color: const Color(0xFFF5F7F9),
       child: Column(
         children: [
-          // --- CABECERA BLANCA CON TÍTULO Y FLECHA ---
+          // CABECERA
           Container(
             padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
             decoration: const BoxDecoration(
@@ -1354,13 +1467,8 @@ class _MainLayoutState extends State<MainLayout> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.black87,
-                    size: 20,
-                  ),
-                  onPressed: () =>
-                      setState(() => _indiceActual = 0), // Vuelve al mapa
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  onPressed: () => setState(() => _indiceActual = 0),
                 ),
                 const Expanded(
                   child: Center(
@@ -1369,29 +1477,24 @@ class _MainLayoutState extends State<MainLayout> {
                       style: TextStyle(
                         color: Color(0xFF3ABEF9),
                         fontWeight: FontWeight.w900,
-                        fontSize: 14,
                         letterSpacing: 2,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(
-                  width: 40,
-                ), // Balance visual para el botón de volver
+                const SizedBox(width: 40),
               ],
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // --- BLOQUES BENTO DE ESTADÍSTICAS ---
+          // ESTADÍSTICAS
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
                 _tarjetaMiniBento(
                   "Total Clientes",
-                  "0",
+                  _misClientesReales.length.toString(),
                   Icons.people,
                   const Color(0xFF3ABEF9),
                 ),
@@ -1405,10 +1508,8 @@ class _MainLayoutState extends State<MainLayout> {
               ],
             ),
           ),
-
           const SizedBox(height: 20),
-
-          // --- BLOQUE BENTO PRINCIPAL ---
+          // LISTADO REAL
           Expanded(
             child: Container(
               margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
@@ -1416,19 +1517,13 @@ class _MainLayoutState extends State<MainLayout> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 20,
-                  ),
-                ],
               ),
               child: Column(
                 children: [
                   TextField(
                     decoration: InputDecoration(
-                      hintText: "Buscar por nombre o patente...",
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      hintText: "Buscar cliente...",
+                      prefixIcon: const Icon(Icons.search),
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
                       border: OutlineInputBorder(
@@ -1437,25 +1532,36 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     ),
                   ),
-                  const Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.person_search_rounded,
-                            size: 50,
-                            color: Colors.black12,
+                  const SizedBox(height: 20),
+                  Expanded(
+                    child: _misClientesReales.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "Aún no tienes clientes registrados.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: _misClientesReales.length,
+                            itemBuilder: (context, index) {
+                              // 1. Extraemos el mapa del cliente actual
+                              final cliente = _misClientesReales[index];
+
+                              // 2. Armamos el nombre combinando las columnas de tu DB
+                              // Si no tienen nombre o apellido, ponemos 'Usuario' por defecto
+                              String nombreAMostrar =
+                                  "${cliente['nombre'] ?? 'Usuario'} ${cliente['apellido'] ?? ''}";
+
+                              // 3. Lo mandamos a la tarjetita Bento
+                              return _filaClienteBento(
+                                nombreAMostrar, // <--- Nombre y Apellido reales
+                                cliente['ciudad'] ?? 'Zárate',
+                                cliente['email'] ??
+                                    'Sin email', // <--- El Gmail que ya veías
+                              );
+                            },
                           ),
-                          SizedBox(height: 16),
-                          Text(
-                            "Sin clientes registrados\nLos clientes aparecerán cuando soliciten turnos.",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -1653,24 +1759,61 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> cargarLavaderosDeSupabase() async {
-    final data = await supabase.from('lavaderos').select();
-    if (mounted) {
-      // ESTA LÍNEA ES LA CLAVE: Envía los datos al MainLayout
-      if (widget.onLavaderosCargados != null) {
-        widget.onLavaderosCargados!(data as List);
-      }
+    try {
+      // 1. Traemos solo los lavaderos (sin el join que falla)
+      final data = await supabase.from('lavaderos').select();
+      final List<dynamic> listaLavaderos = data as List;
 
-      setState(() {
-        _markers = (data as List).map((l) {
-          return Marker(
-            point: LatLng(l['latitud'], l['longitud']),
-            width: 200,
-            height: 250,
-            alignment: Alignment.topCenter,
-            child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
+      if (mounted) {
+        // 2. Extraemos los IDs de los dueños (dueño_id) de forma única
+        final idsDuenos = listaLavaderos
+            .map((l) => l['dueño_id']?.toString())
+            .where((id) => id != null)
+            .toSet()
+            .toList();
+
+        Map<String, dynamic> mapaNombres = {};
+
+        if (idsDuenos.isNotEmpty) {
+          // 3. Buscamos los perfiles de esos dueños en la tabla perfiles_usuarios
+          final perfilesData = await supabase
+              .from('perfiles_usuarios')
+              .select('id, nombre, apellido')
+              .filter('id', 'in', idsDuenos);
+
+          debugPrint(
+            "🔍 Perfiles encontrados para dueños: ${perfilesData.length}",
           );
-        }).toList();
-      });
+          // Guardamos los nombres en un mapa para acceso rápido
+          for (var p in perfilesData) {
+            mapaNombres[p['id']] = p;
+          }
+        }
+
+        // 4. "Pegamos" manualmente la info del dueño a cada lavadero
+        for (var lav in listaLavaderos) {
+          lav['perfiles_usuarios'] = mapaNombres[lav['dueño_id']];
+        }
+
+        // 5. Enviamos los datos actualizados al MainLayout
+        if (widget.onLavaderosCargados != null) {
+          widget.onLavaderosCargados!(listaLavaderos);
+        }
+
+        setState(() {
+          _markers = listaLavaderos.map((l) {
+            return Marker(
+              point: LatLng(l['latitud'], l['longitud']),
+              width: 200,
+              height: 250,
+              alignment: Alignment.topCenter,
+              child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
+            );
+          }).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("🚨 ERROR EN MAPA: $e");
     }
   }
 
