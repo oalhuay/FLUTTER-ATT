@@ -168,6 +168,7 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroPrecio = false;
   bool _filtroRating = false;
   bool _filtroDistancia = false;
+  final LatLng _miUbicacionActual = const LatLng(-34.098, -59.028);
   void _aplicarOrdenamiento() {
     setState(() {
       if (_filtroPrecio) {
@@ -198,24 +199,45 @@ class _MainLayoutState extends State<MainLayout> {
   List<dynamic> _todosLosLavaderos = []; // Lista maestra
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
   List<dynamic> _obtenerListaOrdenada() {
+    // 1. Trabajamos sobre una copia de los filtrados
     List<dynamic> lista = List.from(_lavaderosFiltrados);
 
     lista.sort((a, b) {
-      // ... (Filtros de Distancia y Rating se mantienen igual)
+      // CRITERIO 1: DISTANCIA (Si el botón está activo)
+      if (_filtroDistancia) {
+        double distA = _calcularDistancia(a['latitud'], a['longitud']);
+        double distB = _calcularDistancia(b['latitud'], b['longitud']);
 
-      // 3. Prioridad: Menor Precio (Comparando el campo 'Lavado' dentro del JSON)
-      if (_filtroPrecio) {
-        // Obtenemos los precios convirtiéndolos a double para comparar correctamente
-        final precioA = (a['servicios_precios']?['Lavado'] ?? 0).toDouble();
-        final precioB = (b['servicios_precios']?['Lavado'] ?? 0).toDouble();
-
-        int cmp = precioA.compareTo(precioB);
+        // Comparamos: el menor valor (más cerca) va primero
+        int cmp = distA.compareTo(distB);
         if (cmp != 0) return cmp;
       }
+
+      // CRITERIO 2: PRECIO (Si el botón está activo)
+      if (_filtroPrecio) {
+        final precioA = (a['servicios_precios']?['Lavado'] ?? 99999).toDouble();
+        final precioB = (b['servicios_precios']?['Lavado'] ?? 99999).toDouble();
+        int cmp = precioA.compareTo(precioB); // Menor precio primero
+        if (cmp != 0) return cmp;
+      }
+
+      // CRITERIO 3: RATING
+      if (_filtroRating) {
+        final rateA = (a['rating'] ?? 0.0).toDouble();
+        final rateB = (b['rating'] ?? 0.0).toDouble();
+        return rateB.compareTo(rateA); // Mayor rating primero
+      }
+
       return 0;
     });
 
     return lista.take(5).toList();
+  }
+
+  // Función auxiliar para calcular distancia real vs tu GPS
+  double _calcularDistancia(double latB, double lonB) {
+    return (latB - _miUbicacionActual.latitude).abs() +
+        (lonB - _miUbicacionActual.longitude).abs();
   }
 
   @override
@@ -326,7 +348,9 @@ class _MainLayoutState extends State<MainLayout> {
     }
 
     if (_lavaderosFiltrados.isEmpty) {
-      return const Center(child: Text("Porfavor elija un lavadero o vuelva a intentar"));
+      return const Center(
+        child: Text("Porfavor elija un lavadero o vuelva a intentar"),
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,13 +487,8 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    l['direccion'] ?? 'Zárate',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  // Dentro de _buildTargetaBusqueda(dynamic l)
+                  // --- ETIQUETA DE PRECIO (LAVADO) ---
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -480,13 +499,75 @@ class _MainLayoutState extends State<MainLayout> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      // Accedemos al mapa 'servicios_precios' y buscamos la clave 'Lavado'
                       "\$${l['servicios_precios']?['Lavado'] ?? '---'}",
                       style: const TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // --- ETIQUETA DE DISTANCIA (Kms) ---
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.black12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on,
+                          size: 12,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          // Calculamos distancia simple (lat/lng) y formateamos a 1 decimal
+                          "${(((l['latitud'] - (-34.098)).abs() + (l['longitud'] - (-59.028)).abs()) * 111).toStringAsFixed(1)} km",
+                          style: const TextStyle(
+                            color: Colors.black87,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+
+                  // --- ETIQUETA DE RATING (Estrella) ---
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      // Fondo oscuro semi-transparente para que la estrella ámbar resalte
+                      color: Colors.black.withOpacity(0.5),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.star, size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          "${(l['rating'] ?? 0.0).toDouble().toStringAsFixed(1)}",
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color:
+                                Colors.white, // Texto en blanco para contraste
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -1657,6 +1738,7 @@ class _MapScreenState extends State<MapScreen> {
               MarkerLayer(markers: _markers),
             ],
           ),
+
           // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
           // --- PANEL DE BOTONES FACHEROS ---
           Positioned(
