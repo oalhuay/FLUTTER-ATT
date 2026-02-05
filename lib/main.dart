@@ -998,7 +998,7 @@ class _MainLayoutState extends State<MainLayout> {
 
         // --- BOTÓN CONFIGURAR: Solo si tiene sesión Y es dueño ---
         if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(Icons.add_business, "Configurar Lavadero", 99),
+          _itemMenuLateral(Icons.add_business, "Registrar Mi Lavadero", 99),
 
         // --- NUEVO BOTÓN: MIS CLIENTES (Solo para Dueños) ---
         // Lo asignamos con el índice 100 para no chocar con los demás
@@ -1084,6 +1084,20 @@ class _MainLayoutState extends State<MainLayout> {
       );
     }
 
+    final user = supabase.auth.currentUser;
+    // --- LÍNEA NUEVA: Verificamos propiedad ---
+    bool esMio = _lavaderoSeleccionado['dueño_id'] == user?.id;
+
+    // --- BLOQUE DE CONTROL TOTAL ---
+    debugPrint("------------------------------------------");
+    debugPrint(
+      "LAVADERO SELECCIONADO: ${_lavaderoSeleccionado['razon_social']}",
+    );
+    debugPrint("DUEÑO ID EN DB: '${_lavaderoSeleccionado['dueño_id']}'");
+    debugPrint("MI ID (AUTH): '${user?.id}'");
+    debugPrint("¿COINCIDEN?: $esMio");
+    debugPrint("MI ROL ACTUAL: $_rolUsuario");
+    debugPrint("------------------------------------------");
     // Cargamos los datos actuales en los controladores
     _nombreCtrl.text = _lavaderoSeleccionado['razon_social'] ?? '';
     _direccionCtrl.text = _lavaderoSeleccionado['direccion'] ?? '';
@@ -1155,56 +1169,61 @@ class _MainLayoutState extends State<MainLayout> {
           const SizedBox(height: 20),
 
           // 2. CAMPOS DE INFORMACIÓN
-          // Si es dueño, los campos son editables. Si es cliente, son de solo lectura.
-          _inputPanel("Nombre del Negocio", _nombreCtrl, habilitado: esDueno),
+          // Campos informativos (La edición real se hace en la otra pantalla)
+          _inputPanel("Nombre del Negocio", _nombreCtrl, habilitado: false),
           const SizedBox(height: 15),
-          _inputPanel("Dirección", _direccionCtrl, habilitado: esDueno),
+          _inputPanel("Dirección", _direccionCtrl, habilitado: false),
 
           const SizedBox(height: 30),
 
-          // 3. BOTONES DE ACCIÓN (Diferenciados por Rol)
-          if (esDueno) ...[
-            // VISTA PARA DUEÑOS: Update y Borrar
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3ABEF9),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () => _actualizarLavaderoEnSupabase(),
-                    child: const Text("Update Info"),
-                  ),
+          // 3. BOTONES DE ACCIÓN (Diferenciados por Propiedad Real)
+          // 3. BOTONES DE ACCIÓN (Lógica de Roles y Propiedad)
+          if (esMio) ...[
+            // --- CASO DUEÑO: PUEDE MODIFICAR ---
+            const Divider(height: 30),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                // Estética: Azul ATT! con borde para armonía visual
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF3ABEF9),
+                side: const BorderSide(color: Color(0xFF3ABEF9), width: 2),
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _confirmarBorrado(),
-                  tooltip: "Eliminar Lavadero",
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.grey),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.edit_location_alt_rounded),
+              label: const Text(
+                "MODIFICAR DATOS DEL NEGOCIO",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => RegistroLavaderoScreen(
+                      lavaderoParaEditar: _lavaderoSeleccionado,
                     ),
                   ),
-                  onPressed: () => setState(() => _lavaderoSeleccionado = null),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ],
+                );
+              },
             ),
-          ] else ...[
-            // VISTA PARA CLIENTES: Botón de Reserva destacado
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () => _confirmarBorrado(),
+              icon: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+                size: 18,
+              ),
+              label: const Text(
+                "Eliminar este Lavadero",
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ] else if (_rolUsuario == 'cliente') ...[
+            // --- CASO CLIENTE: PUEDE RESERVAR ---
             const Divider(height: 10),
             const SizedBox(height: 10),
             ElevatedButton.icon(
@@ -1220,7 +1239,7 @@ class _MainLayoutState extends State<MainLayout> {
               icon: const Icon(Icons.calendar_today, size: 20),
               label: const Text(
                 "SOLICITAR TURNO AHORA",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
               onPressed: () {
                 Navigator.push(
@@ -1233,7 +1252,6 @@ class _MainLayoutState extends State<MainLayout> {
               },
             ),
             const SizedBox(height: 15),
-            // Botón secundario para volver a los resultados
             OutlinedButton(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 45),
@@ -1244,6 +1262,34 @@ class _MainLayoutState extends State<MainLayout> {
               ),
               onPressed: () => setState(() => _lavaderoSeleccionado = null),
               child: const Text("VOLVER AL LISTADO"),
+            ),
+          ] else ...[
+            // --- CASO OTRO DUEÑO: SOLO LECTURA ---
+            const Divider(height: 30),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  "Modo lectura: Este lavadero pertenece a otro propietario.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 45),
+                side: const BorderSide(color: Color(0xFF3ABEF9)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => setState(() => _lavaderoSeleccionado = null),
+              child: const Text("CERRAR DETALLE"),
             ),
           ],
         ],
@@ -1295,6 +1341,37 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
       ],
+    );
+  }
+
+  // --- NUEVA FUNCIÓN: CARTEL DE SEGURIDAD ---
+  void _mostrarDialogoConfirmacionEdicion() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("¿Confirmar cambios?"),
+        content: const Text(
+          "Se actualizará la información de tu lavadero en el sistema. ¿Estás seguro?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3ABEF9),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context); // Cerramos el cartel
+              _actualizarLavaderoEnSupabase(); // Mandamos a la base de datos
+            },
+            child: const Text("SÍ, ACTUALIZAR"),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1865,7 +1942,10 @@ class _MapScreenState extends State<MapScreen> {
     // Esta línea le avisa al Dashboard qué lavadero tocaste
     if (widget.onSelectLavadero != null) widget.onSelectLavadero!(l);
     // ... el resto de tu código del showModalBottomSheet ...
-    if (_userRol == 'cliente') return;
+    if (_userRol == 'lavadero') {
+      debugPrint("🛠️ Modo gestión activado para este marcador");
+      return;
+    }
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,

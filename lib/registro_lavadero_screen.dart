@@ -8,13 +8,41 @@ import 'package:http/http.dart' as http;
 import 'dart:async';
 
 class RegistroLavaderoScreen extends StatefulWidget {
-  const RegistroLavaderoScreen({super.key});
 
+  final Map<String, dynamic>? lavaderoParaEditar; // Recibe datos si vamos a editar
+  const RegistroLavaderoScreen({super.key, this.lavaderoParaEditar});
   @override
   State<RegistroLavaderoScreen> createState() => _RegistroLavaderoScreenState();
+
 }
 
 class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
+
+  @override
+  void initState() {
+    super.initState();
+    // Si recibimos un lavadero, precargamos todos los controladores
+    if (widget.lavaderoParaEditar != null) {
+      final l = widget.lavaderoParaEditar!;
+      _nombreController.text = l['razon_social'] ?? '';
+      _direccionController.text = l['direccion'] ?? '';
+      _telefonoController.text = l['telefono'] ?? '';
+      _bancoController.text = l['nombre_banco'] ?? '';
+      _cuentaController.text = l['cuenta_bancaria'] ?? '';
+      
+      // Sincronizamos la ubicación del mapa
+      _puntoSeleccionado = LatLng(l['latitud'], l['longitud']);
+      
+      // Sincronizamos precios y servicios
+      if (l['servicios_precios'] != null) {
+        _preciosMap.clear();
+        (l['servicios_precios'] as Map).forEach((k, v) {
+          _preciosMap[k.toString()] = (v as num).toDouble();
+        });
+      }
+    }
+  }
+
   // --- CONTROLADORES CORE ---
   final _nombreController = TextEditingController();
   final _direccionController = TextEditingController();
@@ -157,40 +185,53 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     }
   }
 
-  Future<void> _registrar() async {
+Future<void> _registrar() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
+    
     if ((_preciosMap['Lavado'] ?? 0.0) <= 0) {
       _mostrarAlerta("⚠️ Debes asignar un precio al Lavado", rojoATT);
       return;
     }
 
+    // Preparamos el paquete de datos
+    final datosLavadero = {
+      'dueño_id': user.id,
+      'razon_social': _nombreController.text,
+      'direccion': _direccionController.text,
+      'telefono': _telefonoController.text,
+      'nombre_banco': _bancoController.text,
+      'cuenta_bancaria': _cuentaController.text,
+      'latitud': _puntoSeleccionado.latitude,
+      'longitud': _puntoSeleccionado.longitude,
+      'servicios': _servicios,
+      'servicios_precios': _preciosMap,
+      'hora_apertura': _horaApertura.format(context),
+      'hora_cierre': _horaCierre.format(context),
+      'duracion_estandar': _duracionTurno,
+      'dias_abierto': _diasLaborales.entries
+          .where((e) => e.value)
+          .map((e) => e.key)
+          .toList(),
+    };
+
     try {
-      await supabase.from('lavaderos').insert({
-        'dueño_id': user.id,
-        'razon_social': _nombreController.text,
-        'direccion': _direccionController.text,
-        'telefono': _telefonoController.text,
-        'nombre_banco': _bancoController.text,
-        'cuenta_bancaria': _cuentaController.text,
-        'latitud': _puntoSeleccionado.latitude,
-        'longitud': _puntoSeleccionado.longitude,
-        'servicios': _servicios,
-        'servicios_precios': _preciosMap,
-        'hora_apertura': _horaApertura.format(context),
-        'hora_cierre': _horaCierre.format(context),
-        'duracion_estandar': _duracionTurno,
-        'dias_abierto': _diasLaborales.entries
-            .where((e) => e.value)
-            .map((e) => e.key)
-            .toList(),
-      });
-      if (mounted) {
-        _mostrarAlerta("✅ Lavadero configurado con éxito", Colors.green);
-        Navigator.pop(context);
+      if (widget.lavaderoParaEditar != null) {
+        // --- MODO EDICIÓN: UPDATE ---
+        await supabase
+            .from('lavaderos')
+            .update(datosLavadero)
+            .eq('id', widget.lavaderoParaEditar!['id']);
+        _mostrarAlerta("✨ Datos actualizados correctamente", Colors.green);
+      } else {
+        // --- MODO NUEVO: INSERT ---
+        await supabase.from('lavaderos').insert(datosLavadero);
+        _mostrarAlerta("✅ Lavadero registrado con éxito", Colors.green);
       }
+
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      _mostrarAlerta("❌ Error al guardar: $e", rojoATT);
+      _mostrarAlerta("❌ Error al procesar: $e", rojoATT);
     }
   }
 
@@ -692,9 +733,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
               elevation: 0,
             ),
             onPressed: lavadoHabilitado ? _registrar : null,
-            child: const Text(
-              "FINALIZAR CONFIGURACIÓN",
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
+            child: Text(
+              widget.lavaderoParaEditar != null ? "GUARDAR CAMBIOS" : "FINALIZAR CONFIGURACIÓN",
+              style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
             ),
           ),
         ),
