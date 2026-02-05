@@ -12,7 +12,8 @@ class MPService {
     required double precio,
     required int cantidad,
   }) async {
-    final precioFinal = precio <= 0 ? 100.0 : precio;
+    // Usamos 1.0 como mínimo para evitar errores de la API de Mercado Pago
+    final double precioFinal = precio <= 0 ? 1.0 : precio;
     final url = Uri.parse('https://api.mercadopago.com/checkout/preferences');
 
     try {
@@ -32,12 +33,14 @@ class MPService {
             },
           ],
           "back_urls": {
-            "success": "https://www.google.com/success",
-            "failure": "https://www.google.com/failure",
-            "pending": "https://www.google.com/pending",
+            // IMPORTANTE: Usamos el esquema de la app para el retorno
+            "success": "att-app://pago-finalizado",
+            "failure": "att-app://pago-finalizado",
+            "pending": "att-app://pago-finalizado",
           },
           "auto_return": "approved",
           "external_reference": supabase.auth.currentUser?.id,
+          "binary_mode": true, // Evita estados pendientes, o aprueba o rechaza
         }),
       );
 
@@ -45,7 +48,7 @@ class MPService {
         final data = jsonDecode(response.body);
         return data['init_point'];
       } else {
-        print("Error MP: ${response.body}");
+        print("Error API Mercado Pago: ${response.body}");
         return null;
       }
     } catch (e) {
@@ -54,7 +57,7 @@ class MPService {
     }
   }
 
-  // --- FUNCIÓN EVOLUCIONADA: REGISTRA Y DEVUELVE LA FILA PARA EL PDF ---
+  /// Registra la factura y devuelve la fila con ID y fecha real de Supabase
   Future<Map<String, dynamic>?> registrarFacturaLimpia({
     required String paymentId,
     required String status,
@@ -62,10 +65,9 @@ class MPService {
     required String servicios,
   }) async {
     try {
-      final userId = supabase.auth.currentUser?.id;
+      final user = supabase.auth.currentUser;
+      if (user == null) return null;
 
-      // Usamos .select().single() para que nos devuelva el registro recién creado
-      // Esto nos da el 'id' generado por la DB y la 'fecha_emision' real.
       final response = await supabase
           .from('facturas')
           .insert({
@@ -74,15 +76,15 @@ class MPService {
             'forma_pago': 'mercadopago',
             'total': total,
             'servicios': servicios,
-            'user_id': userId,
+            'user_id': user.id,
           })
           .select()
           .single();
 
-      print("✅ Factura registrada y retornada para comprobante");
+      print("✅ Factura registrada exitosamente");
       return response;
     } catch (e) {
-      print("❌ Error al registrar factura: $e");
+      print("❌ Error al registrar factura en Supabase: $e");
       return null;
     }
   }
