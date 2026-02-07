@@ -3,78 +3,55 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MPService {
-  final String _accessToken =
-      "APP_USR-3237879502950879-012309-a6a9898d2fb9e8d05eee8e2d0d1a0adf-3154302970";
-  final supabase = Supabase.instance.client;
+  // IP para emulador de Android. Si usas celular real, pon la IP de tu PC (ej: 192.168.1.XX)
+  final String serverUrl = "http://localhost:3001";
 
   Future<String?> crearPreferencia({
     required String titulo,
     required double precio,
-    required int cantidad,
   }) async {
-    final double precioFinal = precio <= 0 ? 1.0 : precio;
-    final url = Uri.parse('https://api.mercadopago.com/checkout/preferences');
+    final user = Supabase.instance.client.auth.currentUser;
 
     try {
       final response = await http.post(
-        url,
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
+        Uri.parse('$serverUrl/create-preference'),
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          "items": [
-            {
-              "title": titulo,
-              "quantity": cantidad,
-              "unit_price": precioFinal,
-              "currency_id": "ARS",
-            },
-          ],
-          "back_urls": {
-            // Esquema personalizado para que el celular abra tu App
-            "success": "localhost:3000/pago-finalizado",
-            "failure": "localhost:3000/pago-finalizado",
-            "pending": "localhost:3000/pago-finalizado",
-          },
-          "auto_return": "approved",
-          "external_reference": supabase.auth.currentUser?.id,
-          "binary_mode": true, // Solo acepta pagos de aprobación instantánea
+          "titulo": titulo,
+          "precio": precio,
+          "userId": user?.id, // Coincide con req.body.userId en Node.js
         }),
       );
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
+      if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         return data['init_point'];
+      } else {
+        print("Error en el servidor Node: ${response.body}");
       }
-      return null;
     } catch (e) {
-      return null;
+      print("Error de conexión con el servidor: $e");
     }
+    return null;
   }
 
+  // Esta función ahora solo se usará para obtener datos de la factura si es necesario,
+  // ya que el servidor Node.js es quien hace el insert en Supabase vía Webhook.
   Future<Map<String, dynamic>?> registrarFacturaLimpia({
     required String paymentId,
     required String status,
     required double total,
     required String servicios,
   }) async {
+    // Nota: El servidor Node ya insertó esto.
+    // Aquí podrías hacer un SELECT para traer los datos y generar el PDF.
     try {
-      final user = supabase.auth.currentUser;
-      if (user == null) return null;
-
-      return await supabase
+      final res = await Supabase.instance.client
           .from('facturas')
-          .insert({
-            'payment_id': paymentId,
-            'status': status,
-            'forma_pago': 'mercadopago',
-            'total': total,
-            'servicios': servicios,
-            'user_id': user.id,
-          })
           .select()
+          .eq('payment_id', paymentId)
           .single();
+      return res;
     } catch (e) {
       return null;
     }
