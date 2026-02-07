@@ -168,52 +168,69 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroPrecio = false;
   bool _filtroRating = false;
   bool _filtroDistancia = false;
-  final LatLng _miUbicacionActual = const LatLng(-34.098, -59.028);
+  void _aplicarOrdenamiento() {
+    setState(() {
+      if (_filtroPrecio) {
+        // Asumiendo un precio base de 2500 o el que traiga el objeto
+        _lavaderosFiltrados.sort(
+          (a, b) => (a['precio'] ?? 2500).compareTo(b['precio'] ?? 2500),
+        );
+      }
+      if (_filtroRating) {
+        // Ordena de mayor a menor rating
+        _lavaderosFiltrados.sort(
+          (a, b) => (b['rating'] ?? 0.0).compareTo(a['rating'] ?? 0.0),
+        );
+      }
+      if (_filtroDistancia) {
+        // Aquí podrías usar la lógica de Haversine que mencionamos antes
+        // Por ahora ordenamos por un campo 'distancia' ficticio o real
+        _lavaderosFiltrados.sort(
+          (a, b) => (a['distancia'] ?? 0.0).compareTo(b['distancia'] ?? 0.0),
+        );
+      }
+    });
+  }
+
+  List<dynamic> _misClientesReales = [];
   // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
   String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _todosLosLavaderos = []; // Lista maestra
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
   List<dynamic> _obtenerListaOrdenada() {
-    // 1. Trabajamos sobre una copia de los filtrados
     List<dynamic> lista = List.from(_lavaderosFiltrados);
+    // --- LISTA DE CLIENTES REALES ---
 
+    // Aplicamos los criterios (se pueden combinar)
     lista.sort((a, b) {
-      // CRITERIO 1: DISTANCIA (Si el botón está activo)
+      int cmp = 0;
+
+      // 1. Prioridad: Distancia (si está activo)
       if (_filtroDistancia) {
-        double distA = _calcularDistancia(a['latitud'], a['longitud']);
-        double distB = _calcularDistancia(b['latitud'], b['longitud']);
-
-        // Comparamos: el menor valor (más cerca) va primero
-        int cmp = distA.compareTo(distB);
+        // Por ahora comparamos latitud como simulacro de distancia
+        cmp = a['latitud'].compareTo(b['latitud']);
         if (cmp != 0) return cmp;
       }
 
-      // CRITERIO 2: PRECIO (Si el botón está activo)
-      if (_filtroPrecio) {
-        final precioA = (a['servicios_precios']?['Lavado'] ?? 99999).toDouble();
-        final precioB = (b['servicios_precios']?['Lavado'] ?? 99999).toDouble();
-        int cmp = precioA.compareTo(precioB); // Menor precio primero
-        if (cmp != 0) return cmp;
-      }
-
-      // CRITERIO 3: RATING
+      // 2. Prioridad: Rating (Suponiendo que tienes un campo 'rating')
       if (_filtroRating) {
-        final rateA = (a['rating'] ?? 0.0).toDouble();
-        final rateB = (b['rating'] ?? 0.0).toDouble();
-        return rateB.compareTo(rateA); // Mayor rating primero
+        double ratingA = (a['rating'] ?? 0.0).toDouble();
+        double ratingB = (b['rating'] ?? 0.0).toDouble();
+        cmp = ratingB.compareTo(ratingA); // De mayor a menor
+        if (cmp != 0) return cmp;
       }
 
-      return 0;
+      // 3. Prioridad: Precio
+      if (_filtroPrecio) {
+        // Simulacro: comparamos por ID para variar el orden hasta que tengas 'precio' en DB
+        cmp = a['id'].compareTo(b['id']);
+      }
+
+      return cmp;
     });
 
-    return lista.take(5).toList();
-  }
-
-  // Función auxiliar para calcular distancia real vs tu GPS
-  double _calcularDistancia(double latB, double lonB) {
-    return (latB - _miUbicacionActual.latitude).abs() +
-        (lonB - _miUbicacionActual.longitude).abs();
+    return lista.take(5).toList(); // Mantenemos tu límite de 5 tarjetas rápidas
   }
 
   @override
@@ -266,8 +283,20 @@ class _MainLayoutState extends State<MainLayout> {
           .select('rol')
           .eq('id', user.id)
           .maybeSingle();
-      if (data != null && mounted) {
-        setState(() => _rolUsuario = data['rol'] ?? 'pendiente');
+
+      if (mounted) {
+        // SI DATA ES NULL O EL ROL NO ES 'cliente' NI 'lavadero', MANDAMOS A ELEGIR
+        if (data == null || data['rol'] == null || data['rol'] == 'pendiente') {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const SeleccionRolScreen()),
+          );
+        } else {
+          setState(() {
+            _rolUsuario = data['rol'];
+          });
+          if (data['rol'] == 'lavadero') _cargarMisClientes();
+        }
       }
     }
   }
@@ -324,9 +353,7 @@ class _MainLayoutState extends State<MainLayout> {
     }
 
     if (_lavaderosFiltrados.isEmpty) {
-      return const Center(
-        child: Text("Porfavor elija un lavadero o vuelva a intentar"),
-      );
+      return const Center(child: Text("No se encontraron resultados"));
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -463,8 +490,12 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
               Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // --- ETIQUETA DE PRECIO (LAVADO) ---
+                  Text(
+                    l['direccion'] ?? 'Zárate',
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
                   Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
@@ -474,76 +505,13 @@ class _MainLayoutState extends State<MainLayout> {
                       color: const Color(0xFF3ABEF9),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Text(
-                      "\$${l['servicios_precios']?['Lavado'] ?? '---'}",
-                      style: const TextStyle(
+                    child: const Text(
+                      "\$2500",
+                      style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 12,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // --- ETIQUETA DE DISTANCIA (Kms) ---
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.black12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(
-                          Icons.location_on,
-                          size: 12,
-                          color: Colors.grey,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          // Calculamos distancia simple (lat/lng) y formateamos a 1 decimal
-                          "${(((l['latitud'] - (-34.098)).abs() + (l['longitud'] - (-59.028)).abs()) * 111).toStringAsFixed(1)} km",
-                          style: const TextStyle(
-                            color: Colors.black87,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-
-                  // --- ETIQUETA DE RATING (Estrella) ---
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      // Fondo oscuro semi-transparente para que la estrella ámbar resalte
-                      color: Colors.black.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.star, size: 14, color: Colors.amber),
-                        const SizedBox(width: 4),
-                        Text(
-                          "${(l['rating'] ?? 0.0).toDouble().toStringAsFixed(1)}",
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                            color:
-                                Colors.white, // Texto en blanco para contraste
-                          ),
-                        ),
-                      ],
                     ),
                   ),
                 ],
@@ -801,7 +769,7 @@ class _MainLayoutState extends State<MainLayout> {
                                         padding: EdgeInsets.zero,
                                         shrinkWrap: true,
                                         itemCount: _lavaderosFiltrados.length,
-                                        separatorBuilder: (_, _) =>
+                                        separatorBuilder: (_, __) =>
                                             const Divider(height: 1),
                                         itemBuilder: (context, index) {
                                           final l = _lavaderosFiltrados[index];
@@ -903,7 +871,6 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     // PANEL FLOTANTE: Aparece solo en móvil cuando hay selección
                     if (esPantallaChica &&
-                        _indiceActual == 0 &&
                         _lavaderoSeleccionado != null &&
                         supabase.auth.currentUser != null)
                       Positioned(
@@ -928,18 +895,15 @@ class _MainLayoutState extends State<MainLayout> {
               ),
 
               // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
-              // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
               if (!esPantallaChica && supabase.auth.currentUser != null)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.easeInOutQuart,
-                  // LA CLAVE ESTÁ AQUÍ:
-                  // Agregamos la condición "_indiceActual == 0" para que solo tenga ancho en el Mapa
+                  // El ancho es 350 si hay algo que mostrar, sino es 0
                   width:
-                      (_indiceActual == 0 &&
-                          (_lavaderoSeleccionado != null ||
-                              (_rolUsuario == 'cliente' &&
-                                  _searchController.text.isNotEmpty)))
+                      (_lavaderoSeleccionado != null ||
+                          (_rolUsuario == 'cliente' &&
+                              _searchController.text.isNotEmpty))
                       ? 350
                       : 0,
                   decoration: BoxDecoration(
@@ -948,10 +912,14 @@ class _MainLayoutState extends State<MainLayout> {
                       BoxShadow(
                         color: Colors.black.withOpacity(0.05),
                         blurRadius: 10,
-                        offset: const Offset(-5, 0),
+                        offset: const Offset(
+                          -5,
+                          0,
+                        ), // Sombra hacia la izquierda
                       ),
                     ],
                   ),
+                  // ClipRect evita que el contenido se vea "amontonado" mientras se cierra
                   child: ClipRect(
                     child: OverflowBox(
                       minWidth: 350,
@@ -1030,7 +998,7 @@ class _MainLayoutState extends State<MainLayout> {
 
         // --- BOTÓN CONFIGURAR: Solo si tiene sesión Y es dueño ---
         if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(Icons.add_business, "Configurar Lavadero", 99),
+          _itemMenuLateral(Icons.add_business, "Registrar Mi Lavadero", 99),
 
         // --- NUEVO BOTÓN: MIS CLIENTES (Solo para Dueños) ---
         // Lo asignamos con el índice 100 para no chocar con los demás
@@ -1075,9 +1043,10 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             );
           } else {
-            if (index == 0) {
-              mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-            }
+            if (index == 0)
+              mapScreenKey.currentState
+                  ?.cargarLavaderosDeSupabase(); // la carga al hacer click
+            if (index == 100) _cargarMisClientes();
 
             setState(() {
               // IMPORTANTE: Ahora guardamos el índice real (0, 1, 2 o 100)
@@ -1115,6 +1084,20 @@ class _MainLayoutState extends State<MainLayout> {
       );
     }
 
+    final user = supabase.auth.currentUser;
+    // --- LÍNEA NUEVA: Verificamos propiedad ---
+    bool esMio = _lavaderoSeleccionado['dueño_id'] == user?.id;
+
+    // --- BLOQUE DE CONTROL TOTAL ---
+    debugPrint("------------------------------------------");
+    debugPrint(
+      "LAVADERO SELECCIONADO: ${_lavaderoSeleccionado['razon_social']}",
+    );
+    debugPrint("DUEÑO ID EN DB: '${_lavaderoSeleccionado['dueño_id']}'");
+    debugPrint("MI ID (AUTH): '${user?.id}'");
+    debugPrint("¿COINCIDEN?: $esMio");
+    debugPrint("MI ROL ACTUAL: $_rolUsuario");
+    debugPrint("------------------------------------------");
     // Cargamos los datos actuales en los controladores
     _nombreCtrl.text = _lavaderoSeleccionado['razon_social'] ?? '';
     _direccionCtrl.text = _lavaderoSeleccionado['direccion'] ?? '';
@@ -1144,6 +1127,35 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           const SizedBox(height: 25),
 
+          // --- SELLO DE AUTOR (DUEÑO) ---
+          if (_lavaderoSeleccionado['perfiles_usuarios'] != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3ABEF9).withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.verified_user,
+                    size: 16,
+                    color: Color(0xFF3ABEF9),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Gestionado por: ${_lavaderoSeleccionado['perfiles_usuarios']['nombre'] ?? 'Dueño'} ${_lavaderoSeleccionado['perfiles_usuarios']['apellido'] ?? ''}",
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF3ABEF9),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           // Título dinámico según el rol
           Text(
             esDueno ? "GESTIONAR MI NEGOCIO" : "DETALLES DEL LAVADERO",
@@ -1157,56 +1169,61 @@ class _MainLayoutState extends State<MainLayout> {
           const SizedBox(height: 20),
 
           // 2. CAMPOS DE INFORMACIÓN
-          // Si es dueño, los campos son editables. Si es cliente, son de solo lectura.
-          _inputPanel("Nombre del Negocio", _nombreCtrl, habilitado: esDueno),
+          // Campos informativos (La edición real se hace en la otra pantalla)
+          _inputPanel("Nombre del Negocio", _nombreCtrl, habilitado: false),
           const SizedBox(height: 15),
-          _inputPanel("Dirección", _direccionCtrl, habilitado: esDueno),
+          _inputPanel("Dirección", _direccionCtrl, habilitado: false),
 
           const SizedBox(height: 30),
 
-          // 3. BOTONES DE ACCIÓN (Diferenciados por Rol)
-          if (esDueno) ...[
-            // VISTA PARA DUEÑOS: Update y Borrar
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF3ABEF9),
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    onPressed: () => _actualizarLavaderoEnSupabase(),
-                    child: const Text("Update Info"),
-                  ),
+          // 3. BOTONES DE ACCIÓN (Diferenciados por Propiedad Real)
+          // 3. BOTONES DE ACCIÓN (Lógica de Roles y Propiedad)
+          if (esMio) ...[
+            // --- CASO DUEÑO: PUEDE MODIFICAR ---
+            const Divider(height: 30),
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                // Estética: Azul ATT! con borde para armonía visual
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF3ABEF9),
+                side: const BorderSide(color: Color(0xFF3ABEF9), width: 2),
+                minimumSize: const Size(double.infinity, 55),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _confirmarBorrado(),
-                  tooltip: "Eliminar Lavadero",
-                ),
-                const SizedBox(width: 8),
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.grey),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.edit_location_alt_rounded),
+              label: const Text(
+                "MODIFICAR DATOS DEL NEGOCIO",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => RegistroLavaderoScreen(
+                      lavaderoParaEditar: _lavaderoSeleccionado,
                     ),
                   ),
-                  onPressed: () => setState(() => _lavaderoSeleccionado = null),
-                  child: const Text(
-                    "Cancel",
-                    style: TextStyle(color: Colors.grey),
-                  ),
-                ),
-              ],
+                );
+              },
             ),
-          ] else ...[
-            // VISTA PARA CLIENTES: Botón de Reserva destacado
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: () => _confirmarBorrado(),
+              icon: const Icon(
+                Icons.delete_outline,
+                color: Colors.redAccent,
+                size: 18,
+              ),
+              label: const Text(
+                "Eliminar este Lavadero",
+                style: TextStyle(color: Colors.redAccent),
+              ),
+            ),
+          ] else if (_rolUsuario == 'cliente') ...[
+            // --- CASO CLIENTE: PUEDE RESERVAR ---
             const Divider(height: 10),
             const SizedBox(height: 10),
             ElevatedButton.icon(
@@ -1222,7 +1239,7 @@ class _MainLayoutState extends State<MainLayout> {
               icon: const Icon(Icons.calendar_today, size: 20),
               label: const Text(
                 "SOLICITAR TURNO AHORA",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
               onPressed: () {
                 Navigator.push(
@@ -1235,7 +1252,6 @@ class _MainLayoutState extends State<MainLayout> {
               },
             ),
             const SizedBox(height: 15),
-            // Botón secundario para volver a los resultados
             OutlinedButton(
               style: OutlinedButton.styleFrom(
                 minimumSize: const Size(double.infinity, 45),
@@ -1246,6 +1262,34 @@ class _MainLayoutState extends State<MainLayout> {
               ),
               onPressed: () => setState(() => _lavaderoSeleccionado = null),
               child: const Text("VOLVER AL LISTADO"),
+            ),
+          ] else ...[
+            // --- CASO OTRO DUEÑO: SOLO LECTURA ---
+            const Divider(height: 30),
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 20),
+                child: Text(
+                  "Modo lectura: Este lavadero pertenece a otro propietario.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontStyle: FontStyle.italic,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+            OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size(double.infinity, 45),
+                side: const BorderSide(color: Color(0xFF3ABEF9)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              onPressed: () => setState(() => _lavaderoSeleccionado = null),
+              child: const Text("CERRAR DETALLE"),
             ),
           ],
         ],
@@ -1297,6 +1341,37 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
       ],
+    );
+  }
+
+  // --- NUEVA FUNCIÓN: CARTEL DE SEGURIDAD ---
+  void _mostrarDialogoConfirmacionEdicion() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("¿Confirmar cambios?"),
+        content: const Text(
+          "Se actualizará la información de tu lavadero en el sistema. ¿Estás seguro?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3ABEF9),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () {
+              Navigator.pop(context); // Cerramos el cartel
+              _actualizarLavaderoEnSupabase(); // Mandamos a la base de datos
+            },
+            child: const Text("SÍ, ACTUALIZAR"),
+          ),
+        ],
+      ),
     );
   }
 
@@ -1385,13 +1460,81 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
+  Future<void> _cargarMisClientes() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      // 1. Buscamos tus lavaderos
+      final List<dynamic> lavaderosData = await supabase
+          .from('lavaderos')
+          .select('razon_social')
+          .eq('dueño_id', user.id);
+
+      if (lavaderosData.isNotEmpty) {
+        final nombresLavaderos = lavaderosData
+            .map((l) => l['razon_social'].toString())
+            .toList();
+        debugPrint("✅ Buscando clientes para: $nombresLavaderos");
+
+        // 2. Traemos los turnos.
+        // USAMOS 'ilike' para que no importe si es mayúscula o minúscula
+        // Y lo hacemos uno por uno para asegurar que las comillas no molesten
+        List<dynamic> todosLosTurnos = [];
+        for (String nombre in nombresLavaderos) {
+          final data = await supabase
+              .from('turnos')
+              .select('user_id')
+              .ilike(
+                'lavadero_nombre',
+                '%$nombre%',
+              ); // El % ayuda si hay espacios o comillas locas
+          todosLosTurnos.addAll(data);
+        }
+
+        if (todosLosTurnos.isEmpty) {
+          debugPrint(
+            "📊 Sigue sin encontrar nada. Revisá si 'lavadero_nombre' en Turnos coincide con 'razon_social' en Lavaderos.",
+          );
+          if (mounted) setState(() => _misClientesReales = []);
+          return;
+        }
+
+        // 3. Obtenemos los IDs de los clientes únicos
+        final idsClientes = todosLosTurnos
+            .map((t) => t['user_id']?.toString())
+            .where((id) => id != null)
+            .toSet()
+            .toList();
+
+        if (idsClientes.isNotEmpty) {
+          // 4. Traemos los perfiles
+          final List<dynamic> perfiles = await supabase
+              .from('perfiles_usuarios')
+              .select()
+              .filter('id', 'in', idsClientes);
+
+          debugPrint("👥 ¡POR FIN! Clientes encontrados: ${perfiles.length}");
+
+          if (mounted) {
+            setState(() {
+              _misClientesReales = perfiles;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("🚨 ERROR CARGANDO: $e");
+    }
+  }
+
   // --- PANTALLA BENTO CORREGIDA: MIS CLIENTES ---
   Widget _buildPantallaMisClientes() {
     return Container(
       color: const Color(0xFFF5F7F9),
       child: Column(
         children: [
-          // --- CABECERA BLANCA CON TÍTULO Y FLECHA ---
+          // CABECERA
           Container(
             padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
             decoration: const BoxDecoration(
@@ -1401,13 +1544,8 @@ class _MainLayoutState extends State<MainLayout> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new_rounded,
-                    color: Colors.black87,
-                    size: 20,
-                  ),
-                  onPressed: () =>
-                      setState(() => _indiceActual = 0), // Vuelve al mapa
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  onPressed: () => setState(() => _indiceActual = 0),
                 ),
                 const Expanded(
                   child: Center(
@@ -1416,29 +1554,24 @@ class _MainLayoutState extends State<MainLayout> {
                       style: TextStyle(
                         color: Color(0xFF3ABEF9),
                         fontWeight: FontWeight.w900,
-                        fontSize: 14,
                         letterSpacing: 2,
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(
-                  width: 40,
-                ), // Balance visual para el botón de volver
+                const SizedBox(width: 40),
               ],
             ),
           ),
-
           const SizedBox(height: 24),
-
-          // --- BLOQUES BENTO DE ESTADÍSTICAS ---
+          // ESTADÍSTICAS
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
               children: [
                 _tarjetaMiniBento(
                   "Total Clientes",
-                  "0",
+                  _misClientesReales.length.toString(),
                   Icons.people,
                   const Color(0xFF3ABEF9),
                 ),
@@ -1452,10 +1585,8 @@ class _MainLayoutState extends State<MainLayout> {
               ],
             ),
           ),
-
           const SizedBox(height: 20),
-
-          // --- BLOQUE BENTO PRINCIPAL ---
+          // LISTADO REAL
           Expanded(
             child: Container(
               margin: const EdgeInsets.fromLTRB(24, 0, 24, 24),
@@ -1463,19 +1594,13 @@ class _MainLayoutState extends State<MainLayout> {
               decoration: BoxDecoration(
                 color: Colors.white,
                 borderRadius: BorderRadius.circular(30),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.02),
-                    blurRadius: 20,
-                  ),
-                ],
               ),
               child: Column(
                 children: [
                   TextField(
                     decoration: InputDecoration(
-                      hintText: "Buscar por nombre o patente...",
-                      prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                      hintText: "Buscar cliente...",
+                      prefixIcon: const Icon(Icons.search),
                       filled: true,
                       fillColor: const Color(0xFFF1F5F9),
                       border: OutlineInputBorder(
@@ -1484,25 +1609,36 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     ),
                   ),
-                  const Expanded(
-                    child: Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            Icons.person_search_rounded,
-                            size: 50,
-                            color: Colors.black12,
+                  const SizedBox(height: 20),
+                  Expanded(
+                    child: _misClientesReales.isEmpty
+                        ? const Center(
+                            child: Text(
+                              "Aún no tienes clientes registrados.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : ListView.builder(
+                            padding: EdgeInsets.zero,
+                            itemCount: _misClientesReales.length,
+                            itemBuilder: (context, index) {
+                              // 1. Extraemos el mapa del cliente actual
+                              final cliente = _misClientesReales[index];
+
+                              // 2. Armamos el nombre combinando las columnas de tu DB
+                              // Si no tienen nombre o apellido, ponemos 'Usuario' por defecto
+                              String nombreAMostrar =
+                                  "${cliente['nombre'] ?? 'Usuario'} ${cliente['apellido'] ?? ''}";
+
+                              // 3. Lo mandamos a la tarjetita Bento
+                              return _filaClienteBento(
+                                nombreAMostrar, // <--- Nombre y Apellido reales
+                                cliente['ciudad'] ?? 'Zárate',
+                                cliente['email'] ??
+                                    'Sin email', // <--- El Gmail que ya veías
+                              );
+                            },
                           ),
-                          SizedBox(height: 16),
-                          Text(
-                            "Sin clientes registrados\nLos clientes aparecerán cuando soliciten turnos.",
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -1555,6 +1691,32 @@ class _MainLayoutState extends State<MainLayout> {
       ),
     );
   }
+
+  Widget _filaClienteBento(String nombre, String patente, String auto) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(15),
+      ),
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF3ABEF9),
+          child: Text(nombre[0], style: const TextStyle(color: Colors.white)),
+        ),
+        title: Text(
+          nombre,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+        ),
+        subtitle: Text(
+          "$auto • $patente",
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: const Icon(Icons.chevron_right, color: Colors.black26),
+      ),
+    );
+  }
 }
 
 // --- PANTALLA DE MAPA ---
@@ -1582,7 +1744,6 @@ class _MapScreenState extends State<MapScreen> {
     _animatedMapMove(posicion, 16);
   }
 
-  dynamic _lavaderoHover;
   // CONTROLADOR DEL MAPA PARA EL ZOOM Y GPS
   final MapController _mapController = MapController();
   void actualizarMarkersExternos(List<dynamic> listaFiltrada) {
@@ -1675,47 +1836,61 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   Future<void> cargarLavaderosDeSupabase() async {
-    final data = await supabase.from('lavaderos').select();
-    if (mounted) {
-      // ESTA LÍNEA ES LA CLAVE: Envía los datos al MainLayout
-      if (widget.onLavaderosCargados != null) {
-        widget.onLavaderosCargados!(data as List);
-      }
+    try {
+      // 1. Traemos solo los lavaderos (sin el join que falla)
+      final data = await supabase.from('lavaderos').select();
+      final List<dynamic> listaLavaderos = data as List;
 
-      setState(() {
-        // En cargarLavaderosDeSupabase o actualizarMarkersExternos
-        _markers = (data as List).map((l) {
-          return Marker(
-            point: LatLng(l['latitud'], l['longitud']),
-            width: 35, // Hitbox de ancho
-            height: 35, // Hitbox de alto
-            alignment:
-                Alignment.center, // Centra el hitbox en la coordenada GPS
-            child: MouseRegion(
-              cursor: SystemMouseCursors.click,
-              onEnter: (_) => setState(() => _lavaderoHover = l),
-              onExit: (_) => setState(() => _lavaderoHover = null),
-              child: GestureDetector(
-                onTap: () => _mostrarCartel(l),
-                // --- LA SOLUCIÓN ESTÁ AQUÍ ---
-                child: OverflowBox(
-                  alignment: Alignment
-                      .center, // Fuerza al icono a centrarse sobre el hitbox
-                  maxWidth: 45,
-                  maxHeight: 45,
-                  child: Icon(
-                    Icons.location_on,
-                    color: _lavaderoHover?['id'] == l['id']
-                        ? const Color(0xFFEF4444)
-                        : const Color(0xFF3ABEF9),
-                    size: 45, // El icono visual sigue siendo grande
-                  ),
-                ),
-              ),
-            ),
+      if (mounted) {
+        // 2. Extraemos los IDs de los dueños (dueño_id) de forma única
+        final idsDuenos = listaLavaderos
+            .map((l) => l['dueño_id']?.toString())
+            .where((id) => id != null)
+            .toSet()
+            .toList();
+
+        Map<String, dynamic> mapaNombres = {};
+
+        if (idsDuenos.isNotEmpty) {
+          // 3. Buscamos los perfiles de esos dueños en la tabla perfiles_usuarios
+          final perfilesData = await supabase
+              .from('perfiles_usuarios')
+              .select('id, nombre, apellido')
+              .filter('id', 'in', idsDuenos);
+
+          debugPrint(
+            "🔍 Perfiles encontrados para dueños: ${perfilesData.length}",
           );
-        }).toList();
-      });
+          // Guardamos los nombres en un mapa para acceso rápido
+          for (var p in perfilesData) {
+            mapaNombres[p['id']] = p;
+          }
+        }
+
+        // 4. "Pegamos" manualmente la info del dueño a cada lavadero
+        for (var lav in listaLavaderos) {
+          lav['perfiles_usuarios'] = mapaNombres[lav['dueño_id']];
+        }
+
+        // 5. Enviamos los datos actualizados al MainLayout
+        if (widget.onLavaderosCargados != null) {
+          widget.onLavaderosCargados!(listaLavaderos);
+        }
+
+        setState(() {
+          _markers = listaLavaderos.map((l) {
+            return Marker(
+              point: LatLng(l['latitud'], l['longitud']),
+              width: 200,
+              height: 250,
+              alignment: Alignment.topCenter,
+              child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
+            );
+          }).toList();
+        });
+      }
+    } catch (e) {
+      debugPrint("🚨 ERROR EN MAPA: $e");
     }
   }
 
@@ -1767,7 +1942,10 @@ class _MapScreenState extends State<MapScreen> {
     // Esta línea le avisa al Dashboard qué lavadero tocaste
     if (widget.onSelectLavadero != null) widget.onSelectLavadero!(l);
     // ... el resto de tu código del showModalBottomSheet ...
-    if (_userRol == 'cliente') return;
+    if (_userRol == 'lavadero') {
+      debugPrint("🛠️ Modo gestión activado para este marcador");
+      return;
+    }
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -1888,147 +2066,17 @@ class _MapScreenState extends State<MapScreen> {
     );
   }
 
-  Widget _buildPopupSoberano(dynamic l) {
-    double posX = 0;
-    double posY = 0;
-
-    if (l != null) {
-      try {
-        final point = _mapController.camera.latLngToScreenPoint(
-          LatLng(l['latitud'], l['longitud']),
-        );
-        posX = point.x.toDouble();
-        posY = point.y.toDouble();
-      } catch (e) {
-        return const SizedBox.shrink();
-      }
-    }
-
-    return Positioned(
-      left: posX - 90,
-      // Bajado de -170 a -150 para que esté más cerca del marcador
-      top: posY - 175,
-      child: IgnorePointer(
-        ignoring: true,
-        child: AnimatedOpacity(
-          opacity: l != null ? 1.0 : 0.0,
-          duration: const Duration(milliseconds: 200),
-          child: AnimatedScale(
-            scale: l != null ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutBack,
-            child: Container(
-              width: 180,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Colors.black26,
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                  ),
-                ],
-                border: Border.all(color: const Color(0xFF3ABEF9), width: 2),
-              ),
-              child: l == null
-                  ? const SizedBox.shrink()
-                  : Column(
-                      mainAxisSize:
-                          MainAxisSize.min, // Ajusta el alto al contenido
-                      children: [
-                        // 1. IMAGEN
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(10),
-                          child: Image.network(
-                            'https://picsum.photos/seed/${l['id']}/200/120',
-                            height: 80,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                            errorBuilder: (context, error, stackTrace) =>
-                                Container(
-                                  height: 80,
-                                  color: Colors.grey[200],
-                                  child: const Icon(
-                                    Icons.image_not_supported,
-                                    size: 20,
-                                    color: Colors.grey,
-                                  ),
-                                ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        // 2. NOMBRE
-                        Text(
-                          l['razon_social'] ?? 'Lavadero',
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13,
-                            color: Colors.black87,
-                          ),
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        // 3. RATING Y ESTADO (Recuperados)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const Icon(
-                              Icons.star,
-                              size: 12,
-                              color: Colors.amber,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              "${(l['rating'] ?? 0.0).toDouble().toStringAsFixed(1)}",
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Text(
-                              "|",
-                              style: TextStyle(
-                                color: Colors.black12,
-                                fontSize: 10,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            const Text(
-                              "Disponible",
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: Colors.green,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Stack(
         children: [
-          // CAPA 1: EL MAPA (Base de todo)
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
               initialCenter: const LatLng(-34.098, -59.028),
               initialZoom: 14,
-              // Al tocar el fondo del mapa, deseleccionamos
+              // ESTA FUNCIÓN SE ACTIVA AL TOCAR CUALQUIER PARTE VACÍA DEL MAPA
               onTap: (tapPosition, point) {
                 if (widget.onDeselccionar != null) {
                   widget.onDeselccionar!();
@@ -2039,18 +2087,13 @@ class _MapScreenState extends State<MapScreen> {
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               ),
-              // Aquí se dibujan los iconos de ubicación (Gotas)
               MarkerLayer(markers: _markers),
             ],
           ),
-
-          // CAPA 2: EL POPUP MAESTRO (Se dibuja después del mapa para estar ENCIMA)
-          // Solo aparece si el mouse está sobre un marcador [_lavaderoHover]
-          _buildPopupSoberano(_lavaderoHover),
-
-          // CAPA 3: BOTONES DE INTERFAZ (Zoom, GPS, etc.)
+          // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
+          // --- PANEL DE BOTONES FACHEROS ---
           Positioned(
-            top: 100,
+            top: 100, // Bajado para no tapar el Avatar
             right: 15,
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2095,6 +2138,34 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
+          // --- BLOQUE 2: BOTÓN "+" DE AÑADIR TURNO (ABAJO A LA DERECHA) ---
+          // Solo aparece en la versión móvil/tablet
+          if (MediaQuery.of(context).size.width < 950)
+            Positioned(
+              bottom: 30, // Posición clásica de pulgar
+              right: 20,
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(
+                  color: Color(0xFF3ABEF9), // Rojo ATT!
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black38,
+                      blurRadius: 10,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.add, color: Colors.white, size: 35),
+                  onPressed: () {
+                    // Aquí tu lógica para añadir turno
+                  },
+                ),
+              ),
+            ),
         ],
       ),
     );

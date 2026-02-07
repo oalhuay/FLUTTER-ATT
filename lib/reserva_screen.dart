@@ -22,6 +22,7 @@ class _ReservaScreenState extends State<ReservaScreen>
   double _totalAPagar = 0.0;
   String? _horaSeleccionada;
   bool _esperandoPago = false;
+
   bool _estaProcesando = false;
   DateTime _fechaSeleccionada = DateTime.now();
   final _appLinks = AppLinks();
@@ -34,7 +35,6 @@ class _ReservaScreenState extends State<ReservaScreen>
   void initState() {
     super.initState();
     // Validación inicial de fecha laboral
-    WidgetsBinding.instance.addObserver(this);
     if (!_esDiaLaboral(_fechaSeleccionada)) {
       _fechaSeleccionada = _fechaSeleccionada.add(const Duration(days: 1));
       int safeGuard = 0;
@@ -193,6 +193,14 @@ class _ReservaScreenState extends State<ReservaScreen>
         ),
       );
       return; // Súper importante: cortamos la función aquí. No se guarda nada.
+    }
+
+    if (status == 'approved') {
+      final paymentId = uri.queryParameters['payment_id'] ?? '';
+      await _ejecutarRegistroEnBaseDeDatos(
+        status: status ?? '',
+        paymentId: paymentId,
+      );
     }
   }
 

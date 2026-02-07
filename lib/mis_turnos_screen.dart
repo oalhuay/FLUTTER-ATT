@@ -172,7 +172,7 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                   Text(
                     "MIS RESERVAS",
                     style: TextStyle(
-                      color: Colors.black87,
+                      color: azulATT,
                       fontWeight: FontWeight.w900,
                       fontSize: 16,
                       letterSpacing: 1,
