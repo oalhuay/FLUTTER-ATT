@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
+const axios = require("axios"); // Movido arriba para mejor rendimiento
 require("dotenv").config();
 
 // 1. IMPORTAR SDK NUEVO
@@ -10,17 +11,23 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// 2. CONFIGURAR CLIENTE MP (Esto faltaba definirlo correctamente)
+const client = new MercadoPagoConfig({
+  accessToken: process.env.MP_ACCESS_TOKEN,
+});
+
 // Configuración de Supabase
 const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
+
 // --- ENDPOINT: CREAR PREFERENCIA ---
 app.post("/create-preference", async (req, res) => {
   try {
     const { titulo, precio, userId } = req.body;
 
-    // 3. USAR EL SDK PARA LA PREFERENCIA
+    // USAR EL SDK CON EL CLIENTE DEFINIDO ARRIBA
     const preference = new Preference(client);
 
     const result = await preference.create({
@@ -40,12 +47,11 @@ app.post("/create-preference", async (req, res) => {
         },
         auto_return: "approved",
         external_reference: userId,
-        // RECUERDA: Cambia esto por tu URL actual de Ngrok si pruebas Webhooks
+        // Usamos tu URL de Vercel directamente
         notification_url: "https://flutter-att-8xz7.vercel.app/webhook",
       },
     });
 
-    // El SDK devuelve el init_point dentro del resultado
     res.json({ init_point: result.init_point });
   } catch (error) {
     console.error("Error SDK MP:", error);
@@ -53,8 +59,9 @@ app.post("/create-preference", async (req, res) => {
   }
 });
 
+// --- ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
-  // 1. RESPUESTA INSTANTÁNEA: Esto mata el error 502
+  // Respuesta inmediata para Mercado Pago
   res.status(200).send("OK");
 
   const { query, body } = req;
@@ -63,17 +70,13 @@ app.post("/webhook", async (req, res) => {
 
   console.log(`📩 Webhook recibido: Tipo: ${type}, ID: ${id}`);
 
-  // 2. Si es la prueba de Mercado Pago (ID 123456), no hacemos nada más
   if (id === "123456") {
     console.log("✅ Prueba de conexión de MP exitosa.");
     return;
   }
 
-  // 3. Procesamos pagos reales en segundo plano
   try {
     if (type === "payment" && id) {
-      // Importante: Usamos fetch o axios para buscar el detalle
-      const axios = require("axios");
       const { data: payment } = await axios.get(
         `https://api.mercadopago.com/v1/payments/${id}`,
         {
@@ -88,7 +91,7 @@ app.post("/webhook", async (req, res) => {
           payment_id: id.toString(),
           status: "approved",
           total: payment.transaction_amount,
-          user_id: payment.external_reference, // El userId que mandamos desde Flutter
+          user_id: payment.external_reference,
           servicios: "Reserva ATT",
           fecha_emision: new Date().toISOString(),
         });
@@ -101,13 +104,16 @@ app.post("/webhook", async (req, res) => {
       }
     }
   } catch (error) {
-    // Error silencioso para no romper el flujo
     console.error("⚠️ Error procesando datos del pago:", error.message);
   }
 });
 
-const PORT = 3001;
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor ATT con SDK Oficial en puerto ${PORT}`);
-});
+// Condición para que funcione en Local y en Vercel
+if (process.env.NODE_ENV !== "production") {
+  const PORT = process.env.PORT || 3001;
+  app.listen(PORT, () => {
+    console.log(`🚀 Servidor ATT local en puerto ${PORT}`);
+  });
+}
+
 module.exports = app;
