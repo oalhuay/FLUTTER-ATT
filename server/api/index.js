@@ -41,7 +41,7 @@ app.post("/create-preference", async (req, res) => {
         auto_return: "approved",
         external_reference: userId,
         // RECUERDA: Cambia esto por tu URL actual de Ngrok si pruebas Webhooks
-        notification_url: "https://mpatt.vercel.app/webhook",
+        notification_url: "https://flutter-att-8xz7.vercel.app/webhook",
       },
     });
 
