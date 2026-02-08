@@ -49,7 +49,7 @@ app.post("/create-preference", async (req, res) => {
         external_reference: userId,
         // RECUERDA: Cambia esto por tu URL actual de Ngrok si pruebas Webhooks
         notification_url:
-          "https://risky-aleisha-chemically.ngrok-free.app/webhook",
+          "https://localhost/webhook",
       },
     });
 
