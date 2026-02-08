@@ -9,6 +9,7 @@ import 'registro_lavadero_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart'; // <--- AGREGÁ ESTA LÍNEA
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -168,31 +169,76 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroPrecio = false;
   bool _filtroRating = false;
   bool _filtroDistancia = false;
+  final ScrollController _scrollBentoController = ScrollController();
+  int _paginaActual = 1;
+  final int _itemsPorPagina =
+      8; // Mostramos 8 por página (2 filas de 4 o 4 filas de 2)
+  int _totalLavaderosDB = 0; // Para saber hasta dónde podemos avanzar
   void _aplicarOrdenamiento() {
     setState(() {
       if (_filtroPrecio) {
-        // Asumiendo un precio base de 2500 o el que traiga el objeto
         _lavaderosFiltrados.sort(
-          (a, b) => (a['precio'] ?? 2500).compareTo(b['precio'] ?? 2500),
+          (a, b) => (a['precio'] ?? 2500).toDouble().compareTo(
+            (b['precio'] ?? 2500).toDouble(),
+          ),
         );
-      }
-      if (_filtroRating) {
-        // Ordena de mayor a menor rating
+      } else if (_filtroRating) {
         _lavaderosFiltrados.sort(
-          (a, b) => (b['rating'] ?? 0.0).compareTo(a['rating'] ?? 0.0),
+          (a, b) => (b['rating'] ?? 0.0).toDouble().compareTo(
+            (a['rating'] ?? 0.0).toDouble(),
+          ),
         );
-      }
-      if (_filtroDistancia) {
-        // Aquí podrías usar la lógica de Haversine que mencionamos antes
-        // Por ahora ordenamos por un campo 'distancia' ficticio o real
+      } else if (_filtroDistancia) {
         _lavaderosFiltrados.sort(
-          (a, b) => (a['distancia'] ?? 0.0).compareTo(b['distancia'] ?? 0.0),
+          (a, b) => (a['distancia'] ?? 0.0).toDouble().compareTo(
+            (b['distancia'] ?? 0.0).toDouble(),
+          ),
         );
       }
     });
   }
 
   List<dynamic> _misClientesReales = [];
+
+  List<dynamic> _misLavaderosReales = []; // Aquí guardaremos tus locales
+  bool _cargandoLavaderos = false;
+
+  Future<void> _cargarMisLavaderos() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+    setState(() => _cargandoLavaderos = true);
+    try {
+      // 1. Calculamos el rango
+      int desde = (_paginaActual - 1) * _itemsPorPagina;
+      int hasta = desde + _itemsPorPagina - 1;
+
+      // 2. Pedimos los datos con conteo incluido
+      final response = await supabase
+          .from('lavaderos')
+          .select(
+            '*',
+          ) // Usamos select con count opcional si tu versión lo permite, o pedimos todo para el total
+          .eq('dueño_id', user.id);
+
+      // Simulamos el total para la botonera basado en la lista completa del dueño
+      final List<dynamic> todos = response as List<dynamic>;
+      _totalLavaderosDB = todos.length;
+
+      // 3. Filtramos solo el rango para la vista actual
+      final pagedData = todos.skip(desde).take(_itemsPorPagina).toList();
+
+      if (mounted) {
+        setState(() {
+          _misLavaderosReales = pagedData;
+          _cargandoLavaderos = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error cargando locales: $e");
+      if (mounted) setState(() => _cargandoLavaderos = false);
+    }
+  }
+
   // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
   String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
   final TextEditingController _searchController = TextEditingController();
@@ -369,7 +415,14 @@ class _MainLayoutState extends State<MainLayout> {
                 Icons.payments_outlined,
                 _filtroPrecio,
                 () {
-                  setState(() => _filtroPrecio = !_filtroPrecio);
+                  setState(() {
+                    _filtroPrecio = !_filtroPrecio;
+                    if (_filtroPrecio) {
+                      _filtroRating = false;
+                      _filtroDistancia = false;
+                    }
+                    _aplicarOrdenamiento(); // Esta es la función que arreglamos antes
+                  });
                 },
               ),
               _buildEtiquetaFiltro(
@@ -377,7 +430,14 @@ class _MainLayoutState extends State<MainLayout> {
                 Icons.star_outline,
                 _filtroRating,
                 () {
-                  setState(() => _filtroRating = !_filtroRating);
+                  setState(() {
+                    _filtroRating = !_filtroRating;
+                    if (_filtroRating) {
+                      _filtroPrecio = false;
+                      _filtroDistancia = false;
+                    }
+                    _aplicarOrdenamiento();
+                  });
                 },
               ),
               _buildEtiquetaFiltro(
@@ -385,13 +445,21 @@ class _MainLayoutState extends State<MainLayout> {
                 Icons.near_me_outlined,
                 _filtroDistancia,
                 () {
-                  setState(() => _filtroDistancia = !_filtroDistancia);
+                  setState(() {
+                    _filtroDistancia = !_filtroDistancia;
+                    if (_filtroDistancia) {
+                      _filtroPrecio = false;
+                      _filtroRating = false;
+                    }
+                    _aplicarOrdenamiento();
+                  });
                 },
               ),
             ],
           ),
         ),
 
+        // Texto de "RESULTADOS"
         const Padding(
           padding: EdgeInsets.symmetric(horizontal: 20),
           child: Text(
@@ -404,13 +472,13 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
 
+        // Lista de lavaderos (Paso 3)
         Expanded(
           child: ListView.builder(
             padding: const EdgeInsets.all(15),
-            itemCount: _obtenerListaOrdenada()
-                .length, // Usamos la nueva función de orden
+            itemCount: _lavaderosFiltrados.length,
             itemBuilder: (context, index) {
-              final l = _obtenerListaOrdenada()[index];
+              final l = _lavaderosFiltrados[index];
               return _buildTargetaBusqueda(l);
             },
           ),
@@ -544,6 +612,7 @@ class _MainLayoutState extends State<MainLayout> {
       PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
       // --- NUEVA PANTALLA AQUÍ ---
       _buildPantallaMisClientes(),
+      _buildPantallaMisLavaderos(), // Nueva pantalla posición 4
     ];
   }
 
@@ -569,42 +638,45 @@ class _MainLayoutState extends State<MainLayout> {
           return Row(
             children: [
               // COLUMNA 1: SIDEBAR ANIMADO (Ahora sí se desliza real hacia la izquierda)
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 400),
-                curve: Curves.easeInOutQuart,
-                // El ancho cambia de 250 a 0, activando el efecto de deslizamiento
-                width: (!esMovil && _sidebarAbierto) ? 250 : 0,
-                child: ClipRect(
-                  child: OverflowBox(
-                    minWidth: 250,
-                    maxWidth: 250,
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      width: 250,
-                      color: const Color(0xFF1E1E2D),
-                      child: Stack(
-                        children: [
-                          _buildContenidoSidebar(),
-                          // BOTÓN DE CERRAR (X) A LA IZQUIERDA
-                          Positioned(
-                            top: 10,
-                            left: 10,
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.white60,
-                                size: 22,
+              if (_indiceActual != 101) // <--- AGREGÁ ESTO ACÁ
+                AnimatedContainer(
+                  duration: const Duration(milliseconds: 400),
+                  curve: Curves.easeInOutQuart,
+                  // El ancho es 0 si es la pantalla 101, sino depende de _sidebarAbierto
+                  width: (_indiceActual == 101)
+                      ? 0
+                      : (_sidebarAbierto ? 250 : 0),
+                  child: ClipRect(
+                    child: OverflowBox(
+                      minWidth: 250,
+                      maxWidth: 250,
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: 250,
+                        color: const Color(0xFF1E1E2D),
+                        child: Stack(
+                          children: [
+                            _buildContenidoSidebar(),
+                            // BOTÓN DE CERRAR (X) A LA IZQUIERDA
+                            Positioned(
+                              top: 10,
+                              left: 10,
+                              child: IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white60,
+                                  size: 22,
+                                ),
+                                onPressed: () =>
+                                    setState(() => _sidebarAbierto = false),
                               ),
-                              onPressed: () =>
-                                  setState(() => _sidebarAbierto = false),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
 
               // COLUMNA 2: CONTENIDO CENTRAL (Se expande automáticamente)
               Expanded(
@@ -613,7 +685,15 @@ class _MainLayoutState extends State<MainLayout> {
                     Container(
                       color: const Color(0xFFF5F7F9),
                       child: IndexedStack(
-                        index: _indiceActual == 100 ? 3 : _indiceActual,
+                        // Lógica para que entren todas las pantallas (0 a 4)
+                        // pero que ignore el 99 (Registro) para que no crashee
+                        index: (_indiceActual == 100)
+                            ? 3 // Pantalla Mis Clientes
+                            : (_indiceActual == 101)
+                            ? 4 // Pantalla Mis Lavaderos
+                            : (_indiceActual >= 0 && _indiceActual <= 2)
+                            ? _indiceActual
+                            : 0, // Si es 99, se queda en el Mapa de fondo mientras abre el popup
                         children: _paginas,
                       ),
                     ),
@@ -869,10 +949,11 @@ class _MainLayoutState extends State<MainLayout> {
                           ],
                         ),
                       ),
-                    // PANEL FLOTANTE: Aparece solo en móvil cuando hay selección
+                    // PANEL FLOTANTE: Bloqueado si el índice es 101
                     if (esPantallaChica &&
                         _lavaderoSeleccionado != null &&
-                        supabase.auth.currentUser != null)
+                        supabase.auth.currentUser != null &&
+                        _indiceActual != 101) // <--- ESTE ES EL MISIL
                       Positioned(
                         right: 15,
                         top: 80,
@@ -895,15 +976,18 @@ class _MainLayoutState extends State<MainLayout> {
               ),
 
               // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
-              if (!esPantallaChica && supabase.auth.currentUser != null)
+              if (!esPantallaChica &&
+                  supabase.auth.currentUser != null &&
+                  _indiceActual != 101)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.easeInOutQuart,
-                  // El ancho es 350 si hay algo que mostrar, sino es 0
-                  width:
-                      (_lavaderoSeleccionado != null ||
-                          (_rolUsuario == 'cliente' &&
-                              _searchController.text.isNotEmpty))
+                  // --- CAMBIO AQUÍ: Si el índice es 101, el ancho es SIEMPRE 0 ---
+                  width: (_indiceActual == 101)
+                      ? 0
+                      : (_lavaderoSeleccionado != null ||
+                            (_rolUsuario == 'cliente' &&
+                                _searchController.text.isNotEmpty))
                       ? 350
                       : 0,
                   decoration: BoxDecoration(
@@ -1004,6 +1088,8 @@ class _MainLayoutState extends State<MainLayout> {
         // Lo asignamos con el índice 100 para no chocar con los demás
         if (tieneSesion && _rolUsuario == 'lavadero')
           _itemMenuLateral(Icons.people_alt_rounded, "Mis Clientes", 100),
+        if (tieneSesion && _rolUsuario == 'lavadero')
+          _itemMenuLateral(Icons.business_center_rounded, "Mis Lavaderos", 101),
 
         const Spacer(),
         const Text(
@@ -1017,58 +1103,52 @@ class _MainLayoutState extends State<MainLayout> {
 
   // Función para crear los botones del menú lateral
   // --- SUSTITUIR DESDE AQUÍ ---
-  Widget _itemMenuLateral(IconData icono, String texto, int index) {
+  Widget _itemMenuLateral(IconData icon, String label, int index) {
     bool seleccionado = _indiceActual == index;
-    return Padding(
-      // 1. EL MARGEN: Para que el botón no toque los bordes del sidebar
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: ListTile(
-        // 2. EL REDONDEADO: 'borderRadius' de 12 o más para ese efecto cápsula
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
 
-        // 3. EL COLOR DE FONDO: Solo se ve cuando está seleccionado
-        tileColor: seleccionado
-            ? Colors.white.withOpacity(0.1)
-            : Colors.transparent,
-
-        // 4. EL ESTADO: Para que Flutter sepa que debe aplicar los colores de arriba
-        selected: seleccionado,
-
-        onTap: () {
-          if (index == 99) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => const RegistroLavaderoScreen(),
-              ),
-            );
-          } else {
-            if (index == 0)
-              mapScreenKey.currentState
-                  ?.cargarLavaderosDeSupabase(); // la carga al hacer click
-            if (index == 100) _cargarMisClientes();
-
-            setState(() {
-              // IMPORTANTE: Ahora guardamos el índice real (0, 1, 2 o 100)
-              _indiceActual = index;
-            });
-          }
-        },
-
-        leading: Icon(
-          icono,
-          color: seleccionado ? const Color(0xFFEF4444) : Colors.white60,
-          size: 22,
-        ),
-        title: Text(
-          texto,
-          style: TextStyle(
-            color: seleccionado ? Colors.white : Colors.white60,
-            fontSize: 15,
-            fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
-          ),
+    return ListTile(
+      selected: seleccionado,
+      leading: Icon(
+        icon,
+        color: seleccionado ? const Color(0xFF64FFDA) : Colors.white60,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          color: seleccionado ? Colors.white : Colors.white60,
+          fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
         ),
       ),
+      onTap: () {
+        // Cerramos el Drawer de móvil si existe
+        if (Navigator.canPop(context)) Navigator.pop(context);
+
+        if (index == 99) {
+          // Navigator.push devuelve un Future que se completa al volver
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) => const RegistroLavaderoScreen(),
+            ),
+          ).then((_) {
+            // --- ESTO SE EJECUTA AL VOLVER ---
+            setState(() {
+              _indiceActual = 0; // Volvemos al mapa
+              _sidebarAbierto = true; // Forzamos que la barra sea visible
+            });
+          });
+        } else {
+          // ... resto de tu código de índices (0, 100, 101)
+          setState(() {
+            _sidebarAbierto = false;
+            _indiceActual = index;
+          });
+          if (index == 0)
+            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+          if (index == 100) _cargarMisClientes();
+          if (index == 101) _cargarMisLavaderos();
+        }
+      },
     );
   }
   // --- HASTA AQUÍ ---
@@ -1649,6 +1729,358 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
+  Widget _buildPantallaMisLavaderos() {
+    return Container(
+      color: const Color(0xFFF5F7F9),
+      child: Column(
+        children: [
+          // CABECERA ESTILO BENTO
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
+            ),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  onPressed: () => setState(() => _indiceActual = 0),
+                ),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      "MIS LAVADEROS", // <--- CAMBIO DE NOMBRE
+                      style: TextStyle(
+                        color: Color(0xFF3ABEF9),
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                  ),
+                ),
+                // --- NUEVO BOTÓN "INGRESAR NUEVO" ---
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    backgroundColor: const Color(0xFF3ABEF9).withOpacity(0.1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const RegistroLavaderoScreen(),
+                    ),
+                  ),
+                  icon: const Icon(
+                    Icons.add_rounded,
+                    color: Color(0xFF3ABEF9),
+                    size: 18,
+                  ),
+                  label: const Text(
+                    "INGRESAR NUEVO",
+                    style: TextStyle(
+                      color: Color(0xFF3ABEF9),
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          Expanded(
+            child: _cargandoLavaderos
+                ? const Center(child: CircularProgressIndicator())
+                : Column(
+                    // <--- Agregamos esta columna para meter la botonera abajo
+                    children: [
+                      Expanded(
+                        child: _misLavaderosReales.isEmpty
+                            ? _buildSinLavaderos()
+                            : RawKeyboardListener(
+                                focusNode: FocusNode(),
+                                autofocus: true,
+                                onKey: (event) {
+                                  // (Acá mantené toda tu lógica de teclas que ya tenés igual...)
+                                  if (event is RawKeyDownEvent) {
+                                    int currentIndex = _misLavaderosReales
+                                        .indexOf(_lavaderoSeleccionado);
+                                    if (currentIndex == -1) currentIndex = 0;
+                                    int nuevoIndex = currentIndex;
+                                    if (event.logicalKey ==
+                                            LogicalKeyboardKey.enter ||
+                                        event.logicalKey ==
+                                            LogicalKeyboardKey.numpadEnter) {
+                                      if (_lavaderoSeleccionado != null)
+                                        _confirmarEdicionLavadero(
+                                          _lavaderoSeleccionado,
+                                        );
+                                    } else if (event.logicalKey ==
+                                        LogicalKeyboardKey.arrowRight) {
+                                      if (currentIndex <
+                                          _misLavaderosReales.length - 1)
+                                        nuevoIndex = currentIndex + 1;
+                                    } else if (event.logicalKey ==
+                                        LogicalKeyboardKey.arrowLeft) {
+                                      if (currentIndex > 0)
+                                        nuevoIndex = currentIndex - 1;
+                                    } else if (event.logicalKey ==
+                                        LogicalKeyboardKey.arrowDown) {
+                                      // CAMBIO: Si hay 4 columnas, el salto es de 4
+                                      int salto =
+                                          MediaQuery.of(context).size.width >
+                                              1100
+                                          ? 4
+                                          : 2;
+                                      if (currentIndex + salto <
+                                          _misLavaderosReales.length)
+                                        nuevoIndex = currentIndex + salto;
+                                    } else if (event.logicalKey ==
+                                        LogicalKeyboardKey.arrowUp) {
+                                      // CAMBIO: Si hay 4 columnas, el salto es de 4
+                                      int salto =
+                                          MediaQuery.of(context).size.width >
+                                              1100
+                                          ? 4
+                                          : 2;
+                                      if (currentIndex - salto >= 0)
+                                        nuevoIndex = currentIndex - salto;
+                                    }
+                                    if (nuevoIndex != currentIndex) {
+                                      setState(
+                                        () => _lavaderoSeleccionado =
+                                            _misLavaderosReales[nuevoIndex],
+                                      );
+                                      double offset =
+                                          (nuevoIndex ~/
+                                              (MediaQuery.of(
+                                                        context,
+                                                      ).size.width >
+                                                      1100
+                                                  ? 4
+                                                  : 2)) *
+                                          215.0;
+                                      _scrollBentoController.animateTo(
+                                        offset,
+                                        duration: const Duration(
+                                          milliseconds: 250,
+                                        ),
+                                        curve: Curves.easeOut,
+                                      );
+                                    }
+                                  }
+                                },
+                                child: GridView.builder(
+                                  controller: _scrollBentoController,
+                                  padding: const EdgeInsets.all(20),
+                                  gridDelegate:
+                                      SliverGridDelegateWithFixedCrossAxisCount(
+                                        // --- 1. LAS 4 COLUMNAS AQUÍ ---
+                                        crossAxisCount:
+                                            MediaQuery.of(context).size.width >
+                                                1100
+                                            ? 4
+                                            : 2,
+                                        crossAxisSpacing: 15,
+                                        mainAxisSpacing: 15,
+                                        childAspectRatio: 0.85,
+                                      ),
+                                  itemCount: _misLavaderosReales.length,
+                                  itemBuilder: (context, index) {
+                                    final l = _misLavaderosReales[index];
+                                    return _tarjetaBentoLavadero(l);
+                                  },
+                                ),
+                              ),
+                      ),
+
+                      // --- 2. LA BOTONERA DE PAGINACIÓN AQUÍ ---
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 20),
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          border: Border(
+                            top: BorderSide(color: Colors.black12),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _botonPaginacion(
+                              "ANTERIOR",
+                              Icons.arrow_back_ios_new,
+                              _paginaActual > 1
+                                  ? () {
+                                      setState(() => _paginaActual--);
+                                      _cargarMisLavaderos();
+                                    }
+                                  : null,
+                            ),
+                            const SizedBox(width: 30),
+                            Text(
+                              "PÁGINA $_paginaActual",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w900,
+                                color: Colors.blueGrey,
+                              ),
+                            ),
+                            const SizedBox(width: 30),
+                            _botonPaginacion(
+                              "SIGUIENTE",
+                              Icons.arrow_forward_ios,
+                              // Solo habilita siguiente si trajimos el máximo de items de la página
+                              _misLavaderosReales.length == _itemsPorPagina
+                                  ? () {
+                                      setState(() => _paginaActual++);
+                                      _cargarMisLavaderos();
+                                    }
+                                  : null,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _tarjetaBentoLavadero(dynamic l, {bool destaca = false}) {
+    bool estaSeleccionada =
+        _lavaderoSeleccionado != null && _lavaderoSeleccionado['id'] == l['id'];
+
+    return GestureDetector(
+      onTap: () => setState(() => _lavaderoSeleccionado = l),
+      onDoubleTap: () => _confirmarEdicionLavadero(l),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        decoration: BoxDecoration(
+          // Proposición: El azul fuerte solo aparece si está SELECCIONADO
+          color: estaSeleccionada ? const Color(0xFF3ABEF9) : Colors.white,
+          borderRadius: BorderRadius.circular(25),
+          boxShadow: [
+            if (estaSeleccionada)
+              BoxShadow(
+                color: const Color(0xFF3ABEF9).withOpacity(0.5),
+                blurRadius: 20,
+                spreadRadius: 5,
+              )
+            else
+              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+          ],
+          border: Border.all(
+            color: estaSeleccionada
+                ? const Color(0xFF3ABEF9)
+                : Colors.transparent,
+            width: 2,
+          ),
+        ),
+
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              flex: destaca ? 3 : 2,
+              child: Stack(
+                // Usamos Stack para encimar el texto sobre la imagen
+                children: [
+                  Container(
+                    margin: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(20),
+                      image: DecorationImage(
+                        image: NetworkImage(
+                          'https://picsum.photos/seed/${l['id']}/400/300',
+                        ),
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  ),
+                  // --- ESTE ES EL INDICADOR DE ESTADO ---
+                  Positioned(
+                    top: 15,
+                    right: 15,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: destaca ? Colors.white : const Color(0xFF3ABEF9),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black12, blurRadius: 4),
+                        ],
+                      ),
+                      child: Text(
+                        "OPERANDO", // Más adelante lo haremos dinámico con el horario
+                        style: TextStyle(
+                          color: destaca
+                              ? const Color(0xFF3ABEF9)
+                              : Colors.white,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l['razon_social'] ?? 'Sin Nombre',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: destaca ? 18 : 14,
+                      color: destaca ? Colors.white : Colors.black87,
+                    ),
+                  ),
+                  Text(
+                    l['direccion'] ?? 'Zárate',
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: destaca ? Colors.white70 : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSinLavaderos() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.store_outlined, size: 80, color: Colors.grey[300]),
+          const SizedBox(height: 10),
+          const Text(
+            "No tienes lavaderos registrados todavía.",
+            style: TextStyle(color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _tarjetaMiniBento(
     String titulo,
     String valor,
@@ -1714,6 +2146,99 @@ class _MainLayoutState extends State<MainLayout> {
           style: const TextStyle(fontSize: 12),
         ),
         trailing: const Icon(Icons.chevron_right, color: Colors.black26),
+      ),
+    );
+  }
+
+  void _confirmarEdicionLavadero(dynamic lavadero) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+        title: Row(
+          children: [
+            Icon(Icons.edit_note_rounded, color: const Color(0xFF3ABEF9)),
+            const SizedBox(width: 10),
+            const Text("Editar Lavadero"),
+          ],
+        ),
+        content: Text(
+          "¿Deseas modificar los datos de '${lavadero['razon_social']}'?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF3ABEF9),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            onPressed: () {
+              Navigator.pop(context); // Cierra el cartel
+              setState(() => _lavaderoSeleccionado = lavadero);
+              // Salto a la edición
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      RegistroLavaderoScreen(lavaderoParaEditar: lavadero),
+                ),
+              );
+            },
+            child: const Text(
+              "SÍ, EDITAR",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _botonPaginacion(String texto, IconData icono, VoidCallback? onTap) {
+    bool deshabilitado = onTap == null;
+
+    return MouseRegion(
+      // ESTO PONE LA MANITO
+      cursor: deshabilitado
+          ? SystemMouseCursors.basic
+          : SystemMouseCursors.click,
+      child: Opacity(
+        opacity: deshabilitado ? 0.3 : 1.0,
+        child: InkWell(
+          // ESTO HACE LA ANIMACIÓN AL CLICKEAR
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(15),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: const Color(0xFF3ABEF9), width: 1.5),
+            ),
+            child: Row(
+              children: [
+                if (texto == "ANTERIOR")
+                  Icon(icono, size: 14, color: const Color(0xFF3ABEF9)),
+                if (texto == "ANTERIOR") const SizedBox(width: 8),
+                Text(
+                  texto,
+                  style: const TextStyle(
+                    color: Color(0xFF3ABEF9),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                if (texto == "SIGUIENTE") const SizedBox(width: 8),
+                if (texto == "SIGUIENTE")
+                  Icon(icono, size: 14, color: const Color(0xFF3ABEF9)),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
