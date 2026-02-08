@@ -15,13 +15,6 @@ const supabase = createClient(
   process.env.SUPABASE_URL,
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
-
-// 2. CONFIGURAR CLIENTE MP
-const client = new MercadoPagoConfig({
-  accessToken:
-    "APP_USR-8115934189968230-020621-d0d2756b4bf4d74e164719cfa54e050d-1899785327",
-});
-
 // --- ENDPOINT: CREAR PREFERENCIA ---
 app.post("/create-preference", async (req, res) => {
   try {
