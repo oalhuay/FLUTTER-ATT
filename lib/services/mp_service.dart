@@ -5,7 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class MPService {
   // IP para emulador de Android (10.0.2.2).
   // Si vas a probar en la web o celular real, recuerda cambiar esto por tu URL de Vercel/Ngrok.
-  final String serverUrl = "http://10.0.2.2:3001";
+  final String serverUrl = "https://mpatt.vercel.app";
 
   Future<String?> crearPreferencia({
     required String titulo,
