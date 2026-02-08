@@ -43,6 +43,30 @@ class _ReservaScreenState extends State<ReservaScreen>
         safeGuard++;
       }
     }
+    _appLinks.uriLinkStream.listen((uri) {
+      // uri será algo como: att-app://pago-fallido?status=rejected&payment_id=...
+
+      final String path =
+          uri.host; // Esto devuelve "pago-exitoso" o "pago-fallido"
+
+      if (path == "pago-fallido") {
+        setState(() {
+          _estaProcesando = false;
+          _esperandoPago = false;
+        });
+
+        // Aquí muestras el aviso que querías
+        _mostrarMensajeError("No se realizó el pago. Por favor, reintente.");
+      } else if (path == "pago-exitoso") {
+        final paymentId = uri.queryParameters['payment_id'];
+        _ejecutarRegistroEnBaseDeDatos(
+          status: 'approved',
+          paymentId: paymentId ?? '',
+        );
+      }
+    });
+    _calcularTotal();
+    _inicializarStream();
     _calcularTotal();
     _inicializarStream();
     _configurarListenerRetorno();
@@ -62,121 +86,121 @@ class _ReservaScreenState extends State<ReservaScreen>
     super.dispose();
   }
 
-  // Se dispara cuando el usuario vuelve de Mercado Pago a la App manualmente
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _esperandoPago) {
-      // Si el usuario vuelve pero el listener de Deep Link no se activó,
-      // podemos dejar de procesar o intentar una verificación manual.
-      setState(() {
-        _estaProcesando = false;
-        _esperandoPago = false;
-      });
-    }
-  }
-
-  // --- PROCESO PARTE 1: LANZAR EL PAGO ---
   void _procesarPagoYReserva(BuildContext context, String hora) async {
     final usuario = Supabase.instance.client.auth.currentUser;
     if (usuario == null) return;
 
     setState(() {
       _estaProcesando = true;
-      _esperandoPago = true;
+      _esperandoPago = true; // El "oído" se activa aquí
     });
 
     try {
       final mp = MPService();
+      // Llamamos a tu nuevo servidor Node.js (localhost:3001)
       final urlPago = await mp.crearPreferencia(
         titulo: "Reserva ATT: ${widget.lavadero['razon_social']}",
         precio: _totalAPagar,
-        cantidad: 1,
       );
 
       if (urlPago != null) {
+        // Abrimos el navegador. La ejecución de la app se queda "en pausa" aquí.
         await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
-        // La ejecución se detiene. Esperamos al listener de AppLinks.
+      } else {
+        setState(() {
+          _estaProcesando = false;
+          _esperandoPago = false;
+        });
+        _mostrarMensajeError("No se pudo conectar con el servidor de pagos.");
       }
     } catch (e) {
       setState(() {
         _estaProcesando = false;
         _esperandoPago = false;
       });
+      debugPrint("Error: $e");
     }
   }
 
-  // --- PROCESO PARTE 2: VALIDAR Y REGISTRAR (SOLO SI EL PAGO ES APROBADO) ---
-  Future<void> _validarYFinalizarReserva(Uri uri) async {
-    final status = uri.queryParameters['status'];
-    final paymentId = uri.queryParameters['payment_id'];
+  void _mostrarMensajeError(String mensaje) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.error_outline, color: Colors.white),
+            const SizedBox(width: 10),
+            Expanded(child: Text(mensaje)),
+          ],
+        ),
+        backgroundColor: Colors.red.shade800,
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: "OK",
+          textColor: Colors.white,
+          onPressed: () {},
+        ),
+      ),
+    );
+  }
 
-    // Si el pago NO es aprobado, reseteamos y salimos sin guardar nada
-    if (status != 'approved' || paymentId == null || paymentId == 'null') {
+  Future<void> _validarYFinalizarReserva(Uri uri) async {
+    // Extraemos el status que Mercado Pago pegó en la URL
+    final status = uri.queryParameters['status'];
+
+    // CASO: PAGO NO EXITOSO (Rejected, Cancelled, etc.)
+    if (status != 'approved') {
       setState(() {
         _estaProcesando = false;
         _esperandoPago = false;
       });
-      _mostrarErrorPago();
-      return;
+
+      // --- EL ANUNCIO DE ERROR ---
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.error_outline, color: Colors.red),
+              SizedBox(width: 10),
+              Text(
+                "Pago no realizado",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          content: Text(
+            status == 'rejected'
+                ? "Tu pago fue rechazado por el banco. Por favor, intenta con otro medio."
+                : "No pudimos confirmar el pago. El turno no ha sido reservado.",
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: azulATT),
+              onPressed: () => Navigator.pop(context),
+              child: const Text(
+                "ENTENDIDO",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        ),
+      );
+      return; // Súper importante: cortamos la función aquí. No se guarda nada.
     }
 
-    // SI ES APROBADO, RECIÉN AQUÍ HACEMOS TODO LO DEMÁS
-    try {
-      final mp = MPService();
-
-      // 1. Registrar Factura Real
-      final facturaData = await mp.registrarFacturaLimpia(
+    if (status == 'approved') {
+      final paymentId = uri.queryParameters['payment_id'] ?? '';
+      await _ejecutarRegistroEnBaseDeDatos(
+        status: status ?? '',
         paymentId: paymentId,
-        status: status!,
-        total: _totalAPagar,
-        servicios: _serviciosSeleccionados.join(", "),
       );
-
-      // 2. Insertar Turno en Supabase
-      final turnoResponse = await Supabase.instance.client
-          .from('turnos')
-          .insert({
-            'hora': _horaSeleccionada,
-            'fecha': _fechaSeleccionada.toIso8601String().split('T')[0],
-            'lavadero_nombre': widget.lavadero['razon_social'],
-            'user_id': Supabase.instance.client.auth.currentUser!.id,
-            'monto_pagado': _totalAPagar,
-            'servicios': _serviciosSeleccionados.join(", "),
-            'estado': 'activo',
-          })
-          .select()
-          .single();
-
-      // 3. Generar PDF y Comprobante
-      if (facturaData != null) {
-        final pdfBytes = await PdfHelper.obtenerBytesPDF(
-          nroFactura: facturaData['id']
-              .toString()
-              .substring(0, 8)
-              .toUpperCase(),
-          lavadero: widget.lavadero['razon_social'],
-          fecha: facturaData['fecha_emision'].toString(),
-          servicios: facturaData['servicios'],
-          total: (facturaData['total'] as num).toDouble(),
-        );
-
-        await _subirComprobanteAStorage(
-          turnoResponse['id'].toString(),
-          pdfBytes,
-        );
-
-        _mostrarExitoFinal(facturaData);
-      }
-    } catch (e) {
-      debugPrint("Error finalizando reserva: $e");
-    } finally {
-      setState(() {
-        _estaProcesando = false;
-        _esperandoPago = false;
-      });
     }
   }
 
@@ -196,6 +220,78 @@ class _ReservaScreenState extends State<ReservaScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _ejecutarRegistroEnBaseDeDatos({
+    required String status,
+    required String paymentId,
+  }) async {
+    if (status != 'approved') {
+      setState(() {
+        _estaProcesando = false;
+        _esperandoPago = false;
+      });
+      _mostrarErrorPago();
+      return;
+    }
+
+    try {
+      setState(() => _estaProcesando = true);
+
+      // PASO A: Intentar buscar si el servidor Node ya la creó (esperamos 3 seg)
+      await Future.delayed(const Duration(seconds: 3));
+      var resFactura = await Supabase.instance.client
+          .from('facturas')
+          .select()
+          .eq('payment_id', paymentId)
+          .maybeSingle();
+
+      // PASO B: Si el servidor Node falló (por estar en localhost), LA CREAMOS DESDE LA APP
+      if (resFactura == null) {
+        debugPrint(
+          "⚠️ El servidor Node no creó la factura. Creándola desde la App...",
+        );
+        resFactura = await Supabase.instance.client
+            .from('facturas')
+            .insert({
+              'payment_id': paymentId,
+              'status': status,
+              'total': _totalAPagar,
+              'servicios': _serviciosSeleccionados.join(", "),
+              'user_id': Supabase.instance.client.auth.currentUser!.id,
+              'fecha_emision': DateTime.now().toIso8601String(),
+            })
+            .select()
+            .single();
+      }
+
+      // PASO C: Ahora que tenemos factura, creamos el TURNO
+      final turno = await Supabase.instance.client
+          .from('turnos')
+          .insert({
+            'hora': _horaSeleccionada,
+            'fecha': _fechaSeleccionada.toIso8601String().split('T')[0],
+            'lavadero_nombre': widget.lavadero['razon_social'],
+            'user_id': Supabase.instance.client.auth.currentUser!.id,
+            'monto_pagado': _totalAPagar,
+            'servicios': _serviciosSeleccionados.join(", "),
+            'estado': 'activo',
+            'payment_id': paymentId,
+          })
+          .select()
+          .single();
+
+      // PASO D: Generar PDF y cerrar
+      _mostrarExitoFinal(resFactura);
+    } catch (e) {
+      debugPrint("❌ Error en el proceso final: $e");
+      _mostrarMensajeError("Error al registrar: $e");
+    } finally {
+      setState(() {
+        _estaProcesando = false;
+        _esperandoPago = false;
+      });
+    }
   }
 
   void _inicializarStream() {
@@ -257,6 +353,23 @@ class _ReservaScreenState extends State<ReservaScreen>
       return slots;
     } catch (e) {
       return ["09:00", "10:00", "11:00", "15:00", "16:00"];
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Solo nos interesa cuando el usuario VUELVE (resumed)
+    if (state == AppLifecycleState.resumed) {
+      // Si después de 2 segundos de volver no entró el Deep Link de éxito/error,
+      // simplemente quitamos el spinner de carga para que el usuario pueda reintentar.
+      Future.delayed(const Duration(seconds: 2), () {
+        if (mounted && _estaProcesando) {
+          setState(() {
+            _estaProcesando = false;
+            _esperandoPago = false;
+          });
+        }
+      });
     }
   }
 

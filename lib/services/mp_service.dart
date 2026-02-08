@@ -3,88 +3,67 @@ import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MPService {
-  final String _accessToken =
-      "APP_USR-3237879502950879-012309-a6a9898d2fb9e8d05eee8e2d0d1a0adf-3154302970";
-  final supabase = Supabase.instance.client;
+  // IP para emulador de Android (10.0.2.2).
+  // Si vas a probar en la web o celular real, recuerda cambiar esto por tu URL de Vercel/Ngrok.
+  final String serverUrl = "http://10.0.2.2:3001";
 
   Future<String?> crearPreferencia({
     required String titulo,
     required double precio,
-    required int cantidad,
   }) async {
-    // Usamos 1.0 como mínimo para evitar errores de la API de Mercado Pago
-    final double precioFinal = precio <= 0 ? 1.0 : precio;
-    final url = Uri.parse('https://api.mercadopago.com/checkout/preferences');
+    final user = Supabase.instance.client.auth.currentUser;
+
+    // Validación de seguridad mínima
+    final double precioFinal = precio <= 0 ? 10.0 : precio;
 
     try {
       final response = await http.post(
-        url,
-        headers: {
-          'Authorization': 'Bearer $_accessToken',
-          'Content-Type': 'application/json',
-        },
+        Uri.parse('$serverUrl/create-preference'),
+        headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          "items": [
-            {
-              "title": titulo,
-              "quantity": cantidad,
-              "unit_price": precioFinal,
-              "currency_id": "ARS",
-            },
-          ],
-          "back_urls": {
-            // IMPORTANTE: Usamos el esquema de la app para el retorno
-            "success": "att-app://pago-finalizado",
-            "failure": "att-app://pago-finalizado",
-            "pending": "att-app://pago-finalizado",
-          },
-          "auto_return": "approved",
-          "external_reference": supabase.auth.currentUser?.id,
-          "binary_mode": true, // Evita estados pendientes, o aprueba o rechaza
+          "titulo": titulo,
+          "precio": precioFinal,
+          "userId": user
+              ?.id, // Enviamos el ID para que el Webhook sepa de quién es el pago
         }),
       );
 
-      if (response.statusCode == 201 || response.statusCode == 200) {
+      if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
+        // El servidor nos devuelve el link de Mercado Pago
         return data['init_point'];
       } else {
-        print("Error API Mercado Pago: ${response.body}");
+        print("❌ Error en el servidor Node: ${response.body}");
         return null;
       }
     } catch (e) {
-      print("Error conexión MP: $e");
+      print("❌ Error de conexión con el servidor: $e");
       return null;
     }
   }
 
-  /// Registra la factura y devuelve la fila con ID y fecha real de Supabase
-  Future<Map<String, dynamic>?> registrarFacturaLimpia({
+  /// Esta función busca en Supabase la factura que el Servidor Node ya debió insertar
+  /// vía Webhook. La usamos para confirmar el pago y generar el PDF.
+  Future<Map<String, dynamic>?> buscarFacturaEnSupabase({
     required String paymentId,
-    required String status,
-    required double total,
-    required String servicios,
   }) async {
     try {
-      final user = supabase.auth.currentUser;
+      final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return null;
 
-      final response = await supabase
+      // Hacemos el select para ver si el Webhook ya hizo su trabajo
+      final response = await Supabase.instance.client
           .from('facturas')
-          .insert({
-            'payment_id': paymentId,
-            'status': status,
-            'forma_pago': 'mercadopago',
-            'total': total,
-            'servicios': servicios,
-            'user_id': user.id,
-          })
           .select()
-          .single();
+          .eq('payment_id', paymentId)
+          .maybeSingle(); // Usamos maybeSingle para que no explote si aún no existe
 
-      print("✅ Factura registrada exitosamente");
+      if (response != null) {
+        print("✅ Factura encontrada en Supabase");
+      }
       return response;
     } catch (e) {
-      print("❌ Error al registrar factura en Supabase: $e");
+      print("❌ Error al buscar factura: $e");
       return null;
     }
   }
