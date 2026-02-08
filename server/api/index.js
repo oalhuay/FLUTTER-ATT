@@ -48,8 +48,7 @@ app.post("/create-preference", async (req, res) => {
         auto_return: "approved",
         external_reference: userId,
         // RECUERDA: Cambia esto por tu URL actual de Ngrok si pruebas Webhooks
-        notification_url:
-          "https://localhost/webhook",
+        notification_url: "https://mpatt.vercel.app/webhook",
       },
     });
 
@@ -118,3 +117,4 @@ const PORT = 3001;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor ATT con SDK Oficial en puerto ${PORT}`);
 });
+module.exports = app;
