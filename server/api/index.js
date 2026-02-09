@@ -9,9 +9,10 @@ const PDFDocument = require("pdfkit"); //
 const app = express();
 app.use(
   cors({
-    origin: "*", // Permite cualquier origen (ideal para evitar problemas en Vercel)
+    origin: "https://flutter-att.vercel.app", // Permite cualquier origen (ideal para evitar problemas en Vercel)
     methods: ["GET", "POST", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
 app.use(express.json());
