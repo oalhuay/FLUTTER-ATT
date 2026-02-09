@@ -9,6 +9,7 @@ class MPService {
   Future<String?> crearPreferencia({
     required String titulo,
     required double precio,
+    Map<String, dynamic>? metadata, // <--- AGREGAMOS ESTA LÍNEA
   }) async {
     final user = Supabase.instance.client.auth.currentUser;
     final double precioFinal = precio <= 0 ? 10.0 : precio;
@@ -21,6 +22,7 @@ class MPService {
           "titulo": titulo,
           "precio": precioFinal,
           "userId": user?.id,
+          "metadata": metadata, // <--- ENVIAMOS LA DATA AL SERVIDOR
         }),
       );
 
@@ -28,9 +30,11 @@ class MPService {
         final data = jsonDecode(response.body);
         return data['init_point'];
       } else {
+        print("❌ Error en el servidor Node: ${response.body}");
         return null;
       }
     } catch (e) {
+      print("❌ Error de conexión: $e");
       return null;
     }
   }

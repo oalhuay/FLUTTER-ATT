@@ -5,7 +5,7 @@ const axios = require("axios");
 require("dotenv").config();
 
 const { MercadoPagoConfig, Preference } = require("mercadopago");
-
+const PDFDocument = require("pdfkit"); //
 const app = express();
 app.use(cors());
 app.use(express.json());
@@ -54,8 +54,8 @@ app.post("/create-preference", async (req, res) => {
   }
 });
 
-// --- ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
+  // 1. Respuesta inmediata para Mercado Pago
   res.status(200).send("OK");
 
   const id = req.query.id || (req.body.data && req.body.data.id);
@@ -71,53 +71,115 @@ app.post("/webhook", async (req, res) => {
       );
 
       if (payment.status === "approved") {
+        console.log("-----------------------------------------");
+        console.log("💰 PROCESANDO PAGO APROBADO:", id);
+        console.log("Metadata:", JSON.stringify(payment.metadata, null, 2));
+        console.log("-----------------------------------------");
+
         const userId = payment.external_reference;
         const paymentId = id.toString();
+        const metadata = payment.metadata || {}; //
 
-        console.log(
-          `💰 Pago ${paymentId} aprobado. Procesando factura y turno...`
+        // --- A. GENERAR PDF EN MEMORIA ---
+        const doc = new PDFDocument();
+        let buffers = [];
+        doc.on("data", buffers.push.bind(buffers));
+
+        // Diseño del PDF (ATT! 2040)
+        doc
+          .fontSize(25)
+          .fillColor("#3ABEF9")
+          .text("ATT! A TODO TRAPO", { align: "center" });
+        doc.moveDown();
+        doc
+          .fontSize(10)
+          .fillColor("black")
+          .text(`Comprobante de Pago #${paymentId}`, { align: "right" });
+        doc.text(`Fecha: ${new Date().toLocaleDateString()}`, {
+          align: "right",
+        });
+        doc.moveDown();
+        doc
+          .fontSize(14)
+          .text(`Lavadero: ${metadata.lavadero_nombre || "Sucursal ATT!"}`);
+        doc.text(`Servicio: ${payment.description || "Lavado Premium"}`);
+        doc.text(
+          `Turno: ${metadata.fecha_turno || "--"} a las ${
+            metadata.hora_turno || "--"
+          }hs`
         );
+        doc.moveDown();
+        doc
+          .fontSize(20)
+          .fillColor("#EF4444")
+          .text(`TOTAL: $${payment.transaction_amount}`, { align: "left" });
+        doc.end();
 
-        // 1. GUARDAR FACTURA
-        const { error: errorFactura } = await supabase.from("facturas").insert({
-          payment_id: paymentId,
-          status: "approved",
-          total: payment.transaction_amount,
-          user_id: userId,
-          servicios: payment.description || "Reserva ATT",
-          fecha_emision: new Date().toISOString(),
+        // --- B. ESPERAR A QUE EL PDF TERMINE Y SUBIRLO ---
+        doc.on("end", async () => {
+          const pdfBuffer = Buffer.concat(buffers);
+          const fileName = `tickets/factura_${paymentId}.pdf`;
+
+          try {
+            // 1. Subir a Supabase Storage
+            const { error: uploadError } = await supabase.storage
+              .from("comprobantes")
+              .upload(fileName, pdfBuffer, {
+                contentType: "application/pdf",
+                upsert: true,
+              });
+
+            if (uploadError) throw uploadError;
+
+            // 2. Obtener la URL Pública
+            const {
+              data: { publicUrl },
+            } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
+
+            console.log("📄 PDF subido correctamente:", publicUrl);
+
+            // 3. Registrar Factura
+            const { error: errorFactura } = await supabase
+              .from("facturas")
+              .insert({
+                payment_id: paymentId,
+                status: "approved",
+                total: payment.transaction_amount,
+                user_id: userId,
+                servicios: payment.description || "Reserva ATT",
+                fecha_emision: new Date().toISOString(),
+                url_pdf: publicUrl, // Guardamos el link en la factura
+              });
+
+            if (errorFactura)
+              console.error("❌ Error Factura:", errorFactura.message);
+
+            // 4. Registrar Turno
+            const { error: errorTurno } = await supabase.from("turnos").insert({
+              user_id: userId,
+              payment_id: paymentId,
+              estado: "activo", // Cambiado a 'activo' para tu filtro de Flutter
+              monto_pagado: payment.transaction_amount,
+              fecha:
+                metadata.fecha_turno || new Date().toISOString().split("T")[0],
+              hora: metadata.hora_turno || "00:00",
+              lavadero_nombre: metadata.lavadero_nombre || "Lavadero ATT",
+              servicios: payment.description || "Reserva ATT",
+              url_comprobante: publicUrl, // El cliente ya tiene el link listo
+            });
+
+            if (errorTurno) {
+              console.error("❌ Error Turno:", errorTurno.message);
+            } else {
+              console.log("📅 Turno y Factura vinculados exitosamente.");
+            }
+          } catch (dbErr) {
+            console.error("🚨 Error en Storage/Base de Datos:", dbErr.message);
+          }
         });
-
-        if (errorFactura) {
-          console.error("❌ Error Supabase (Factura):", errorFactura.message);
-        } else {
-          console.log("🚀 Factura guardada.");
-        }
-
-        // 2. GUARDAR TURNO (Para que aparezca en "Mis Turnos")
-        // Usamos los datos que Mercado Pago nos devuelve o los que mandamos en metadata
-        const { error: errorTurno } = await supabase.from("turnos").insert({
-          user_id: userId,
-          payment_id: paymentId,
-          estado: "confirmado",
-          monto_pagado: payment.transaction_amount,
-          // Si envías fecha/hora en metadata al crear la preferencia, las usas aquí:
-          fecha:
-            payment.metadata?.fecha_turno ||
-            new Date().toISOString().split("T")[0],
-          hora: payment.metadata?.hora_turno || "00:00",
-          lavadero_nombre: payment.metadata?.lavadero_nombre || "Lavadero ATT",
-          servicios: payment.description || "Reserva ATT",
-        });
-
-        if (errorTurno) {
-          console.error("❌ Error Supabase (Turno):", errorTurno.message);
-        } else {
-          console.log("📅 Turno registrado con éxito.");
-        }
       }
     } catch (error) {
-      console.error("⚠️ Error procesando webhook:", error.message);
+      console.error("⚠️ Error consultando pago en MP:", error.message);
     }
   }
 });

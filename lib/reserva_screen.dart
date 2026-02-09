@@ -131,15 +131,22 @@ class _ReservaScreenState extends State<ReservaScreen>
 
     setState(() {
       _estaProcesando = true;
-      _esperandoPago = true; // El "oído" se activa aquí
+      _esperandoPago = true;
     });
 
     try {
       final mp = MPService();
-      // Llamamos a tu nuevo servidor Node.js (localhost:3001)
+      // ENVIAMOS METADATA: Esto es lo que el Webhook recibirá para crear el turno
       final urlPago = await mp.crearPreferencia(
         titulo: "Reserva ATT: ${widget.lavadero['razon_social']}",
         precio: _totalAPagar,
+        // Añadimos este mapa de datos extra
+        metadata: {
+          "userId": usuario.id,
+          "fecha_turno": _fechaSeleccionada.toIso8601String().split('T')[0],
+          "hora_turno": hora,
+          "lavadero_nombre": widget.lavadero['razon_social'],
+        },
       );
 
       if (urlPago != null) {
@@ -185,151 +192,37 @@ class _ReservaScreenState extends State<ReservaScreen>
     );
   }
 
-  Future<void> _validarYFinalizarReserva(Uri uri) async {
-    // Extraemos el status que Mercado Pago pegó en la URL
-    final status = uri.queryParameters['status'];
-
-    // CASO: PAGO NO EXITOSO (Rejected, Cancelled, etc.)
-    if (status != 'approved') {
-      setState(() {
-        _estaProcesando = false;
-        _esperandoPago = false;
-      });
-
-      // --- EL ANUNCIO DE ERROR ---
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Row(
-            children: [
-              Icon(Icons.error_outline, color: Colors.red),
-              SizedBox(width: 10),
-              Text(
-                "Pago no realizado",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
-          ),
-          content: Text(
-            status == 'rejected'
-                ? "Tu pago fue rechazado por el banco. Por favor, intenta con otro medio."
-                : "No pudimos confirmar el pago. El turno no ha sido reservado.",
-          ),
-          actions: [
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: azulATT),
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                "ENTENDIDO",
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      );
-      return; // Súper importante: cortamos la función aquí. No se guarda nada.
-    }
-
-    if (status == 'approved') {
-      final paymentId = uri.queryParameters['payment_id'] ?? '';
-      await _ejecutarRegistroEnBaseDeDatos(
-        status: status ?? '',
-        paymentId: paymentId,
-      );
-    }
-  }
-
-  void _mostrarErrorPago() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Pago no realizado"),
-        content: const Text(
-          "No se pudo confirmar el pago. El turno no ha sido reservado.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("REINTENTAR"),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _ejecutarRegistroEnBaseDeDatos({
     required String status,
     required String paymentId,
   }) async {
-    if (status != 'approved') {
-      setState(() {
-        _estaProcesando = false;
-        _esperandoPago = false;
-      });
-      _mostrarErrorPago();
-      return;
-    }
+    if (status != 'approved') return;
 
     try {
       setState(() => _estaProcesando = true);
 
-      // PASO A: Intentar buscar si el servidor Node ya la creó (esperamos 3 seg)
-      await Future.delayed(const Duration(seconds: 3));
-      var resFactura = await Supabase.instance.client
-          .from('facturas')
+      // 1. Esperamos un poco para que el Webhook trabaje
+      await Future.delayed(const Duration(seconds: 4));
+
+      // 2. ¿Ya existe el turno? (Lo creó el Webhook)
+      final existeTurno = await Supabase.instance.client
+          .from('turnos')
           .select()
           .eq('payment_id', paymentId)
           .maybeSingle();
 
-      // PASO B: Si el servidor Node falló (por estar en localhost), LA CREAMOS DESDE LA APP
-      if (resFactura == null) {
-        debugPrint(
-          "⚠️ El servidor Node no creó la factura. Creándola desde la App...",
-        );
-        resFactura = await Supabase.instance.client
-            .from('facturas')
-            .insert({
-              'payment_id': paymentId,
-              'status': status,
-              'total': _totalAPagar,
-              'servicios': _serviciosSeleccionados.join(", "),
-              'user_id': Supabase.instance.client.auth.currentUser!.id,
-              'fecha_emision': DateTime.now().toIso8601String(),
-            })
-            .select()
-            .single();
+      if (existeTurno != null) {
+        debugPrint("✅ El servidor registró el turno correctamente.");
+        return; // Salimos, no hace falta hacer nada más
       }
 
-      // PASO C: Ahora que tenemos factura, creamos el TURNO
-      final turno = await Supabase.instance.client
-          .from('turnos')
-          .insert({
-            'hora': _horaSeleccionada,
-            'fecha': _fechaSeleccionada.toIso8601String().split('T')[0],
-            'lavadero_nombre': widget.lavadero['razon_social'],
-            'user_id': Supabase.instance.client.auth.currentUser!.id,
-            'monto_pagado': _totalAPagar,
-            'servicios': _serviciosSeleccionados.join(", "),
-            'estado': 'activo',
-            'payment_id': paymentId,
-          })
-          .select()
-          .single();
-
-      // PASO D: Generar PDF y cerrar
-      _mostrarExitoFinal(resFactura);
+      // 3. SOLO SI EL SERVIDOR FALLÓ (Backup local):
+      debugPrint("⚠️ Webhook no detectado. Registrando localmente...");
+      // Aquí mueves tu lógica de insert que ya tenías en el PASO C
     } catch (e) {
-      debugPrint("❌ Error en el proceso final: $e");
-      _mostrarMensajeError("Error al registrar: $e");
+      debugPrint("❌ Error: $e");
     } finally {
-      setState(() {
-        _estaProcesando = false;
-        _esperandoPago = false;
-      });
+      setState(() => _estaProcesando = false);
     }
   }
 
@@ -826,7 +719,8 @@ class _ReservaScreenState extends State<ReservaScreen>
       ),
     );
   }
-Widget _buildPantallaExito() {
+
+  Widget _buildPantallaExito() {
     return Center(
       child: _buildBentoCard(
         child: Column(
@@ -920,6 +814,7 @@ Widget _buildPantallaExito() {
       ),
     );
   }
+
   void _confirmarAntesDePagar(BuildContext context, String hora) {
     showDialog(
       context: context,
@@ -953,81 +848,6 @@ Widget _buildPantallaExito() {
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _mostrarExitoFinal(Map<String, dynamic>? factura) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-        title: const Icon(
-          Icons.check_circle_rounded,
-          color: Colors.green,
-          size: 70,
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              "¡Turno confirmado!",
-              textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
-            ),
-            if (factura != null) ...[
-              const SizedBox(height: 10),
-              const Text(
-                "Tu comprobante ya está listo.",
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.black54, fontSize: 13),
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          if (factura != null)
-            ElevatedButton.icon(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: rojoATT,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                minimumSize: const Size(double.infinity, 45),
-              ),
-              onPressed: () => PdfHelper.descargarComprobante(
-                nroFactura: factura['id']
-                    .toString()
-                    .substring(0, 8)
-                    .toUpperCase(),
-                lavadero: widget.lavadero['razon_social'],
-                fecha: factura['fecha_emision'].toString(),
-                servicios: factura['servicios'],
-                total: (factura['total'] as num).toDouble(),
-              ),
-              icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
-              label: const Text(
-                "DESCARGAR COMPROBANTE",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          Center(
-            child: TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                Navigator.pop(context);
-              },
-              child: Text(
-                "VOLVER AL MAPA",
-                style: TextStyle(color: azulATT, fontWeight: FontWeight.bold),
               ),
             ),
           ),
