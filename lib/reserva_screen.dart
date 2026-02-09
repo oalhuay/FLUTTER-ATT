@@ -830,7 +830,6 @@ class _ReservaScreenState extends State<ReservaScreen>
   Widget _buildPantallaExito() {
     return Center(
       child: _buildBentoCard(
-        // Reutilizamos tu diseño de tarjeta Bento
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -850,34 +849,67 @@ class _ReservaScreenState extends State<ReservaScreen>
             ),
             const SizedBox(height: 10),
             const Text(
-              "Tu turno ha sido reservado con éxito.\nYa puedes ver tu comprobante.",
+              "Tu turno ha sido reservado con éxito.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 30),
 
-            // BOTÓN PRINCIPAL DE RETORNO
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: azulATT,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 40,
-                  vertical: 15,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(15),
-                ),
+            // --- BOTÓN PARA DESCARGAR COMPROBANTE ---
+            FutureBuilder<Map<String, dynamic>?>(
+              future: MPService().buscarFacturaEnSupabase(
+                paymentId: _pagoID ?? "",
               ),
-              onPressed: () {
-                // Limpia el stack y vuelve al mapa (página principal)
-                Navigator.of(context).popUntil((route) => route.isFirst);
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const CircularProgressIndicator();
+                }
+
+                if (snapshot.hasData && snapshot.data != null) {
+                  final factura = snapshot.data!;
+                  return ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: rojoATT,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+                    label: const Text(
+                      "DESCARGAR COMPROBANTE",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    onPressed: () => PdfHelper.descargarComprobante(
+                      nroFactura: factura['payment_id'].toString(),
+                      lavadero: widget.lavadero['razon_social'],
+                      fecha: DateFormat(
+                        'dd/MM/yyyy HH:mm',
+                      ).format(DateTime.parse(factura['fecha_emision'])),
+                      servicios: factura['servicios'] ?? "Reserva de Turno ATT",
+                      total: (factura['total'] as num).toDouble(),
+                    ),
+                  );
+                }
+                return const Text("Procesando comprobante...");
               },
-              child: const Text(
+            ),
+
+            const SizedBox(height: 15),
+
+            // --- BOTÓN VOLVER ---
+            TextButton(
+              onPressed: () =>
+                  Navigator.of(context).popUntil((route) => route.isFirst),
+              child: Text(
                 "VOLVER A LA PÁGINA PRINCIPAL",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: azulATT, fontWeight: FontWeight.bold),
               ),
             ),
           ],
