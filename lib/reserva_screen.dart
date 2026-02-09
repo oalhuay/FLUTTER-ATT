@@ -826,8 +826,7 @@ class _ReservaScreenState extends State<ReservaScreen>
       ),
     );
   }
-
-  Widget _buildPantallaExito() {
+Widget _buildPantallaExito() {
     return Center(
       child: _buildBentoCard(
         child: Column(
@@ -844,19 +843,20 @@ class _ReservaScreenState extends State<ReservaScreen>
               style: TextStyle(
                 color: azulATT,
                 fontWeight: FontWeight.w900,
-                fontSize: 20,
+                fontSize: 22,
               ),
             ),
             const SizedBox(height: 10),
             const Text(
-              "Tu turno ha sido reservado con éxito.",
+              "Tu turno ha sido reservado.\nYa puedes descargar tu comprobante.",
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.black54),
             ),
             const SizedBox(height: 30),
 
-            // --- BOTÓN PARA DESCARGAR COMPROBANTE ---
+            // --- BOTÓN DINÁMICO DE PDF ---
             FutureBuilder<Map<String, dynamic>?>(
+              // Buscamos la factura usando el ID que nos dio el Webhook
               future: MPService().buscarFacturaEnSupabase(
                 paymentId: _pagoID ?? "",
               ),
@@ -871,11 +871,11 @@ class _ReservaScreenState extends State<ReservaScreen>
                     style: ElevatedButton.styleFrom(
                       backgroundColor: rojoATT,
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 12,
+                        horizontal: 24,
+                        vertical: 16,
                       ),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                     ),
                     icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
@@ -892,18 +892,21 @@ class _ReservaScreenState extends State<ReservaScreen>
                       fecha: DateFormat(
                         'dd/MM/yyyy HH:mm',
                       ).format(DateTime.parse(factura['fecha_emision'])),
-                      servicios: factura['servicios'] ?? "Reserva de Turno ATT",
+                      servicios: factura['servicios'] ?? "Lavado Premium ATT",
                       total: (factura['total'] as num).toDouble(),
                     ),
                   );
                 }
-                return const Text("Procesando comprobante...");
+                // Si el webhook tarda un poco, mostramos este mensaje
+                return const Text(
+                  "Generando factura digital...",
+                  style: TextStyle(fontSize: 12),
+                );
               },
             ),
 
-            const SizedBox(height: 15),
+            const SizedBox(height: 20),
 
-            // --- BOTÓN VOLVER ---
             TextButton(
               onPressed: () =>
                   Navigator.of(context).popUntil((route) => route.isFirst),
@@ -917,7 +920,6 @@ class _ReservaScreenState extends State<ReservaScreen>
       ),
     );
   }
-
   void _confirmarAntesDePagar(BuildContext context, String hora) {
     showDialog(
       context: context,
