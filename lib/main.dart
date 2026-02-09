@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:app_links/app_links.dart';
 import 'reserva_screen.dart';
 import 'splash_screen.dart';
 import 'mis_turnos_screen.dart';
@@ -9,43 +10,93 @@ import 'registro_lavadero_screen.dart';
 import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
-import 'package:flutter/services.dart'; // <--- AGREGÁ ESTA LÍNEA
+import 'package:flutter/services.dart';
+
+// --- GLOBALES REINSTALADAS ---
+final supabase = Supabase.instance.client; //
+// Esta es la que faltaba y causaba los 8 errores:
+final GlobalKey<_MapScreenState> mapScreenKey = GlobalKey<_MapScreenState>(); //
+// Key para los anuncios globales de Mercado Pago:
+final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
+    GlobalKey<ScaffoldMessengerState>(); //
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // ESTA ES LA LÍNEA CLAVE: Inicializa los nombres de días y meses en español
-  await initializeDateFormatting('es', null);
+  await initializeDateFormatting('es', null); //
 
   await Supabase.initialize(
     url: 'https://oaudxvhroedmtpwrityk.supabase.co',
     anonKey:
         'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9hdWR4dmhyb2VkbXRwd3JpdHlrIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjgwOTczMzQsImV4cCI6MjA4MzY3MzMzNH0.qj1sJFu_GSs-T656E6iyIMnSwYYZlTsQpb8Ke3OgZek',
-  );
+  ); //
 
   runApp(const MyApp());
 }
 
-final supabase = Supabase.instance.client;
-final GlobalKey<_MapScreenState> mapScreenKey = GlobalKey<_MapScreenState>();
-
-class MyApp extends StatelessWidget {
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  final _appLinks = AppLinks();
+
+  @override
+  void initState() {
+    super.initState();
+    _initDeepLinks(); //
+  }
+
+  void _initDeepLinks() {
+    _appLinks.uriLinkStream.listen((uri) {
+      final urlString = uri.toString(); //
+
+      if (urlString.contains("pago-exitoso")) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.check_circle, color: Colors.white),
+                SizedBox(width: 10),
+                Text("¡PAGO APROBADO! Tu reserva en ATT! está lista."),
+              ],
+            ),
+            backgroundColor: Colors.green.shade600,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
+        ); //
+      } else if (urlString.contains("pago-fallido")) {
+        scaffoldMessengerKey.currentState?.showSnackBar(
+          SnackBar(
+            content: const Row(
+              children: [
+                Icon(Icons.error, color: Colors.white),
+                SizedBox(width: 10),
+                Text("EL PAGO NO SE REALIZÓ. Intenta nuevamente."),
+              ],
+            ),
+            backgroundColor: Colors.red.shade600,
+            behavior: SnackBarBehavior.floating,
+          ),
+        ); //
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      scaffoldMessengerKey: scaffoldMessengerKey, //
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      supportedLocales: const [
-        Locale('es', 'AR'), // Español Argentina
-        Locale('en', 'US'), // Inglés por si las dudas
-      ],
-      locale: const Locale('es', 'AR'), // Forzamos el idioma
-      // ... resto de tu código
+      supportedLocales: const [Locale('es', 'AR'), Locale('en', 'US')],
+      locale: const Locale('es', 'AR'),
       debugShowCheckedModeBanner: false,
       title: 'ATT!: A Todo Trapo',
       theme: ThemeData(
@@ -55,7 +106,7 @@ class MyApp extends StatelessWidget {
           primary: const Color(0xFFEF4444),
         ),
       ),
-      home: const SplashScreen(),
+      home: const SplashScreen(), //
     );
   }
 }
