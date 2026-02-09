@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:url_launcher/url_launcher.dart';
+
 import 'package:intl/intl.dart';
+import 'services/pdf_helper.dart';
 
 class MisTurnosScreen extends StatefulWidget {
   final VoidCallback? onVolver;
@@ -394,20 +395,40 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                     ],
                   ),
                 ),
-                if (turno['url_comprobante'] != null)
-                  _circleActionButton(
-                    Icons.receipt_long_rounded,
-                    azulATT,
-                    () async {
-                      final url = Uri.parse(turno['url_comprobante']);
-                      if (await canLaunchUrl(url)) {
-                        await launchUrl(
-                          url,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    },
-                  ),
+                if (turno['payment_id'] != null)
+                  _circleActionButton(Icons.receipt_long_rounded, azulATT, () async {
+                    // 1. Buscamos la factura real en Supabase usando el MPService que ya tienes
+                    final factura = await supabase
+                        .from('facturas')
+                        .select()
+                        .eq('payment_id', turno['payment_id'])
+                        .maybeSingle();
+
+                    if (factura != null) {
+                      // 2. Usamos tu PdfHelper para generar y descargar el PDF en el momento
+                      PdfHelper.descargarComprobante(
+                        nroFactura: factura['payment_id']
+                            .toString()
+                            .substring(0, 8)
+                            .toUpperCase(),
+                        lavadero: turno['lavadero_nombre'],
+                        fecha: DateFormat(
+                          "dd/MM/yyyy",
+                        ).format(DateTime.parse(factura['fecha_emision'])),
+                        servicios: factura['servicios'] ?? "Reserva ATT",
+                        total: (factura['total'] as num).toDouble(),
+                      );
+                    } else {
+                      // Por si el webhook todavía no terminó de escribir
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text(
+                            "Generando comprobante digital... reintente en un momento.",
+                          ),
+                        ),
+                      );
+                    }
+                  }),
                 if (_filtroActual == 'activo') ...[
                   const SizedBox(width: 10),
                   _circleActionButton(

@@ -22,7 +22,7 @@ const supabase = createClient(
 // --- ENDPOINT: CREAR PREFERENCIA ---
 app.post("/create-preference", async (req, res) => {
   try {
-    const { titulo, precio, userId } = req.body;
+    const { titulo, precio, userId, metadata } = req.body; // Recibimos metadata opcional
     const preference = new Preference(client);
 
     const result = await preference.create({
@@ -42,8 +42,8 @@ app.post("/create-preference", async (req, res) => {
         },
         auto_return: "approved",
         external_reference: userId,
-        // CAMBIO AQUÍ: Usamos la URL limpia de producción para el webhook
         notification_url: "https://flutter-att-8xz7.vercel.app/webhook",
+        metadata: metadata, // Pasamos info extra (fecha, hora, lavadero) si viene desde Flutter
       },
     });
 
@@ -56,13 +56,11 @@ app.post("/create-preference", async (req, res) => {
 
 // --- ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
-  // 1. Respuesta inmediata (Obligatorio para evitar reintentos infinitos de MP)
   res.status(200).send("OK");
 
   const id = req.query.id || (req.body.data && req.body.data.id);
   const type = req.query.type || req.body.type;
 
-  // Solo procesamos si el evento es un pago
   if (type === "payment" && id) {
     try {
       const { data: payment } = await axios.get(
@@ -72,27 +70,54 @@ app.post("/webhook", async (req, res) => {
         }
       );
 
-      // Verificamos que el estado sea aprobado
       if (payment.status === "approved") {
-        console.log(`💰 Pago ${id} aprobado. Registrando...`);
+        const userId = payment.external_reference;
+        const paymentId = id.toString();
 
-        const { error } = await supabase.from("facturas").insert({
-          payment_id: id.toString(),
+        console.log(
+          `💰 Pago ${paymentId} aprobado. Procesando factura y turno...`
+        );
+
+        // 1. GUARDAR FACTURA
+        const { error: errorFactura } = await supabase.from("facturas").insert({
+          payment_id: paymentId,
           status: "approved",
           total: payment.transaction_amount,
-          user_id: payment.external_reference, // Recuperamos el ID de Supabase enviado desde Flutter
-          servicios: "Reserva ATT",
+          user_id: userId,
+          servicios: payment.description || "Reserva ATT",
           fecha_emision: new Date().toISOString(),
         });
 
-        if (error) {
-          console.error("❌ Error al insertar en Supabase:", error.message);
+        if (errorFactura) {
+          console.error("❌ Error Supabase (Factura):", errorFactura.message);
         } else {
-          console.log("🚀 ¡FACTURA GUARDADA CON ÉXITO EN PRODUCCIÓN!");
+          console.log("🚀 Factura guardada.");
+        }
+
+        // 2. GUARDAR TURNO (Para que aparezca en "Mis Turnos")
+        // Usamos los datos que Mercado Pago nos devuelve o los que mandamos en metadata
+        const { error: errorTurno } = await supabase.from("turnos").insert({
+          user_id: userId,
+          payment_id: paymentId,
+          estado: "confirmado",
+          monto_pagado: payment.transaction_amount,
+          // Si envías fecha/hora en metadata al crear la preferencia, las usas aquí:
+          fecha:
+            payment.metadata?.fecha_turno ||
+            new Date().toISOString().split("T")[0],
+          hora: payment.metadata?.hora_turno || "00:00",
+          lavadero_nombre: payment.metadata?.lavadero_nombre || "Lavadero ATT",
+          servicios: payment.description || "Reserva ATT",
+        });
+
+        if (errorTurno) {
+          console.error("❌ Error Supabase (Turno):", errorTurno.message);
+        } else {
+          console.log("📅 Turno registrado con éxito.");
         }
       }
     } catch (error) {
-      console.error("⚠️ Error consultando pago en MP:", error.message);
+      console.error("⚠️ Error procesando webhook:", error.message);
     }
   }
 });
