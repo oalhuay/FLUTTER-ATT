@@ -19,7 +19,7 @@ final GlobalKey<_MapScreenState> mapScreenKey = GlobalKey<_MapScreenState>(); //
 // Key para los anuncios globales de Mercado Pago:
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>(); //
-
+String? pendingPaymentResult; //
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es', null); //
@@ -51,37 +51,13 @@ class _MyAppState extends State<MyApp> {
 
   void _initDeepLinks() {
     _appLinks.uriLinkStream.listen((uri) {
-      final urlString = uri.toString(); //
+      final urlString = uri.toString();
 
+      // Guardamos el resultado sin mostrar nada aún
       if (urlString.contains("pago-exitoso")) {
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.check_circle, color: Colors.white),
-                SizedBox(width: 10),
-                Text("¡PAGO APROBADO! Tu reserva en ATT! está lista."),
-              ],
-            ),
-            backgroundColor: Colors.green.shade600,
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 5),
-          ),
-        ); //
+        pendingPaymentResult = "success";
       } else if (urlString.contains("pago-fallido")) {
-        scaffoldMessengerKey.currentState?.showSnackBar(
-          SnackBar(
-            content: const Row(
-              children: [
-                Icon(Icons.error, color: Colors.white),
-                SizedBox(width: 10),
-                Text("EL PAGO NO SE REALIZÓ. Intenta nuevamente."),
-              ],
-            ),
-            backgroundColor: Colors.red.shade600,
-            behavior: SnackBarBehavior.floating,
-          ),
-        ); //
+        pendingPaymentResult = "error";
       }
     });
   }
@@ -330,16 +306,21 @@ class _MainLayoutState extends State<MainLayout> {
     return lista.take(5).toList(); // Mantenemos tu límite de 5 tarjetas rápidas
   }
 
-  @override
+@override
   void initState() {
     super.initState();
     _obtenerRolActual();
+
+    // --- LÓGICA DE AVISO POS-CARGA ---
+    // Esperamos a que el primer frame se dibuje (después del Splash) para mostrar el anuncio
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _verificarYMostrarNotificacionDePago();
+    });
 
     supabase.auth.onAuthStateChange.listen((data) {
       if (mounted) {
         _obtenerRolActual();
 
-        // --- AGREGAMOS ESTA LÓGICA DE LIMPIEZA ---
         // Si el usuario es nulo (cerró sesión), limpiamos la selección
         if (supabase.auth.currentUser == null) {
           setState(() {
@@ -352,6 +333,46 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
+  // FUNCIÓN AUXILIAR PARA EL ANUNCIO
+  void _verificarYMostrarNotificacionDePago() {
+    // Si no hay ningún resultado de pago pendiente, no hacemos nada
+    if (pendingPaymentResult == null) return;
+
+    if (pendingPaymentResult == "success") {
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.white),
+              SizedBox(width: 10),
+              Text("¡PAGO APROBADO! Tu reserva en ATT! está lista."),
+            ],
+          ),
+          backgroundColor: Colors.green.shade600,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } else if (pendingPaymentResult == "error") {
+      scaffoldMessengerKey.currentState?.showSnackBar(
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.error, color: Colors.white),
+              SizedBox(width: 10),
+              Text("EL PAGO NO SE REALIZÓ. Intenta nuevamente."),
+            ],
+          ),
+          backgroundColor: Colors.red.shade600,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+
+    // IMPORTANTÍSIMO: Limpiamos la variable global para que el aviso
+    // no vuelva a salir si el usuario navega o recarga la pantalla.
+    pendingPaymentResult = null;
+  }
   Widget _buildContenidoPanelDerecho() {
     // CASO 1: Si es Dueño de Lavadero -> Siempre ve el panel de edición si hay algo seleccionado
     if (_rolUsuario == 'lavadero') {
