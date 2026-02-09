@@ -22,6 +22,17 @@ const allowedOrigins = [
   "http://localhost:3000", // Para pruebas locales
   "http://localhost:5000",
 ];
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "https://flutter-att.vercel.app");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+
+  // Si es una petición de pre-vuelo (OPTIONS), respondemos 200 inmediatamente
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
 app.use(
   cors({
     origin: function (origin, callback) {
@@ -37,6 +48,14 @@ app.use(
     },
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
+app.use(
+  cors({
+    origin: "https://flutter-att.vercel.app", // Tu dominio de Flutter
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true,
   })
 );
 const client = new MercadoPagoConfig({
