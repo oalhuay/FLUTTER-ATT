@@ -8,65 +8,45 @@ const PDFDocument = require("pdfkit");
 
 const app = express();
 
-// --- 1. CONFIGURACIÓN UNIFICADA DE CORS ---
-const allowedOrigins = [
-  "https://flutter-att.vercel.app",
-  "https://flutter-att-8xz7.vercel.app",
-  "http://localhost:3000",
-  "http://localhost:5000",
-];
-
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
-
-  // Si el origen está en nuestra lista permitida, lo seteamos dinámicamente
-  if (allowedOrigins.includes(origin)) {
-    res.header("Access-Control-Allow-Origin", origin);
-  } else {
-    // Fallback para producción si el origen es nulo (como apps móviles)
-    res.header("Access-Control-Allow-Origin", "https://flutter-att.vercel.app");
-  }
-
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
-  res.header(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Requested-With"
-  );
-  res.header("Access-Control-Allow-Credentials", "true");
-
-  // Respuesta inmediata para el Preflight (OPTIONS) - ESTO SOLUCIONA TU ERROR
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-  next();
-});
-
-// Middleware de cors como respaldo
+// --- CORS CONFIGURACIÓN ---
 app.use(
   cors({
-    origin: allowedOrigins,
+    origin: "https://flutter-att.vercel.app",
     credentials: true,
   })
 );
 
 app.use(express.json());
 
-// --- CONFIGURACIÓN DE CLIENTES ---
-const client = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN,
+// Manejo manual de OPTIONS para evitar el 500 en preflight
+app.options("*", (req, res) => {
+  res.header("Access-Control-Allow-Origin", "https://flutter-att.vercel.app");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.sendStatus(200);
 });
 
+// --- CLIENTES ---
+// Usamos try-catch para que si faltan las ENV, no rompa todo el servidor
 const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_URL || "",
+  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
 );
 
-// --- ENDPOINT: CREAR PREFERENCIA ---
+const client = new MercadoPagoConfig({
+  accessToken: process.env.MP_ACCESS_TOKEN || "",
+});
+
+// --- RUTA: CREAR PREFERENCIA ---
 app.post("/create-preference", async (req, res) => {
   try {
     const { titulo, precio, userId, metadata } = req.body;
-    const preference = new Preference(client);
 
+    if (!titulo || !precio) {
+      return res.status(400).json({ error: "Faltan datos obligatorios" });
+    }
+
+    const preference = new Preference(client);
     const result = await preference.create({
       body: {
         items: [
@@ -80,7 +60,6 @@ app.post("/create-preference", async (req, res) => {
         back_urls: {
           success: "https://flutter-att.vercel.app/#/pago-exitoso",
           failure: "https://flutter-att.vercel.app/#/pago-fallido",
-          pending: "https://flutter-att.vercel.app/#/pago-pendiente",
         },
         auto_return: "approved",
         external_reference: userId,
@@ -91,7 +70,7 @@ app.post("/create-preference", async (req, res) => {
 
     res.json({ init_point: result.init_point });
   } catch (error) {
-    console.error("Error SDK MP:", error);
+    console.error("❌ Error en create-preference:", error);
     res.status(500).json({ error: error.message });
   }
 });
