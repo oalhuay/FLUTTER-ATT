@@ -8,45 +8,52 @@ const PDFDocument = require("pdfkit");
 
 const app = express();
 
-// --- CORS CONFIGURACIÓN ---
-app.use(
-  cors({
-    origin: "https://flutter-att.vercel.app",
-    credentials: true,
-  })
-);
+// --- 1. CONFIGURACIÓN DE CORS Y CONTROL DE PRE-VUELO (OPTIONS) ---
+const allowedOrigins = [
+  "https://flutter-att.vercel.app",
+  "https://flutter-att-8xz7.vercel.app",
+  "http://localhost:3000",
+];
+
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  } else {
+    res.header("Access-Control-Allow-Origin", "https://flutter-att.vercel.app");
+  }
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  // Respuesta inmediata para el Preflight (Resuelve: "It does not have HTTP ok status")
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  next();
+});
 
 app.use(express.json());
 
-// Manejo manual de OPTIONS para evitar el 500 en preflight
-app.options("*", (req, res) => {
-  res.header("Access-Control-Allow-Origin", "https://flutter-att.vercel.app");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-  res.sendStatus(200);
+// --- 2. CONFIGURACIÓN DE CLIENTES ---
+const client = new MercadoPagoConfig({
+  accessToken: process.env.MP_ACCESS_TOKEN,
 });
 
-// --- CLIENTES ---
-// Usamos try-catch para que si faltan las ENV, no rompa todo el servidor
 const supabase = createClient(
-  process.env.SUPABASE_URL || "",
-  process.env.SUPABASE_SERVICE_ROLE_KEY || ""
+  process.env.SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-const client = new MercadoPagoConfig({
-  accessToken: process.env.MP_ACCESS_TOKEN || "",
-});
-
-// --- RUTA: CREAR PREFERENCIA ---
+// --- 3. ENDPOINT: CREAR PREFERENCIA ---
 app.post("/create-preference", async (req, res) => {
   try {
     const { titulo, precio, userId, metadata } = req.body;
-
-    if (!titulo || !precio) {
-      return res.status(400).json({ error: "Faltan datos obligatorios" });
-    }
-
     const preference = new Preference(client);
+
     const result = await preference.create({
       body: {
         items: [
@@ -64,20 +71,20 @@ app.post("/create-preference", async (req, res) => {
         auto_return: "approved",
         external_reference: userId,
         notification_url: "https://flutter-att-8xz7.vercel.app/webhook",
-        metadata: metadata,
+        metadata: metadata, // Importante para recuperar fecha/hora en el webhook
       },
     });
 
     res.json({ init_point: result.init_point });
   } catch (error) {
-    console.error("❌ Error en create-preference:", error);
+    console.error("❌ Error MP:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// --- ENDPOINT: WEBHOOK ---
+// --- 4. ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
-  res.status(200).send("OK");
+  res.status(200).send("OK"); // Obligatorio para Mercado Pago
 
   const id = req.query.id || (req.body.data && req.body.data.id);
   const type = req.query.type || req.body.type;
@@ -86,9 +93,7 @@ app.post("/webhook", async (req, res) => {
     try {
       const { data: payment } = await axios.get(
         `https://api.mercadopago.com/v1/payments/${id}`,
-        {
-          headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` },
-        }
+        { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` } }
       );
 
       if (payment.status === "approved") {
@@ -96,7 +101,9 @@ app.post("/webhook", async (req, res) => {
         const paymentId = id.toString();
         const metadata = payment.metadata || {};
 
-        // --- A. GENERAR PDF EN MEMORIA ---
+        console.log(`💰 Procesando pago aprobado ${paymentId}...`);
+
+        // --- A. GENERAR PDF ---
         const doc = new PDFDocument();
         let buffers = [];
         doc.on("data", buffers.push.bind(buffers));
@@ -109,7 +116,7 @@ app.post("/webhook", async (req, res) => {
         doc
           .fontSize(10)
           .fillColor("black")
-          .text(`Comprobante de Pago #${paymentId}`, { align: "right" });
+          .text(`Comprobante #${paymentId}`, { align: "right" });
         doc.text(`Fecha: ${new Date().toLocaleDateString()}`, {
           align: "right",
         });
@@ -117,12 +124,12 @@ app.post("/webhook", async (req, res) => {
         doc
           .fontSize(14)
           .text(`Lavadero: ${metadata.lavadero_nombre || "Sucursal ATT!"}`);
-        doc.text(`Servicio: ${payment.description || "Lavado Premium"}`);
         doc.text(
-          `Turno: ${metadata.fecha_turno || "--"} a las ${
+          `Turno: ${metadata.fecha_turno || "--"} - ${
             metadata.hora_turno || "--"
           }hs`
         );
+        doc.text(`Servicio: ${payment.description || "Lavado Premium"}`);
         doc.moveDown();
         doc
           .fontSize(20)
@@ -135,22 +142,19 @@ app.post("/webhook", async (req, res) => {
           const fileName = `tickets/factura_${paymentId}.pdf`;
 
           try {
-            // 1. Subir a Supabase Storage
-            const { error: uploadError } = await supabase.storage
+            // 1. Subir a Storage
+            await supabase.storage
               .from("comprobantes")
               .upload(fileName, pdfBuffer, {
                 contentType: "application/pdf",
                 upsert: true,
               });
 
-            if (uploadError) throw uploadError;
-
-            // 2. Obtener la URL Pública
             const {
               data: { publicUrl },
             } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
 
-            // 3. Registrar Factura
+            // 2. Insertar Factura
             await supabase.from("facturas").insert({
               payment_id: paymentId,
               status: "approved",
@@ -161,7 +165,7 @@ app.post("/webhook", async (req, res) => {
               url_pdf: publicUrl,
             });
 
-            // 4. Registrar Turno
+            // 3. Insertar Turno (Para "Mis Turnos" en la App)
             await supabase.from("turnos").insert({
               user_id: userId,
               payment_id: paymentId,
@@ -175,23 +179,21 @@ app.post("/webhook", async (req, res) => {
               url_comprobante: publicUrl,
             });
 
-            console.log("📅 Sistema procesado: PDF, Factura y Turno creados.");
+            console.log("📅 Proceso completado: Turno y Factura vinculados.");
           } catch (dbErr) {
-            console.error("🚨 Error en Storage/Base de Datos:", dbErr.message);
+            console.error("🚨 Error Supabase/Storage:", dbErr.message);
           }
         });
       }
     } catch (error) {
-      console.error("⚠️ Error procesando webhook:", error.message);
+      console.error("⚠️ Error Webhook:", error.message);
     }
   }
 });
 
 if (process.env.NODE_ENV !== "production") {
   const PORT = process.env.PORT || 3001;
-  app.listen(PORT, () => {
-    console.log(`🚀 Servidor ATT local corriendo`);
-  });
+  app.listen(PORT, () => console.log(`🚀 Servidor ATT local activo`));
 }
 
 module.exports = app;
