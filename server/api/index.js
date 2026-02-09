@@ -3,62 +3,55 @@ const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const axios = require("axios");
 require("dotenv").config();
-const cors = require("cors");
 const { MercadoPagoConfig, Preference } = require("mercadopago");
-const PDFDocument = require("pdfkit"); //
+const PDFDocument = require("pdfkit");
+
 const app = express();
-app.use(
-  cors({
-    origin: "https://flutter-att.vercel.app", // Permite cualquier origen (ideal para evitar problemas en Vercel)
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-    credentials: true,
-  })
-);
-app.use(express.json());
-app.options("*", cors());
+
+// --- 1. CONFIGURACIÓN UNIFICADA DE CORS ---
 const allowedOrigins = [
-  "https://flutter-att.vercel.app", // Tu dominio de front-end
-  "https://flutter-att-8xz7.vercel.app", // Tu dominio de servidor
-  "http://localhost:3000", // Para pruebas locales
+  "https://flutter-att.vercel.app",
+  "https://flutter-att-8xz7.vercel.app",
+  "http://localhost:3000",
   "http://localhost:5000",
 ];
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "https://flutter-att.vercel.app");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  // Si es una petición de pre-vuelo (OPTIONS), respondemos 200 inmediatamente
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
+
+  // Si el origen está en nuestra lista permitida, lo seteamos dinámicamente
+  if (allowedOrigins.includes(origin)) {
+    res.header("Access-Control-Allow-Origin", origin);
+  } else {
+    // Fallback para producción si el origen es nulo (como apps móviles)
+    res.header("Access-Control-Allow-Origin", "https://flutter-att.vercel.app");
+  }
+
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
+  res.header("Access-Control-Allow-Credentials", "true");
+
+  // Respuesta inmediata para el Preflight (OPTIONS) - ESTO SOLUCIONA TU ERROR
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
   next();
 });
-app.use(
-  cors({
-    origin: function (origin, callback) {
-      // Permitir peticiones sin origen (como apps móviles o curl)
-      if (!origin) return callback(null, true);
 
-      if (allowedOrigins.indexOf(origin) === -1) {
-        const msg =
-          "El policy de CORS para este sitio no permite acceso desde el origen especificado.";
-        return callback(new Error(msg), false);
-      }
-      return callback(null, true);
-    },
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  })
-);
+// Middleware de cors como respaldo
 app.use(
   cors({
-    origin: "https://flutter-att.vercel.app", // Tu dominio de Flutter
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
+    origin: allowedOrigins,
     credentials: true,
   })
 );
+
+app.use(express.json());
+
+// --- CONFIGURACIÓN DE CLIENTES ---
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN,
 });
@@ -71,7 +64,7 @@ const supabase = createClient(
 // --- ENDPOINT: CREAR PREFERENCIA ---
 app.post("/create-preference", async (req, res) => {
   try {
-    const { titulo, precio, userId, metadata } = req.body; // Recibimos metadata opcional
+    const { titulo, precio, userId, metadata } = req.body;
     const preference = new Preference(client);
 
     const result = await preference.create({
@@ -92,7 +85,7 @@ app.post("/create-preference", async (req, res) => {
         auto_return: "approved",
         external_reference: userId,
         notification_url: "https://flutter-att-8xz7.vercel.app/webhook",
-        metadata: metadata, // Pasamos info extra (fecha, hora, lavadero) si viene desde Flutter
+        metadata: metadata,
       },
     });
 
@@ -103,8 +96,8 @@ app.post("/create-preference", async (req, res) => {
   }
 });
 
+// --- ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
-  // 1. Respuesta inmediata para Mercado Pago
   res.status(200).send("OK");
 
   const id = req.query.id || (req.body.data && req.body.data.id);
@@ -120,21 +113,15 @@ app.post("/webhook", async (req, res) => {
       );
 
       if (payment.status === "approved") {
-        console.log("-----------------------------------------");
-        console.log("💰 PROCESANDO PAGO APROBADO:", id);
-        console.log("Metadata:", JSON.stringify(payment.metadata, null, 2));
-        console.log("-----------------------------------------");
-
         const userId = payment.external_reference;
         const paymentId = id.toString();
-        const metadata = payment.metadata || {}; //
+        const metadata = payment.metadata || {};
 
         // --- A. GENERAR PDF EN MEMORIA ---
         const doc = new PDFDocument();
         let buffers = [];
         doc.on("data", buffers.push.bind(buffers));
 
-        // Diseño del PDF (ATT! 2040)
         doc
           .fontSize(25)
           .fillColor("#3ABEF9")
@@ -164,7 +151,6 @@ app.post("/webhook", async (req, res) => {
           .text(`TOTAL: $${payment.transaction_amount}`, { align: "left" });
         doc.end();
 
-        // --- B. ESPERAR A QUE EL PDF TERMINE Y SUBIRLO ---
         doc.on("end", async () => {
           const pdfBuffer = Buffer.concat(buffers);
           const fileName = `tickets/factura_${paymentId}.pdf`;
@@ -185,50 +171,39 @@ app.post("/webhook", async (req, res) => {
               data: { publicUrl },
             } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
 
-            console.log("📄 PDF subido correctamente:", publicUrl);
-
             // 3. Registrar Factura
-            const { error: errorFactura } = await supabase
-              .from("facturas")
-              .insert({
-                payment_id: paymentId,
-                status: "approved",
-                total: payment.transaction_amount,
-                user_id: userId,
-                servicios: payment.description || "Reserva ATT",
-                fecha_emision: new Date().toISOString(),
-                url_pdf: publicUrl, // Guardamos el link en la factura
-              });
-
-            if (errorFactura)
-              console.error("❌ Error Factura:", errorFactura.message);
+            await supabase.from("facturas").insert({
+              payment_id: paymentId,
+              status: "approved",
+              total: payment.transaction_amount,
+              user_id: userId,
+              servicios: payment.description || "Reserva ATT",
+              fecha_emision: new Date().toISOString(),
+              url_pdf: publicUrl,
+            });
 
             // 4. Registrar Turno
-            const { error: errorTurno } = await supabase.from("turnos").insert({
+            await supabase.from("turnos").insert({
               user_id: userId,
               payment_id: paymentId,
-              estado: "activo", // Cambiado a 'activo' para tu filtro de Flutter
+              estado: "activo",
               monto_pagado: payment.transaction_amount,
               fecha:
                 metadata.fecha_turno || new Date().toISOString().split("T")[0],
               hora: metadata.hora_turno || "00:00",
               lavadero_nombre: metadata.lavadero_nombre || "Lavadero ATT",
               servicios: payment.description || "Reserva ATT",
-              url_comprobante: publicUrl, // El cliente ya tiene el link listo
+              url_comprobante: publicUrl,
             });
 
-            if (errorTurno) {
-              console.error("❌ Error Turno:", errorTurno.message);
-            } else {
-              console.log("📅 Turno y Factura vinculados exitosamente.");
-            }
+            console.log("📅 Sistema procesado: PDF, Factura y Turno creados.");
           } catch (dbErr) {
             console.error("🚨 Error en Storage/Base de Datos:", dbErr.message);
           }
         });
       }
     } catch (error) {
-      console.error("⚠️ Error consultando pago en MP:", error.message);
+      console.error("⚠️ Error procesando webhook:", error.message);
     }
   }
 });
