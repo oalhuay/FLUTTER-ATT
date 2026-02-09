@@ -1,48 +1,11 @@
-import 'dart:typed_data'; // Necesario para Uint8List
+import 'dart:typed_data';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-// 1. PASO IMPORTANTE: Esta librería permite "hablar" con el navegador Chrome
+// Importante: Este import solo funcionará en Web.
 import 'dart:html' as html;
 
 class PdfHelper {
-  // --- 1. FUNCIÓN PARA DESCARGAR (La que reemplaza a la impresión molesta) ---
   static Future<void> descargarComprobante({
-    required String nroFactura,
-    required String lavadero,
-    required String fecha, 
-    required String servicios,
-    required double total,
-  }) async {
-    // Generamos el documento usando tu función privada de abajo
-    final pdf = _construirDocumento(
-      nroFactura: nroFactura,
-      lavadero: lavadero,
-      fecha: fecha,
-      servicios: servicios,
-      total: total,
-    );
-
-    // Guardamos el PDF en una lista de bytes
-    final Uint8List bytes = await pdf.save();
-
-    // LÓGICA DE DESCARGA WEB:
-    // Creamos un "Blob" (un archivo virtual en la memoria del navegador)
-    final blob = html.Blob([bytes], 'application/pdf');
-
-    // Creamos una URL temporal para ese archivo
-    final url = html.Url.createObjectUrlFromBlob(blob);
-
-    // Creamos un link invisible, le ponemos nombre y le hacemos "click" solo
-    html.AnchorElement(href: url)
-      ..setAttribute("download", "ATT! COMPROBANTE $nroFactura.pdf")
-      ..click();
-
-    // Limpiamos la memoria
-    html.Url.revokeObjectUrl(url);
-  }
-
-  // --- 2. FUNCIÓN PARA OBTENER BYTES (La mantengo por si subís a Storage) ---
-  static Future<Uint8List> obtenerBytesPDF({
     required String nroFactura,
     required String lavadero,
     required String fecha,
@@ -56,10 +19,23 @@ class PdfHelper {
       servicios: servicios,
       total: total,
     );
-    return pdf.save();
+
+    final Uint8List bytes = await pdf.save();
+
+    // Lógica de descarga optimizada para el nuevo sistema
+    final blob = html.Blob([bytes], 'application/pdf');
+    final url = html.Url.createObjectUrlFromBlob(blob);
+
+    html.AnchorElement(href: url)
+      ..setAttribute(
+        "download",
+        "ATT_Factura_${nroFactura.substring(0, 8)}.pdf",
+      )
+      ..click();
+
+    html.Url.revokeObjectUrl(url);
   }
 
-  // --- 3. FUNCIÓN PRIVADA (Tu diseño original, no se toca nada) ---
   static pw.Document _construirDocumento({
     required String nroFactura,
     required String lavadero,
@@ -69,80 +45,113 @@ class PdfHelper {
   }) {
     final pdf = pw.Document();
 
+    // Colores oficiales ATT! 2040
+    final azulATT = PdfColor.fromHex('#3ABEF9');
+    final rojoATT = PdfColor.fromHex('#EF4444');
+
     pdf.addPage(
       pw.Page(
         pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
           return pw.Padding(
-            padding: const pw.EdgeInsets.all(20),
+            padding: const pw.EdgeInsets.all(35),
             child: pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
+                // Cabecera Futurista
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      "ATT - A TODO TRAPO",
+                      "ATT! A TODO TRAPO",
                       style: pw.TextStyle(
                         fontSize: 24,
                         fontWeight: pw.FontWeight.bold,
+                        color: azulATT,
                       ),
                     ),
                     pw.Text(
-                      "COMPROBANTE DIGITAL",
-                      style: pw.TextStyle(color: PdfColors.grey),
+                      "COMPROBANTE OFICIAL",
+                      style: pw.TextStyle(color: PdfColors.grey, fontSize: 10),
                     ),
                   ],
                 ),
-                pw.SizedBox(height: 20),
-                pw.Divider(),
                 pw.SizedBox(height: 10),
+                pw.Container(height: 1, color: azulATT),
+                pw.SizedBox(height: 30),
+
+                // Datos de la Transacción (Del nuevo sistema)
                 pw.Text(
-                  "Factura Nro: #$nroFactura",
+                  "ID DE TRANSACCIÓN: #$nroFactura",
                   style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
                 ),
-                pw.Text("Fecha de emisión: $fecha"),
-                pw.SizedBox(height: 20),
+                pw.Text("EMITIDO EL: $fecha"),
+                pw.SizedBox(height: 30),
+
                 pw.Text(
-                  "Detalle del Lavadero:",
+                  "ESTABLECIMIENTO",
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey700,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+                pw.Text(
+                  lavadero,
                   style: pw.TextStyle(
                     fontSize: 18,
                     fontWeight: pw.FontWeight.bold,
                   ),
                 ),
-                pw.Text(lavadero),
                 pw.SizedBox(height: 20),
+
                 pw.Text(
-                  "Servicios contratados:",
-                  style: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+                  "RESUMEN DE SERVICIOS",
+                  style: pw.TextStyle(
+                    fontSize: 10,
+                    color: PdfColors.grey700,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
                 ),
-                pw.Bullet(text: servicios),
+                pw.Bullet(
+                  text: servicios,
+                  style: const pw.TextStyle(fontSize: 12),
+                ),
+
                 pw.Spacer(),
-                pw.Divider(),
+                pw.Divider(color: PdfColors.grey300),
+
+                // Total con el Rojo ATT!
                 pw.Row(
                   mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
                   children: [
                     pw.Text(
-                      "TOTAL PAGADO:",
+                      "TOTAL ABONADO",
                       style: pw.TextStyle(
-                        fontSize: 20,
+                        fontSize: 18,
                         fontWeight: pw.FontWeight.bold,
                       ),
                     ),
                     pw.Text(
                       "\$${total.toStringAsFixed(2)}",
                       style: pw.TextStyle(
-                        fontSize: 20,
+                        fontSize: 22,
                         fontWeight: pw.FontWeight.bold,
-                        color: PdfColors.green,
+                        color: rojoATT,
                       ),
                     ),
                   ],
                 ),
-                pw.SizedBox(height: 20),
+                pw.SizedBox(height: 40),
                 pw.Center(
                   child: pw.Text(
-                    "Este es un comprobante válido de reserva para el lavadero.",
+                    "Este comprobante confirma que el pago fue procesado exitosamente a través de Mercado Pago.",
+                    textAlign: pw.TextAlign.center,
+                    style: pw.TextStyle(
+                      fontSize: 9,
+                      color: PdfColors.grey600,
+                      fontStyle: pw.FontStyle.italic,
+                    ),
                   ),
                 ),
               ],
