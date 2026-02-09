@@ -22,7 +22,8 @@ class _ReservaScreenState extends State<ReservaScreen>
   double _totalAPagar = 0.0;
   String? _horaSeleccionada;
   bool _esperandoPago = false;
-
+  bool _pagoConfirmado = false; // Controla si mostramos la pantalla de éxito
+  String? _pagoID; // Guarda el ID para mostrarlo en el comprobante
   bool _estaProcesando = false;
   DateTime _fechaSeleccionada = DateTime.now();
   final _appLinks = AppLinks();
@@ -44,21 +45,26 @@ class _ReservaScreenState extends State<ReservaScreen>
       }
     }
     _appLinks.uriLinkStream.listen((uri) {
-      // uri será algo como: att-app://pago-fallido?status=rejected&payment_id=...
-
-      final String path =
-          uri.host; // Esto devuelve "pago-exitoso" o "pago-fallido"
+      final String path = uri.host;
 
       if (path == "pago-fallido") {
         setState(() {
           _estaProcesando = false;
           _esperandoPago = false;
         });
-
-        // Aquí muestras el aviso que querías
         _mostrarMensajeError("No se realizó el pago. Por favor, reintente.");
-      } else if (path == "pago-exitoso") {
+      } else if (path == "pago-exitoso" || path == "pago-finalizado") {
         final paymentId = uri.queryParameters['payment_id'];
+
+        // CAMBIO AQUÍ: Activamos la vista de éxito directamente
+        setState(() {
+          _pagoConfirmado = true;
+          _pagoID = paymentId;
+          _estaProcesando = false;
+          _esperandoPago = false;
+        });
+
+        // Seguimos registrando en la base de datos por detrás
         _ejecutarRegistroEnBaseDeDatos(
           status: 'approved',
           paymentId: paymentId ?? '',
@@ -394,264 +400,291 @@ class _ReservaScreenState extends State<ReservaScreen>
     final horarios = _generarHorarios();
     final Map<String, dynamic> precios =
         widget.lavadero['servicios_precios'] ?? {};
-
     return Scaffold(
       backgroundColor: fondoSoft,
-      body: Stack(
-        children: [
-          CustomScrollView(
-            slivers: [
-              // HEADER PREMIUM BENTO
-              SliverAppBar(
-                expandedHeight: 120,
-                floating: true,
-                pinned: true,
-                backgroundColor: Colors.white,
-                elevation: 0,
-                flexibleSpace: FlexibleSpaceBar(
-                  centerTitle: true,
-                  title: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: azulATT.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      widget.lavadero['razon_social'].toUpperCase(),
-                      style: TextStyle(
-                        color: azulATT,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 14,
-                        letterSpacing: 1.5,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-
-              // BENTO BOX 1: FECHA
-              SliverToBoxAdapter(
-                child: _buildBentoCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _bentoHeader(
-                        "Fecha del turno",
-                        Icons.calendar_today_rounded,
-                      ),
-                      const SizedBox(height: 12),
-                      InkWell(
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: () async {
-                          final picked = await showDatePicker(
-                            context: context,
-                            initialDate: _fechaSeleccionada,
-                            firstDate: DateTime.now(),
-                            lastDate: DateTime.now().add(
-                              const Duration(days: 30),
-                            ),
-                            selectableDayPredicate: _esDiaLaboral,
-                            locale: const Locale("es", "AR"),
-                          );
-                          if (picked != null) {
-                            setState(() => _fechaSeleccionada = picked);
-                          }
-                        },
-                        child: Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: azulATT.withOpacity(0.08),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(color: azulATT.withOpacity(0.1)),
+      body: _pagoConfirmado
+          ? _buildPantallaExito()
+          : Stack(
+              children: [
+                CustomScrollView(
+                  slivers: [
+                    // HEADER PREMIUM BENTO
+                    SliverAppBar(
+                      expandedHeight: 120,
+                      floating: true,
+                      pinned: true,
+                      backgroundColor: Colors.white,
+                      elevation: 0,
+                      flexibleSpace: FlexibleSpaceBar(
+                        centerTitle: true,
+                        title: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 6,
                           ),
-                          child: Row(
-                            children: [
-                              Text(
-                                DateFormat(
-                                  "EEEE d 'de' MMMM",
-                                  "es",
-                                ).format(_fechaSeleccionada).toUpperCase(),
-                                style: TextStyle(
-                                  color: azulATT,
-                                  fontWeight: FontWeight.w900,
-                                  fontSize: 13,
-                                ),
-                              ),
-                              const Spacer(),
-                              Icon(
-                                Icons.edit_calendar_rounded,
-                                color: azulATT,
-                                size: 22,
-                              ),
-                            ],
+                          decoration: BoxDecoration(
+                            color: azulATT.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            widget.lavadero['razon_social'].toUpperCase(),
+                            style: TextStyle(
+                              color: azulATT,
+                              fontWeight: FontWeight.w900,
+                              fontSize: 14,
+                              letterSpacing: 1.5,
+                            ),
                           ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
 
-              // BENTO BOX 2: SERVICIOS
-              SliverToBoxAdapter(
-                child: _buildBentoCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _bentoHeader(
-                        "Servicios y Tarifas",
-                        Icons.auto_awesome_rounded,
-                      ),
-                      const SizedBox(height: 12),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: precios.keys.map((s) {
-                          bool isSel = _serviciosSeleccionados.contains(s);
-                          return ChoiceChip(
-                            label: Text("$s | \$${precios[s]}"),
-                            selected: isSel,
-                            onSelected: s == "Lavado"
-                                ? null
-                                : (val) {
-                                    setState(() {
-                                      val
-                                          ? _serviciosSeleccionados.add(s)
-                                          : _serviciosSeleccionados.remove(s);
-                                      _calcularTotal();
-                                    });
-                                  },
-                            selectedColor: azulATT,
-                            labelStyle: TextStyle(
-                              color: isSel ? Colors.white : Colors.black87,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 12,
+                    // BENTO BOX 1: FECHA
+                    SliverToBoxAdapter(
+                      child: _buildBentoCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _bentoHeader(
+                              "Fecha del turno",
+                              Icons.calendar_today_rounded,
                             ),
-                            backgroundColor: Colors.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
-                              side: BorderSide(
-                                color: isSel ? azulATT : Colors.black12,
-                              ),
-                            ),
-                          );
-                        }).toList(),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-
-              // BENTO BOX 3: HORARIOS
-              SliverToBoxAdapter(
-                child: _buildBentoCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _bentoHeader("Horarios disponibles", Icons.alarm_rounded),
-                      const SizedBox(height: 12),
-                      StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: _turnosStream,
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const LinearProgressIndicator();
-                          }
-                          final fechaIso = _fechaSeleccionada
-                              .toIso8601String()
-                              .split('T')[0];
-                          final ocupados = snapshot.data!
-                              .where(
-                                (t) =>
-                                    t['fecha'].toString() == fechaIso &&
-                                    t['estado'] != 'cancelado',
-                              )
-                              .map((t) => t['hora'].toString().substring(0, 5))
-                              .toList();
-
-                          return GridView.builder(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 4,
-                                  childAspectRatio: 2.1,
-                                  crossAxisSpacing: 10,
-                                  mainAxisSpacing: 10,
-                                ),
-                            itemCount: horarios.length,
-                            itemBuilder: (context, index) {
-                              final h = horarios[index];
-                              bool isOcupado = ocupados.contains(h);
-                              bool isSel = _horaSeleccionada == h;
-                              return InkWell(
-                                borderRadius: BorderRadius.circular(12),
-                                onTap: isOcupado
-                                    ? null
-                                    : () =>
-                                          setState(() => _horaSeleccionada = h),
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  decoration: BoxDecoration(
-                                    color: isOcupado
-                                        ? Colors.black12
-                                        : (isSel ? azulATT : Colors.white),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isSel ? azulATT : Colors.black12,
-                                    ),
-                                    boxShadow: [
-                                      if (isSel)
-                                        BoxShadow(
-                                          color: azulATT.withOpacity(0.3),
-                                          blurRadius: 8,
-                                        ),
-                                    ],
+                            const SizedBox(height: 12),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(18),
+                              onTap: () async {
+                                final picked = await showDatePicker(
+                                  context: context,
+                                  initialDate: _fechaSeleccionada,
+                                  firstDate: DateTime.now(),
+                                  lastDate: DateTime.now().add(
+                                    const Duration(days: 30),
                                   ),
-                                  child: Center(
-                                    child: Text(
-                                      h,
+                                  selectableDayPredicate: _esDiaLaboral,
+                                  locale: const Locale("es", "AR"),
+                                );
+                                if (picked != null) {
+                                  setState(() => _fechaSeleccionada = picked);
+                                }
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.all(16),
+                                decoration: BoxDecoration(
+                                  color: azulATT.withOpacity(0.08),
+                                  borderRadius: BorderRadius.circular(18),
+                                  border: Border.all(
+                                    color: azulATT.withOpacity(0.1),
+                                  ),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Text(
+                                      DateFormat("EEEE d 'de' MMMM", "es")
+                                          .format(_fechaSeleccionada)
+                                          .toUpperCase(),
                                       style: TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        color: isSel
-                                            ? Colors.white
-                                            : (isOcupado
-                                                  ? Colors.black26
-                                                  : Colors.black87),
-                                        decoration: isOcupado
-                                            ? TextDecoration.lineThrough
-                                            : null,
+                                        color: azulATT,
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 13,
                                       ),
                                     ),
-                                  ),
+                                    const Spacer(),
+                                    Icon(
+                                      Icons.edit_calendar_rounded,
+                                      color: azulATT,
+                                      size: 22,
+                                    ),
+                                  ],
                                 ),
-                              );
-                            },
-                          );
-                        },
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
-                  ),
+                    ),
+
+                    // BENTO BOX 2: SERVICIOS
+                    SliverToBoxAdapter(
+                      child: _buildBentoCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _bentoHeader(
+                              "Servicios y Tarifas",
+                              Icons.auto_awesome_rounded,
+                            ),
+                            const SizedBox(height: 12),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 8,
+                              children: precios.keys.map((s) {
+                                bool isSel = _serviciosSeleccionados.contains(
+                                  s,
+                                );
+                                return ChoiceChip(
+                                  label: Text("$s | \$${precios[s]}"),
+                                  selected: isSel,
+                                  onSelected: s == "Lavado"
+                                      ? null
+                                      : (val) {
+                                          setState(() {
+                                            val
+                                                ? _serviciosSeleccionados.add(s)
+                                                : _serviciosSeleccionados
+                                                      .remove(s);
+                                            _calcularTotal();
+                                          });
+                                        },
+                                  selectedColor: azulATT,
+                                  labelStyle: TextStyle(
+                                    color: isSel
+                                        ? Colors.white
+                                        : Colors.black87,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                  ),
+                                  backgroundColor: Colors.white,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(14),
+                                    side: BorderSide(
+                                      color: isSel ? azulATT : Colors.black12,
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // BENTO BOX 3: HORARIOS
+                    SliverToBoxAdapter(
+                      child: _buildBentoCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _bentoHeader(
+                              "Horarios disponibles",
+                              Icons.alarm_rounded,
+                            ),
+                            const SizedBox(height: 12),
+                            StreamBuilder<List<Map<String, dynamic>>>(
+                              stream: _turnosStream,
+                              builder: (context, snapshot) {
+                                if (!snapshot.hasData) {
+                                  return const LinearProgressIndicator();
+                                }
+                                final fechaIso = _fechaSeleccionada
+                                    .toIso8601String()
+                                    .split('T')[0];
+                                final ocupados = snapshot.data!
+                                    .where(
+                                      (t) =>
+                                          t['fecha'].toString() == fechaIso &&
+                                          t['estado'] != 'cancelado',
+                                    )
+                                    .map(
+                                      (t) =>
+                                          t['hora'].toString().substring(0, 5),
+                                    )
+                                    .toList();
+
+                                return GridView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithFixedCrossAxisCount(
+                                        crossAxisCount: 4,
+                                        childAspectRatio: 2.1,
+                                        crossAxisSpacing: 10,
+                                        mainAxisSpacing: 10,
+                                      ),
+                                  itemCount: horarios.length,
+                                  itemBuilder: (context, index) {
+                                    final h = horarios[index];
+                                    bool isOcupado = ocupados.contains(h);
+                                    bool isSel = _horaSeleccionada == h;
+                                    return InkWell(
+                                      borderRadius: BorderRadius.circular(12),
+                                      onTap: isOcupado
+                                          ? null
+                                          : () => setState(
+                                              () => _horaSeleccionada = h,
+                                            ),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 200,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: isOcupado
+                                              ? Colors.black12
+                                              : (isSel
+                                                    ? azulATT
+                                                    : Colors.white),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          border: Border.all(
+                                            color: isSel
+                                                ? azulATT
+                                                : Colors.black12,
+                                          ),
+                                          boxShadow: [
+                                            if (isSel)
+                                              BoxShadow(
+                                                color: azulATT.withOpacity(0.3),
+                                                blurRadius: 8,
+                                              ),
+                                          ],
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            h,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: isSel
+                                                  ? Colors.white
+                                                  : (isOcupado
+                                                        ? Colors.black26
+                                                        : Colors.black87),
+                                              decoration: isOcupado
+                                                  ? TextDecoration.lineThrough
+                                                  : null,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SliverToBoxAdapter(child: SizedBox(height: 160)),
+                  ],
                 ),
-              ),
-              const SliverToBoxAdapter(child: SizedBox(height: 160)),
-            ],
-          ),
 
-          // STICKY GLASS FOOTER (2040 EDITION)
-          Positioned(bottom: 0, left: 0, right: 0, child: _buildGlassFooter()),
+                // STICKY GLASS FOOTER (2040 EDITION)
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: _buildGlassFooter(),
+                ),
 
-          if (_estaProcesando)
-            Container(
-              color: Colors.black45,
-              child: const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
+                if (_estaProcesando)
+                  Container(
+                    color: Colors.black45,
+                    child: const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    ),
+                  ),
+              ],
             ),
-        ],
-      ),
     );
   }
 
@@ -752,6 +785,65 @@ class _ReservaScreenState extends State<ReservaScreen>
                 child: const Text(
                   "RESERVAR TURNO",
                   style: TextStyle(fontWeight: FontWeight.w900, fontSize: 13),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPantallaExito() {
+    return Center(
+      child: _buildBentoCard(
+        // Reutilizamos tu diseño de tarjeta Bento
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.check_circle_outline_rounded,
+              color: Colors.green,
+              size: 80,
+            ),
+            const SizedBox(height: 20),
+            Text(
+              "¡PAGO CONFIRMADO!",
+              style: TextStyle(
+                color: azulATT,
+                fontWeight: FontWeight.w900,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              "Tu turno ha sido reservado con éxito.\nYa puedes ver tu comprobante.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 30),
+
+            // BOTÓN PRINCIPAL DE RETORNO
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: azulATT,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 40,
+                  vertical: 15,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+              onPressed: () {
+                // Limpia el stack y vuelve al mapa (página principal)
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+              child: const Text(
+                "VOLVER A LA PÁGINA PRINCIPAL",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
