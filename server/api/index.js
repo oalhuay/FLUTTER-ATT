@@ -3,13 +3,35 @@ const cors = require("cors");
 const { createClient } = require("@supabase/supabase-js");
 const axios = require("axios");
 require("dotenv").config();
-
+const cors = require("cors");
 const { MercadoPagoConfig, Preference } = require("mercadopago");
 const PDFDocument = require("pdfkit"); //
 const app = express();
 app.use(cors());
 app.use(express.json());
+const allowedOrigins = [
+  "https://flutter-att.vercel.app", // Tu dominio de front-end
+  "https://flutter-att-8xz7.vercel.app", // Tu dominio de servidor
+  "http://localhost:3000", // Para pruebas locales
+  "http://localhost:5000",
+];
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Permitir peticiones sin origen (como apps móviles o curl)
+      if (!origin) return callback(null, true);
 
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg =
+          "El policy de CORS para este sitio no permite acceso desde el origen especificado.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 const client = new MercadoPagoConfig({
   accessToken: process.env.MP_ACCESS_TOKEN,
 });
