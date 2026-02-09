@@ -43,7 +43,7 @@ app.post("/create-preference", async (req, res) => {
         auto_return: "approved",
         external_reference: userId,
         // CAMBIO AQUÍ: Usamos la URL limpia de producción para el webhook
-        notification_url: "https://flutter-att.vercel.app/webhook",
+        notification_url: "https://flutter-att-8xz7.vercel.app/webhook",
       },
     });
 

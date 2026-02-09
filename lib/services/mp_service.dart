@@ -4,7 +4,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MPService {
   // Usamos tu URL principal de producción
-  final String serverUrl = "https://flutter-att.vercel.app";
+  final String serverUrl = "https://flutter-att-8xz7.vercel.app";
 
   Future<String?> crearPreferencia({
     required String titulo,
