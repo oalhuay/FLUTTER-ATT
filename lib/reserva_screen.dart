@@ -80,22 +80,41 @@ class _ReservaScreenState extends State<ReservaScreen>
 
   void _configurarListenerRetorno() {
     _appLinks.uriLinkStream.listen((uri) {
-      if (uri.toString().contains("pago-exitoso")) {
-        final paymentId = uri.queryParameters['payment_id'];
+      // Convertimos a string para buscar "pago-exitoso" en cualquier parte de la URL
+      final urlString = uri.toString();
+
+      if (urlString.contains("pago-exitoso")) {
+        // Mercado Pago suele pegar los parámetros después del path.
+        // Intentamos obtener el payment_id de los queryParameters normales
+        String? paymentId = uri.queryParameters['payment_id'];
+
+        // Si por el formato de la URL (#/) no lo encuentra, lo buscamos manualmente en el string
+        if (paymentId == null && urlString.contains("payment_id=")) {
+          paymentId = urlString.split("payment_id=").last.split("&").first;
+        }
 
         setState(() {
-          _pagoConfirmado = true; // Activa la vista de éxito que creamos
+          _pagoConfirmado =
+              true; // Activa la vista de éxito con el botón de volver
           _pagoID = paymentId;
           _estaProcesando = false;
           _esperandoPago = false;
         });
 
         if (paymentId != null) {
+          // Ejecutamos el registro. Nota: El webhook de Vercel ya debería estar
+          // haciendo esto, pero dejarlo aquí sirve como respaldo (fallback).
           _ejecutarRegistroEnBaseDeDatos(
             status: 'approved',
             paymentId: paymentId,
           );
         }
+      } else if (urlString.contains("pago-fallido")) {
+        setState(() {
+          _estaProcesando = false;
+          _esperandoPago = false;
+        });
+        _mostrarMensajeError("El pago no pudo ser procesado. Reintente.");
       }
     });
   }
