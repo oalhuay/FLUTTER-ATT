@@ -7,8 +7,15 @@ const cors = require("cors");
 const { MercadoPagoConfig, Preference } = require("mercadopago");
 const PDFDocument = require("pdfkit"); //
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: "*", // Permite cualquier origen (ideal para evitar problemas en Vercel)
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+  })
+);
 app.use(express.json());
+app.options("*", cors());
 const allowedOrigins = [
   "https://flutter-att.vercel.app", // Tu dominio de front-end
   "https://flutter-att-8xz7.vercel.app", // Tu dominio de servidor
