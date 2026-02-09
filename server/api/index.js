@@ -41,9 +41,9 @@ app.post("/create-preference", async (req, res) => {
           },
         ],
         back_urls: {
-          success: "att-app://pago-exitoso",
-          failure: "att-app://pago-fallido",
-          pending: "att-app://pago-pendiente",
+          success: "https://flutter-att.vercel.app/#/pago-exitoso",
+          failure: "https://flutter-att.vercel.app/#/pago-fallido",
+          pending: "https://flutter-att.vercel.app/#/pago-pendiente",
         },
         auto_return: "approved",
         external_reference: userId,

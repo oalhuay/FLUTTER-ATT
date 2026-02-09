@@ -80,8 +80,22 @@ class _ReservaScreenState extends State<ReservaScreen>
 
   void _configurarListenerRetorno() {
     _appLinks.uriLinkStream.listen((uri) {
-      if (_esperandoPago) {
-        _validarYFinalizarReserva(uri);
+      if (uri.toString().contains("pago-exitoso")) {
+        final paymentId = uri.queryParameters['payment_id'];
+
+        setState(() {
+          _pagoConfirmado = true; // Activa la vista de éxito que creamos
+          _pagoID = paymentId;
+          _estaProcesando = false;
+          _esperandoPago = false;
+        });
+
+        if (paymentId != null) {
+          _ejecutarRegistroEnBaseDeDatos(
+            status: 'approved',
+            paymentId: paymentId,
+          );
+        }
       }
     });
   }
