@@ -85,11 +85,12 @@ app.post("/create-preference", async (req, res) => {
 // --- 4. ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
   res.status(200).send("OK"); // Obligatorio para Mercado Pago
-
+  console.log("🔔 WEBHOOK RECIBIDO! Query:", req.query);
+  console.log("Body:", JSON.stringify(req.body, null, 2));
   const id = req.query.id || (req.body.data && req.body.data.id);
-  const type = req.query.type || req.body.type;
-
-  if (type === "payment" && id) {
+  const type = req.query.type || req.body.type || req.query.topic;
+  res.status(200).send("OK"); // Respondemos rápido para que MP no reintente
+  if ((type === "payment" || type === "payment.created") && id) {
     try {
       const { data: payment } = await axios.get(
         `https://api.mercadopago.com/v1/payments/${id}`,
