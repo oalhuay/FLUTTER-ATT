@@ -11,7 +11,8 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
-import 'dart:async'; // <--- ESTA ES LA QUE FALTA PARA EL TIMER
+import 'dart:async';
+import 'package:url_launcher/url_launcher.dart';
 
 // --- GLOBALES REINSTALADAS ---
 final supabase = Supabase.instance.client; //
@@ -415,7 +416,7 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           backgroundColor: Colors.green.shade600,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 15),
         ),
       );
     } else if (pendingPaymentResult == "error") {

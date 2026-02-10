@@ -155,24 +155,26 @@ class _ReservaScreenState extends State<ReservaScreen>
       );
 
       if (urlPago != null) {
-        // 1. Capturamos el Navigator antes del async gap
+        // 1. Capturamos la referencia al Navigator ANTES del await
         final navigator = Navigator.of(context);
 
-        // 2. Abrimos Mercado Pago
+        // 2. Abrimos Mercado Pago en el navegador o app externa
         await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
 
-        // 3. Verificamos 'mounted' sobre el context antes de usarlo o realizar cambios de estado
+        // 3. Verificamos que el widget siga en el árbol de widgets
         if (!context.mounted) return;
 
+        // 4. Limpiamos estados de carga por seguridad
         setState(() {
           _estaProcesando = false;
           _esperandoPago = false;
         });
 
-        // 4. Usamos el navigator capturado previamente para cerrar la pantalla
+        // 5. CERRAMOS LA PANTALLA DE RESERVA
+        // Esto devuelve al usuario al mapa/home inmediatamente.
         navigator.pop();
       } else {
         if (!context.mounted) return;
