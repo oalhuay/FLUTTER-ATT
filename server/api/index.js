@@ -47,17 +47,72 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// --- 3. ENDPOINT: CREAR PREFERENCIA ---
+// --- 3. FUNCIÓN DE APOYO: GENERAR PDF Y FACTURA ---
+// Definimos la función que faltaba para procesar el comprobante en segundo plano
+async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
+  return new Promise((resolve) => {
+    const doc = new PDFDocument();
+    let buffers = [];
+    doc.on("data", buffers.push.bind(buffers));
+
+    doc
+      .fontSize(25)
+      .fillColor("#3ABEF9")
+      .text("ATT! A TODO TRAPO", { align: "center" });
+    doc.moveDown().fontSize(12).fillColor("black");
+    doc.text(`Comprobante de Pago: ${paymentId}`);
+    doc.text(`Servicios: ${metadata.servicios || "Lavado"}`);
+    doc.text(`Turno: ${metadata.fecha_turno} - ${metadata.hora_turno}hs`);
+    doc.end();
+
+    doc.on("end", async () => {
+      try {
+        const pdfBuffer = Buffer.concat(buffers);
+        const fileName = `tickets/factura_${paymentId}.pdf`;
+
+        console.log("📤 Subiendo PDF a Storage...");
+        await supabase.storage
+          .from("comprobantes")
+          .upload(fileName, pdfBuffer, {
+            contentType: "application/pdf",
+            upsert: true,
+          });
+
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
+
+        // Registrar factura
+        await supabase.from("facturas").insert({
+          payment_id: paymentId,
+          status: "approved",
+          total: payment.transaction_amount,
+          user_id: userId,
+          servicios: metadata.servicios || "Lavado",
+          fecha_emision: new Date().toISOString(),
+          url_pdf: publicUrl,
+        });
+
+        // Actualizar turno con la URL
+        await supabase
+          .from("turnos")
+          .update({ url_comprobante: publicUrl })
+          .eq("payment_id", paymentId);
+
+        console.log("🏁 PDF y Factura listos:", publicUrl);
+        resolve();
+      } catch (err) {
+        console.error("❌ Error en procesarPDFYFactura:", err.message);
+        resolve(); // Resolvemos para no trabar el webhook
+      }
+    });
+  });
+}
+
+// --- 4. ENDPOINT: CREAR PREFERENCIA ---
 app.post("/create-preference", async (req, res) => {
   try {
     const { titulo, precio, userId, metadata } = req.body;
-
-    console.log("📦 Generando preferencia para User:", userId);
-    console.log(
-      "📝 Metadata recibida de Flutter:",
-      JSON.stringify(metadata, null, 2)
-    );
-
     const preference = new Preference(client);
     const result = await preference.create({
       body: {
@@ -79,15 +134,13 @@ app.post("/create-preference", async (req, res) => {
         metadata: metadata,
       },
     });
-
     res.json({ init_point: result.init_point });
   } catch (error) {
-    console.error("❌ Error creando preferencia:", error.message);
     res.status(500).json({ error: error.message });
   }
 });
 
-// --- 4. ENDPOINT: WEBHOOK CON LOGS DETALLADOS Y FALLBACK DE DATOS ---
+// --- 5. ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
   const id = req.query.id || (req.body.data && req.body.data.id);
   const type = req.query.type || req.body.type || req.query.topic;
@@ -95,32 +148,23 @@ app.post("/webhook", async (req, res) => {
   console.log(`🔔 WEBHOOK ENTRANTE: ID ${id} | Tipo: ${type}`);
 
   if (type !== "payment") {
-    console.log(`⏩ Ignorando ${type} (No es un pago aprobado aún)`);
     return res.status(200).send("OK");
   }
 
-  // IMPORTANTE: En Vercel, NO respondas "OK" aquí si vas a usar procesos largos abajo,
-  // a menos que uses una Promesa envolvente.
-
   try {
-    console.log(`📡 Consultando detalles del pago ${id} a Mercado Pago...`);
-
     const { data: payment } = await axios.get(
       `https://api.mercadopago.com/v1/payments/${id}`,
       { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` } }
     );
-
-    console.log(`💳 Estado del pago: ${payment.status}`);
 
     if (payment.status === "approved") {
       const metadata = payment.metadata || {};
       const userId = payment.external_reference || metadata.user_id;
 
       console.log("📝 Iniciando inserción en Supabase...");
-      console.log(payment.metadata);
-      // Agrupamos las tareas en un solo bloque que DEBEMOS esperar
+
+      // Ejecutamos ambas tareas y esperamos su cumplimiento
       await Promise.all([
-        // Tarea 1: El Turno
         supabase
           .from("turnos")
           .insert({
@@ -131,28 +175,23 @@ app.post("/webhook", async (req, res) => {
             fecha: metadata.fecha_turno,
             hora: metadata.hora_turno,
             lavadero_nombre: metadata.lavadero_nombre,
-            servicios: metadata.servicios || "Lavado ATT!",
+            servicios: metadata.servicios || "Lavado",
           })
           .then(({ error }) => {
             if (error) console.error("❌ Error DB Turno:", error.message);
             else console.log("✅ Turno insertado correctamente");
           }),
 
-        // Tarea 2: PDF y Factura
         procesarPDFYFactura(payment, metadata, id.toString(), userId),
       ]);
 
       console.log("🏁 Webhook procesado completamente.");
     }
 
-    // Respondemos al final para asegurar que Vercel no mate el proceso antes
     return res.status(200).send("OK");
   } catch (error) {
-    console.error(
-      "⚠️ Error crítico en el Webhook:",
-      error.response?.data || error.message
-    );
-    return res.status(200).send("OK"); // Respondemos OK igual para que MP no sature
+    console.error("⚠️ Error crítico en el Webhook:", error.message);
+    return res.status(200).send("OK");
   }
 });
 
