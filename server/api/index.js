@@ -105,6 +105,22 @@ async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
         console.error("❌ Error en procesarPDFYFactura:", err.message);
         resolve(); // Resolvemos para no trabar el webhook
       }
+      console.log("📝 Intentando registrar factura en DB...");
+      const { error: errorFactura } = await supabase.from("facturas").insert({
+        payment_id: paymentId,
+        status: "approved",
+        total: payment.transaction_amount,
+        user_id: userId,
+        servicios: metadata.servicios || "Lavado",
+        fecha_emision: new Date().toISOString(),
+        url_pdf: publicUrl,
+      });
+
+      if (errorFactura) {
+        console.error("❌ Error al insertar Factura:", errorFactura.message);
+      } else {
+        console.log("✅ Factura registrada con éxito en Supabase.");
+      }
     });
   });
 }
