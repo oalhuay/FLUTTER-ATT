@@ -87,7 +87,7 @@ app.post("/create-preference", async (req, res) => {
   }
 });
 
-// --- 4. ENDPOINT: WEBHOOK CON LOGS DETALLADOS ---
+// --- 4. ENDPOINT: WEBHOOK CON LOGS DETALLADOS Y FALLBACK DE DATOS ---
 app.post("/webhook", async (req, res) => {
   const id = req.query.id || (req.body.data && req.body.data.id);
   const type = req.query.type || req.body.type || req.query.topic;
@@ -108,27 +108,36 @@ app.post("/webhook", async (req, res) => {
 
     if (payment.status === "approved") {
       const metadata = payment.metadata || {};
-      const userId = payment.external_reference || metadata.user_id;
-      const paymentId = id.toString();
 
-      // LOGS DE VERIFICACIÓN DE DATOS
+      // LOG DE INSPECCIÓN: Verifica qué llaves envió realmente Mercado Pago
+      console.log("🔍 Llaves detectadas en Metadata:", Object.keys(metadata));
+
+      // Extraemos datos con redundancia (Fallback)
+      const userId =
+        payment.external_reference || metadata.user_id || metadata.userid;
+      const serviciosFinales =
+        metadata.servicios || payment.description || "Servicio ATT!";
+      const fechaTurno =
+        metadata.fecha_turno || new Date().toISOString().split("T")[0];
+      const horaTurno = metadata.hora_turno || "00:00";
+      const lavadero = metadata.lavadero_nombre || "Sucursal ATT!";
+
       console.log("👤 User ID:", userId);
-      console.log("🛠️ Servicios:", metadata.servicios);
-      console.log("📅 Fecha Turno:", metadata.fecha_turno);
-      console.log("⏰ Hora Turno:", metadata.hora_turno);
-      console.log("🏢 Lavadero:", metadata.lavadero_nombre);
+      console.log("🛠️ Servicios:", serviciosFinales);
+      console.log("📅 Fecha Turno:", fechaTurno);
+      console.log("⏰ Hora Turno:", horaTurno);
 
-      // PASO 1: INSERTAR TURNO (Sin esperar al PDF para que Flutter lo encuentre rápido)
+      // PASO 1: INSERTAR TURNO INMEDIATAMENTE
       console.log("⏳ Agendando turno en Supabase...");
       const { error: errTurno } = await supabase.from("turnos").insert({
         user_id: userId,
-        payment_id: paymentId,
+        payment_id: id.toString(),
         estado: "activo",
         monto_pagado: payment.transaction_amount,
-        fecha: metadata.fecha_turno,
-        hora: metadata.hora_turno,
-        lavadero_nombre: metadata.lavadero_nombre,
-        servicios: metadata.servicios || "Lavado ATT!",
+        fecha: fechaTurno,
+        hora: horaTurno,
+        lavadero_nombre: lavadero,
+        servicios: serviciosFinales,
       });
 
       if (errTurno) {
@@ -148,15 +157,15 @@ app.post("/webhook", async (req, res) => {
           .fillColor("#3ABEF9")
           .text("ATT! A TODO TRAPO", { align: "center" });
         doc.moveDown().fontSize(12).fillColor("black");
-        doc.text(`Comprobante de Pago: ${paymentId}`);
-        doc.text(`Servicios: ${metadata.servicios}`);
-        doc.text(`Turno: ${metadata.fecha_turno} - ${metadata.hora_turno}hs`);
+        doc.text(`Comprobante de Pago: ${id}`);
+        doc.text(`Servicios: ${serviciosFinales}`);
+        doc.text(`Turno: ${fechaTurno} - ${horaTurno}hs`);
         doc.end();
 
         doc.on("end", async () => {
           try {
             const pdfBuffer = Buffer.concat(buffers);
-            const fileName = `tickets/factura_${paymentId}.pdf`;
+            const fileName = `tickets/factura_${id}.pdf`;
 
             console.log("📤 Subiendo PDF a Storage...");
             const { error: uploadError } = await supabase.storage
@@ -171,26 +180,24 @@ app.post("/webhook", async (req, res) => {
             const {
               data: { publicUrl },
             } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
-
-            // LOG DE LA URL GENERADA
             console.log("🔗 URL PDF GENERADA:", publicUrl);
 
             // Insertar factura
             await supabase.from("facturas").insert({
-              payment_id: paymentId,
+              payment_id: id.toString(),
               status: "approved",
               total: payment.transaction_amount,
               user_id: userId,
-              servicios: metadata.servicios,
+              servicios: serviciosFinales,
               fecha_emision: new Date().toISOString(),
               url_pdf: publicUrl,
             });
 
-            // Actualizar turno con el link del comprobante
+            // Actualizar turno con el link
             await supabase
               .from("turnos")
               .update({ url_comprobante: publicUrl })
-              .eq("payment_id", paymentId);
+              .eq("payment_id", id.toString());
 
             console.log(
               "🏁 Proceso de factura y PDF finalizado correctamente."
@@ -198,7 +205,7 @@ app.post("/webhook", async (req, res) => {
             resolve();
           } catch (e) {
             console.error("❌ Error en proceso de PDF:", e.message);
-            resolve(); // Resolvemos de todos modos para no colgar la función
+            resolve();
           }
         });
       });

@@ -139,15 +139,18 @@ class _ReservaScreenState extends State<ReservaScreen>
 
       // IMPORTANTE: Los nombres de estas llaves (fecha_turno, hora_turno, etc)
       // deben ser EXACTAMENTE iguales a los que busca el Webhook en Node.js.
+      // En reserva_screen.dart
       final urlPago = await mp.crearPreferencia(
         titulo: "Reserva ATT: ${widget.lavadero['razon_social']}",
         precio: _totalAPagar,
         metadata: {
-          "user_id": usuario.id, // Cambiado a user_id para consistencia
+          "user_id": usuario.id, // Verifica que el servidor busque "user_id"
           "fecha_turno": _fechaSeleccionada.toIso8601String().split('T')[0],
           "hora_turno": hora,
           "lavadero_nombre": widget.lavadero['razon_social'],
-          "servicios": _serviciosSeleccionados.join(", "),
+          "servicios": _serviciosSeleccionados.isEmpty
+              ? "Lavado General"
+              : _serviciosSeleccionados.join(", "),
         },
       );
 
