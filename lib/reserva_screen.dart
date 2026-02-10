@@ -155,16 +155,35 @@ class _ReservaScreenState extends State<ReservaScreen>
       );
 
       if (urlPago != null) {
-        await launchUrl(
+        // 1. Intentamos abrir Mercado Pago primero
+        final bool lanzado = await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
+
+        if (lanzado) {
+          // 2. Esperamos 1 segundo para asegurar que el navegador tomó el control
+          await Future.delayed(const Duration(seconds: 1));
+
+          // 3. Verificamos que la pantalla siga existiendo antes de cerrarla
+          if (context.mounted) {
+            setState(() {
+              _estaProcesando = false;
+              _esperandoPago = false;
+            });
+
+            // Cerramos la pantalla de reserva. El usuario al volver verá el Mapa
+            Navigator.pop(context);
+          }
+        }
       } else {
-        setState(() {
-          _estaProcesando = false;
-          _esperandoPago = false;
-        });
-        _mostrarMensajeError("No se pudo conectar con el servidor de pagos.");
+        if (context.mounted) {
+          setState(() {
+            _estaProcesando = false;
+            _esperandoPago = false;
+          });
+          _mostrarMensajeError("No se pudo conectar con el servidor de pagos.");
+        }
       }
     } catch (e) {
       setState(() {

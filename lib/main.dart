@@ -431,6 +431,7 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 15),
         ),
       );
     }
