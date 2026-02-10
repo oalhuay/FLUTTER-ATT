@@ -136,21 +136,22 @@ class _ReservaScreenState extends State<ReservaScreen>
 
     try {
       final mp = MPService();
-      // ENVIAMOS METADATA: Esto es lo que el Webhook recibirá para crear el turno
+
+      // IMPORTANTE: Los nombres de estas llaves (fecha_turno, hora_turno, etc)
+      // deben ser EXACTAMENTE iguales a los que busca el Webhook en Node.js.
       final urlPago = await mp.crearPreferencia(
         titulo: "Reserva ATT: ${widget.lavadero['razon_social']}",
         precio: _totalAPagar,
-        // Añadimos este mapa de datos extra
         metadata: {
-          "userId": usuario.id,
+          "user_id": usuario.id, // Cambiado a user_id para consistencia
           "fecha_turno": _fechaSeleccionada.toIso8601String().split('T')[0],
           "hora_turno": hora,
           "lavadero_nombre": widget.lavadero['razon_social'],
+          "servicios": _serviciosSeleccionados.join(", "),
         },
       );
 
       if (urlPago != null) {
-        // Abrimos el navegador. La ejecución de la app se queda "en pausa" aquí.
         await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
