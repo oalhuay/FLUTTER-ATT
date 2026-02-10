@@ -92,126 +92,67 @@ app.post("/webhook", async (req, res) => {
   const id = req.query.id || (req.body.data && req.body.data.id);
   const type = req.query.type || req.body.type || req.query.topic;
 
+  console.log(`🔔 WEBHOOK ENTRANTE: ID ${id} | Tipo: ${type}`);
+
   if (type !== "payment") {
+    console.log(`⏩ Ignorando ${type} (No es un pago aprobado aún)`);
     return res.status(200).send("OK");
   }
 
-  res.status(200).send("OK");
+  // IMPORTANTE: En Vercel, NO respondas "OK" aquí si vas a usar procesos largos abajo,
+  // a menos que uses una Promesa envolvente.
 
   try {
-    console.log(`\n--- 🔔 NUEVO PAGO RECIBIDO: ${id} ---`);
+    console.log(`📡 Consultando detalles del pago ${id} a Mercado Pago...`);
 
     const { data: payment } = await axios.get(
       `https://api.mercadopago.com/v1/payments/${id}`,
       { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` } }
     );
 
+    console.log(`💳 Estado del pago: ${payment.status}`);
+
     if (payment.status === "approved") {
       const metadata = payment.metadata || {};
+      const userId = payment.external_reference || metadata.user_id;
 
-      // LOG DE INSPECCIÓN: Verifica qué llaves envió realmente Mercado Pago
-      console.log("🔍 Llaves detectadas en Metadata:", Object.keys(metadata));
+      console.log("📝 Iniciando inserción en Supabase...");
+      console.log(payment.metadata);
+      // Agrupamos las tareas en un solo bloque que DEBEMOS esperar
+      await Promise.all([
+        // Tarea 1: El Turno
+        supabase
+          .from("turnos")
+          .insert({
+            user_id: userId,
+            payment_id: id.toString(),
+            estado: "activo",
+            monto_pagado: payment.transaction_amount,
+            fecha: metadata.fecha_turno,
+            hora: metadata.hora_turno,
+            lavadero_nombre: metadata.lavadero_nombre,
+            servicios: metadata.servicios || "Lavado ATT!",
+          })
+          .then(({ error }) => {
+            if (error) console.error("❌ Error DB Turno:", error.message);
+            else console.log("✅ Turno insertado correctamente");
+          }),
 
-      // Extraemos datos con redundancia (Fallback)
-      const userId =
-        payment.external_reference || metadata.user_id || metadata.userid;
-      const serviciosFinales =
-        metadata.servicios || payment.description || "Servicio ATT!";
-      const fechaTurno =
-        metadata.fecha_turno || new Date().toISOString().split("T")[0];
-      const horaTurno = metadata.hora_turno || "00:00";
-      const lavadero = metadata.lavadero_nombre || "Sucursal ATT!";
+        // Tarea 2: PDF y Factura
+        procesarPDFYFactura(payment, metadata, id.toString(), userId),
+      ]);
 
-      console.log("👤 User ID:", userId);
-      console.log("🛠️ Servicios:", serviciosFinales);
-      console.log("📅 Fecha Turno:", fechaTurno);
-      console.log("⏰ Hora Turno:", horaTurno);
-
-      // PASO 1: INSERTAR TURNO INMEDIATAMENTE
-      console.log("⏳ Agendando turno en Supabase...");
-      const { error: errTurno } = await supabase.from("turnos").insert({
-        user_id: userId,
-        payment_id: id.toString(),
-        estado: "activo",
-        monto_pagado: payment.transaction_amount,
-        fecha: fechaTurno,
-        hora: horaTurno,
-        lavadero_nombre: lavadero,
-        servicios: serviciosFinales,
-      });
-
-      if (errTurno) {
-        console.error("❌ Error al insertar Turno:", errTurno.message);
-      } else {
-        console.log("✅ Turno agendado con éxito.");
-      }
-
-      // PASO 2: PROCESO ASÍNCRONO DE PDF Y FACTURA
-      await new Promise((resolve) => {
-        const doc = new PDFDocument();
-        let buffers = [];
-        doc.on("data", buffers.push.bind(buffers));
-
-        doc
-          .fontSize(25)
-          .fillColor("#3ABEF9")
-          .text("ATT! A TODO TRAPO", { align: "center" });
-        doc.moveDown().fontSize(12).fillColor("black");
-        doc.text(`Comprobante de Pago: ${id}`);
-        doc.text(`Servicios: ${serviciosFinales}`);
-        doc.text(`Turno: ${fechaTurno} - ${horaTurno}hs`);
-        doc.end();
-
-        doc.on("end", async () => {
-          try {
-            const pdfBuffer = Buffer.concat(buffers);
-            const fileName = `tickets/factura_${id}.pdf`;
-
-            console.log("📤 Subiendo PDF a Storage...");
-            const { error: uploadError } = await supabase.storage
-              .from("comprobantes")
-              .upload(fileName, pdfBuffer, {
-                contentType: "application/pdf",
-                upsert: true,
-              });
-
-            if (uploadError) throw uploadError;
-
-            const {
-              data: { publicUrl },
-            } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
-            console.log("🔗 URL PDF GENERADA:", publicUrl);
-
-            // Insertar factura
-            await supabase.from("facturas").insert({
-              payment_id: id.toString(),
-              status: "approved",
-              total: payment.transaction_amount,
-              user_id: userId,
-              servicios: serviciosFinales,
-              fecha_emision: new Date().toISOString(),
-              url_pdf: publicUrl,
-            });
-
-            // Actualizar turno con el link
-            await supabase
-              .from("turnos")
-              .update({ url_comprobante: publicUrl })
-              .eq("payment_id", id.toString());
-
-            console.log(
-              "🏁 Proceso de factura y PDF finalizado correctamente."
-            );
-            resolve();
-          } catch (e) {
-            console.error("❌ Error en proceso de PDF:", e.message);
-            resolve();
-          }
-        });
-      });
+      console.log("🏁 Webhook procesado completamente.");
     }
+
+    // Respondemos al final para asegurar que Vercel no mate el proceso antes
+    return res.status(200).send("OK");
   } catch (error) {
-    console.error("⚠️ Error general en el Webhook:", error.message);
+    console.error(
+      "⚠️ Error crítico en el Webhook:",
+      error.response?.data || error.message
+    );
+    return res.status(200).send("OK"); // Respondemos OK igual para que MP no sature
   }
 });
 
