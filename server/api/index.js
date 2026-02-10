@@ -84,111 +84,137 @@ app.post("/create-preference", async (req, res) => {
 
 // --- 4. ENDPOINT: WEBHOOK ---
 app.post("/webhook", async (req, res) => {
-  res.status(200).send("OK"); // Obligatorio para Mercado Pago
-  console.log("🔔 WEBHOOK RECIBIDO! Query:", req.query);
-  console.log("Body:", JSON.stringify(req.body, null, 2));
+  // 1. Extraer ID y Tipo de notificación (pueden venir en query o body)
   const id = req.query.id || (req.body.data && req.body.data.id);
   const type = req.query.type || req.body.type || req.query.topic;
-  res.status(200).send("OK"); // Respondemos rápido para que MP no reintente
-  if ((type === "payment" || type === "payment.created") && id) {
-    try {
-      const { data: payment } = await axios.get(
-        `https://api.mercadopago.com/v1/payments/${id}`,
-        { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` } }
+
+  console.log(`🔔 Notificación recibida: ID ${id} | Tipo: ${type}`);
+
+  // 2. FILTRO DE SEGURIDAD: Solo procesamos "payment"
+  // Mercado Pago envía 'merchant_order' primero; la ignoramos con un 200 OK limpio.
+  if (type !== "payment") {
+    console.log(`⏩ Ignorando notificación de tipo: ${type}`);
+    return res.status(200).send("OK");
+  }
+
+  // 3. RESPUESTA INMEDIATA: Confirmamos recepción del pago a Mercado Pago
+  // No usamos 'return' aquí para que el proceso siga en segundo plano.
+  res.status(200).send("OK");
+
+  if (!id) return;
+
+  try {
+    // 4. CONSULTAR EL ESTADO REAL DEL PAGO
+    const { data: payment } = await axios.get(
+      `https://api.mercadopago.com/v1/payments/${id}`,
+      { headers: { Authorization: `Bearer ${process.env.MP_ACCESS_TOKEN}` } }
+    );
+
+    if (payment.status === "approved") {
+      console.log(
+        `✅ Pago #${id} aprobado. Iniciando generación de documentos...`
       );
 
-      if (payment.status === "approved") {
-        const userId = payment.external_reference;
-        const paymentId = id.toString();
-        const metadata = payment.metadata || {};
+      const metadata = payment.metadata || {};
+      const userId = payment.external_reference;
+      const paymentId = id.toString();
 
-        console.log(`💰 Procesando pago aprobado ${paymentId}...`);
+      // --- A. GENERAR PDF EN MEMORIA ---
+      const doc = new PDFDocument();
+      let buffers = [];
+      doc.on("data", buffers.push.bind(buffers));
 
-        // --- A. GENERAR PDF ---
-        const doc = new PDFDocument();
-        let buffers = [];
-        doc.on("data", buffers.push.bind(buffers));
+      // Diseño ATT! 2040
+      doc
+        .fontSize(25)
+        .fillColor("#3ABEF9")
+        .text("ATT! A TODO TRAPO", { align: "center" });
+      doc.moveDown();
+      doc
+        .fontSize(10)
+        .fillColor("black")
+        .text(`Comprobante #${paymentId}`, { align: "right" });
+      doc.text(`Fecha: ${new Date().toLocaleDateString()}`, { align: "right" });
+      doc.moveDown();
+      doc
+        .fontSize(14)
+        .text(`Lavadero: ${metadata.lavadero_nombre || "Sucursal ATT!"}`);
+      doc.text(
+        `Turno: ${metadata.fecha_turno || "--"} - ${
+          metadata.hora_turno || "--"
+        }hs`
+      );
+      doc.text(`Servicio: ${payment.description || "Lavado Premium"}`);
+      doc.moveDown();
+      doc
+        .fontSize(20)
+        .fillColor("#EF4444")
+        .text(`TOTAL: $${payment.transaction_amount}`, { align: "left" });
+      doc.end();
 
-        doc
-          .fontSize(25)
-          .fillColor("#3ABEF9")
-          .text("ATT! A TODO TRAPO", { align: "center" });
-        doc.moveDown();
-        doc
-          .fontSize(10)
-          .fillColor("black")
-          .text(`Comprobante #${paymentId}`, { align: "right" });
-        doc.text(`Fecha: ${new Date().toLocaleDateString()}`, {
-          align: "right",
-        });
-        doc.moveDown();
-        doc
-          .fontSize(14)
-          .text(`Lavadero: ${metadata.lavadero_nombre || "Sucursal ATT!"}`);
-        doc.text(
-          `Turno: ${metadata.fecha_turno || "--"} - ${
-            metadata.hora_turno || "--"
-          }hs`
-        );
-        doc.text(`Servicio: ${payment.description || "Lavado Premium"}`);
-        doc.moveDown();
-        doc
-          .fontSize(20)
-          .fillColor("#EF4444")
-          .text(`TOTAL: $${payment.transaction_amount}`, { align: "left" });
-        doc.end();
+      // --- B. PROCESAR RESULTADO DEL PDF ---
+      doc.on("end", async () => {
+        const pdfBuffer = Buffer.concat(buffers);
+        const fileName = `tickets/factura_${paymentId}.pdf`;
 
-        doc.on("end", async () => {
-          const pdfBuffer = Buffer.concat(buffers);
-          const fileName = `tickets/factura_${paymentId}.pdf`;
-
-          try {
-            // 1. Subir a Storage
-            await supabase.storage
-              .from("comprobantes")
-              .upload(fileName, pdfBuffer, {
-                contentType: "application/pdf",
-                upsert: true,
-              });
-
-            const {
-              data: { publicUrl },
-            } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
-
-            // 2. Insertar Factura
-            await supabase.from("facturas").insert({
-              payment_id: paymentId,
-              status: "approved",
-              total: payment.transaction_amount,
-              user_id: userId,
-              servicios: payment.description || "Reserva ATT",
-              fecha_emision: new Date().toISOString(),
-              url_pdf: publicUrl,
+        try {
+          // 1. Subir a Supabase Storage (Bucket 'comprobantes' debe ser público)
+          const { error: uploadError } = await supabase.storage
+            .from("comprobantes")
+            .upload(fileName, pdfBuffer, {
+              contentType: "application/pdf",
+              upsert: true,
             });
 
-            // 3. Insertar Turno (Para "Mis Turnos" en la App)
-            await supabase.from("turnos").insert({
-              user_id: userId,
-              payment_id: paymentId,
-              estado: "activo",
-              monto_pagado: payment.transaction_amount,
-              fecha:
-                metadata.fecha_turno || new Date().toISOString().split("T")[0],
-              hora: metadata.hora_turno || "00:00",
-              lavadero_nombre: metadata.lavadero_nombre || "Lavadero ATT",
-              servicios: payment.description || "Reserva ATT",
-              url_comprobante: publicUrl,
-            });
+          if (uploadError) throw uploadError;
 
-            console.log("📅 Proceso completado: Turno y Factura vinculados.");
-          } catch (dbErr) {
-            console.error("🚨 Error Supabase/Storage:", dbErr.message);
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
+          console.log("📄 PDF subido y disponible en:", publicUrl);
+
+          // 2. Insertar en tabla 'facturas'
+          const { error: errFact } = await supabase.from("facturas").insert({
+            payment_id: paymentId,
+            status: "approved",
+            total: payment.transaction_amount,
+            user_id: userId,
+            servicios: payment.description || "Reserva ATT",
+            fecha_emision: new Date().toISOString(),
+            url_pdf: publicUrl,
+          });
+          if (errFact) console.error("❌ Error Factura:", errFact.message);
+
+          // 3. Insertar en tabla 'turnos' (Usando Metadata de Flutter)
+          const { error: errTurno } = await supabase.from("turnos").insert({
+            user_id: userId,
+            payment_id: paymentId,
+            estado: "activo",
+            monto_pagado: payment.transaction_amount,
+            fecha:
+              metadata.fecha_turno || new Date().toISOString().split("T")[0],
+            hora: metadata.hora_turno || "00:00",
+            lavadero_nombre: metadata.lavadero_nombre || "Lavadero ATT",
+            servicios: payment.description || "Reserva ATT",
+            url_comprobante: publicUrl,
+          });
+
+          if (errTurno) {
+            console.error("❌ Error al crear turno:", errTurno.message);
+          } else {
+            console.log(`📅 Turno creado para el usuario ${userId} con éxito.`);
           }
-        });
-      }
-    } catch (error) {
-      console.error("⚠️ Error Webhook:", error.message);
+        } catch (dbErr) {
+          console.error("🚨 Error crítico en Supabase/Storage:", dbErr.message);
+        }
+      });
+    } else {
+      console.log(
+        `⚠️ El pago #${id} tiene estado: ${payment.status}. No se registra turno.`
+      );
     }
+  } catch (error) {
+    console.error("❌ Error consultando el pago en MP:", error.message);
   }
 });
 
