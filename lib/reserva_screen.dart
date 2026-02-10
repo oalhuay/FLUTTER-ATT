@@ -155,11 +155,27 @@ class _ReservaScreenState extends State<ReservaScreen>
       );
 
       if (urlPago != null) {
+        // 1. Capturamos el Navigator antes del async gap
+        final navigator = Navigator.of(context);
+
+        // 2. Abrimos Mercado Pago
         await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
+
+        // 3. Verificamos 'mounted' sobre el context antes de usarlo o realizar cambios de estado
+        if (!context.mounted) return;
+
+        setState(() {
+          _estaProcesando = false;
+          _esperandoPago = false;
+        });
+
+        // 4. Usamos el navigator capturado previamente para cerrar la pantalla
+        navigator.pop();
       } else {
+        if (!context.mounted) return;
         setState(() {
           _estaProcesando = false;
           _esperandoPago = false;
@@ -167,6 +183,7 @@ class _ReservaScreenState extends State<ReservaScreen>
         _mostrarMensajeError("No se pudo conectar con el servidor de pagos.");
       }
     } catch (e) {
+      if (!context.mounted) return;
       setState(() {
         _estaProcesando = false;
         _esperandoPago = false;
