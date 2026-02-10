@@ -55,6 +55,7 @@ async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
     let buffers = [];
     doc.on("data", buffers.push.bind(buffers));
 
+
     doc
       .fontSize(25)
       .fillColor("#3ABEF9")
@@ -70,56 +71,63 @@ async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
         const pdfBuffer = Buffer.concat(buffers);
         const fileName = `tickets/factura_${paymentId}.pdf`;
 
+        // 1. Subir a Storage
         console.log("📤 Subiendo PDF a Storage...");
-        await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("comprobantes")
           .upload(fileName, pdfBuffer, {
             contentType: "application/pdf",
             upsert: true,
           });
 
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("comprobantes").getPublicUrl(fileName);
+        if (uploadError) throw uploadError;
 
-        // Registrar factura
-        await supabase.from("facturas").insert({
+        // 2. Obtener URL Pública de forma segura
+        const { data: publicUrlData } = supabase.storage
+          .from("comprobantes")
+          .getPublicUrl(fileName);
+
+        const urlGenerada = publicUrlData.publicUrl;
+        console.log("🔗 URL PDF GENERADA:", urlGenerada);
+
+        // 3. Registrar Factura en DB
+        console.log("📝 Intentando registrar factura en DB...");
+        const { error: errorFactura } = await supabase.from("facturas").insert({
           payment_id: paymentId,
           status: "approved",
           total: payment.transaction_amount,
           user_id: userId,
           servicios: metadata.servicios || "Lavado",
           fecha_emision: new Date().toISOString(),
-          url_pdf: publicUrl,
+          url_pdf: urlGenerada,
         });
 
-        // Actualizar turno con la URL
-        await supabase
+        if (errorFactura) {
+          console.error("❌ Error al insertar Factura:", errorFactura.message);
+        } else {
+          console.log("✅ Factura registrada con éxito en Supabase.");
+        }
+
+        // 4. Actualizar Turno con la URL del comprobante
+        const { error: errorTurno } = await supabase
           .from("turnos")
-          .update({ url_comprobante: publicUrl })
+          .update({ url_comprobante: urlGenerada })
           .eq("payment_id", paymentId);
 
-        console.log("🏁 PDF y Factura listos:", publicUrl);
+        if (errorTurno) {
+          console.error(
+            "❌ Error al actualizar turno con URL:",
+            errorTurno.message
+          );
+        } else {
+          console.log("📅 Turno actualizado con link al PDF.");
+        }
+
+        console.log("🏁 Proceso de PDF y Factura finalizado.");
         resolve();
       } catch (err) {
-        console.error("❌ Error en procesarPDFYFactura:", err.message);
-        resolve(); // Resolvemos para no trabar el webhook
-      }
-      console.log("📝 Intentando registrar factura en DB...");
-      const { error: errorFactura } = await supabase.from("facturas").insert({
-        payment_id: paymentId,
-        status: "approved",
-        total: payment.transaction_amount,
-        user_id: userId,
-        servicios: metadata.servicios || "Lavado",
-        fecha_emision: new Date().toISOString(),
-        url_pdf: publicUrl,
-      });
-
-      if (errorFactura) {
-        console.error("❌ Error al insertar Factura:", errorFactura.message);
-      } else {
-        console.log("✅ Factura registrada con éxito en Supabase.");
+        console.error("❌ Error crítico en procesarPDFYFactura:", err.message);
+        resolve(); // Resolvemos para no dejar colgado el Webhook
       }
     });
   });
