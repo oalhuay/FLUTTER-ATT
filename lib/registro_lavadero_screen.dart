@@ -6,18 +6,17 @@ import 'package:flutter_map_dragmarker/flutter_map_dragmarker.dart';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'dart:async';
+import 'package:image_picker/image_picker.dart';
 
 class RegistroLavaderoScreen extends StatefulWidget {
-
-  final Map<String, dynamic>? lavaderoParaEditar; // Recibe datos si vamos a editar
+  final Map<String, dynamic>?
+  lavaderoParaEditar; // Recibe datos si vamos a editar
   const RegistroLavaderoScreen({super.key, this.lavaderoParaEditar});
   @override
   State<RegistroLavaderoScreen> createState() => _RegistroLavaderoScreenState();
-
 }
 
 class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
-
   @override
   void initState() {
     super.initState();
@@ -29,10 +28,11 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
       _telefonoController.text = l['telefono'] ?? '';
       _bancoController.text = l['nombre_banco'] ?? '';
       _cuentaController.text = l['cuenta_bancaria'] ?? '';
-      
+      _fotoUrlTemporal = l['foto_url']; // Cargamos la foto actual si existe
+
       // Sincronizamos la ubicación del mapa
       _puntoSeleccionado = LatLng(l['latitud'], l['longitud']);
-      
+
       // Sincronizamos precios y servicios
       if (l['servicios_precios'] != null) {
         _preciosMap.clear();
@@ -44,6 +44,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   }
 
   // --- CONTROLADORES CORE ---
+  String? _fotoUrlTemporal;
+  bool _subiendoImagen = false;
+
   final _nombreController = TextEditingController();
   final _direccionController = TextEditingController();
   final _telefonoController = TextEditingController();
@@ -91,7 +94,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   Future<void> _obtenerDireccionDesdeCoords(LatLng coords) async {
     setState(() {
       _cargandoDireccion = true;
-// Al mover el mapa, reseteamos a modo detección
+      // Al mover el mapa, reseteamos a modo detección
     });
 
     try {
@@ -119,7 +122,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
           if (road != null) {
             String fullAddress = "$road ${houseNumber ?? ''}".trim();
             _direccionController.text = fullAddress;
-// Confirmamos que es detectada
+            // Confirmamos que es detectada
             _mensajeUbicacion =
                 "✅ Dirección detectada: $fullAddress ${city != null ? '($city)' : ''}";
           } else {
@@ -185,10 +188,59 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     }
   }
 
-Future<void> _registrar() async {
+  Future<void> _elegirYSubirFoto() async {
+    final picker = ImagePicker();
+    // 1. El dueño elige la imagen
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 80, // Comprimimos un poco desde el celu
+    );
+
+    if (image == null) return;
+
+    setState(() => _subiendoImagen = true);
+
+    try {
+      // 2. Preparamos la petición POST a Cloudinary
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://api.cloudinary.com/v1_1/dcmz8zzln/image/upload'),
+      );
+
+      request.fields['upload_preset'] =
+          'preset_lavaderos'; // El que creaste hoy
+
+      var bytes = await image.readAsBytes();
+      request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: image.name),
+      );
+
+      var response = await request.send();
+      var responseData = await response.stream.toBytes();
+      var jsonResponse = jsonDecode(String.fromCharCodes(responseData));
+
+      if (response.statusCode == 200) {
+        setState(() {
+          _fotoUrlTemporal = jsonResponse['secure_url'];
+        });
+        _mostrarAlerta("📸 Foto cargada correctamente", Colors.green);
+      } else {
+        _mostrarAlerta(
+          "❌ Error Cloudinary: ${jsonResponse['error']['message']}",
+          rojoATT,
+        );
+      }
+    } catch (e) {
+      _mostrarAlerta("❌ Error al conectar con la nube: $e", rojoATT);
+    } finally {
+      setState(() => _subiendoImagen = false);
+    }
+  }
+
+  Future<void> _registrar() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
-    
+
     if ((_preciosMap['Lavado'] ?? 0.0) <= 0) {
       _mostrarAlerta("⚠️ Debes asignar un precio al Lavado", rojoATT);
       return;
@@ -198,6 +250,7 @@ Future<void> _registrar() async {
     final datosLavadero = {
       'dueño_id': user.id,
       'razon_social': _nombreController.text,
+      'foto_url': _fotoUrlTemporal, //
       'direccion': _direccionController.text,
       'telefono': _telefonoController.text,
       'nombre_banco': _bancoController.text,
@@ -277,6 +330,62 @@ Future<void> _registrar() async {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
             sliver: SliverList(
               delegate: SliverChildListDelegate([
+                // --- SECCIÓN: SUBIDA DE FOTO BENTO ---
+                _buildBentoCard(
+                  title: "Imagen del Lavadero",
+                  icon: Icons.camera_alt_rounded,
+                  children: [
+                    Center(
+                      child: GestureDetector(
+                        onTap: _subiendoImagen ? null : _elegirYSubirFoto,
+                        child: Container(
+                          height: 180,
+                          width: double.infinity,
+                          decoration: BoxDecoration(
+                            color: fondoSoft,
+                            borderRadius: BorderRadius.circular(24),
+                            border: Border.all(
+                              color: azulATT.withOpacity(0.1),
+                              width: 2,
+                            ),
+                            image: _fotoUrlTemporal != null
+                                ? DecorationImage(
+                                    image: NetworkImage(_fotoUrlTemporal!),
+                                    fit: BoxFit.cover,
+                                  )
+                                : null,
+                          ),
+                          child: _subiendoImagen
+                              ? const Center(child: CircularProgressIndicator())
+                              : _fotoUrlTemporal == null
+                              ? Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.cloud_upload_outlined,
+                                      size: 40,
+                                      color: azulATT,
+                                    ),
+                                    const SizedBox(height: 10),
+                                    Text(
+                                      "TOCA PARA SUBIR FOTO",
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w900,
+                                        color: azulATT,
+                                        letterSpacing: 1.1,
+                                      ),
+                                    ),
+                                  ],
+                                )
+                              : null,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+
                 // 1. DATOS DEL NEGOCIO
                 _buildBentoCard(
                   title: "Datos del Lavadero",
@@ -734,7 +843,9 @@ Future<void> _registrar() async {
             ),
             onPressed: lavadoHabilitado ? _registrar : null,
             child: Text(
-              widget.lavaderoParaEditar != null ? "GUARDAR CAMBIOS" : "FINALIZAR CONFIGURACIÓN",
+              widget.lavaderoParaEditar != null
+                  ? "GUARDAR CAMBIOS"
+                  : "FINALIZAR CONFIGURACIÓN",
               style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 14),
             ),
           ),

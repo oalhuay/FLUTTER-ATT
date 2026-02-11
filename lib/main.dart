@@ -11,6 +11,10 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
+import 'dart:convert'; // Para arreglar el error de jsonDecode
+import 'package:http/http.dart'
+    as http; // Para arreglar el error de http.MultipartRequest
+import 'package:image_picker/image_picker.dart'; // Para arreglar el error de ImagePicker y XFile
 
 // --- GLOBALES REINSTALADAS ---
 final supabase = Supabase.instance.client; //
@@ -190,6 +194,9 @@ class MainLayout extends StatefulWidget {
 }
 
 class _MainLayoutState extends State<MainLayout> {
+  final Color azulATT = const Color(
+    0xFF3ABEF9,
+  ); // <-- Esto quita el error de los subrayados
   int _indiceActual = 0;
   bool _sidebarAbierto = true;
   dynamic _lavaderoSeleccionado;
@@ -197,9 +204,9 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroRating = false;
   bool _filtroDistancia = false;
   final ScrollController _scrollBentoController = ScrollController();
-  int _paginaActual = 1;
+  int _paginaActual = 0;
   final int _itemsPorPagina =
-      8; // Mostramos 8 por página (2 filas de 4 o 4 filas de 2)
+      3; // Mostramos 8 por página (2 filas de 4 o 4 filas de 2)
   int _totalLavaderosDB = 0; // Para saber hasta dónde podemos avanzar
   void _aplicarOrdenamiento() {
     setState(() {
@@ -236,8 +243,8 @@ class _MainLayoutState extends State<MainLayout> {
     setState(() => _cargandoLavaderos = true);
     try {
       // 1. Calculamos el rango
-      int desde = (_paginaActual - 1) * _itemsPorPagina;
-      int hasta = desde + _itemsPorPagina - 1;
+      final desde = _paginaActual * _itemsPorPagina;
+      final hasta = desde + _itemsPorPagina - 1;
 
       // 2. Pedimos los datos con conteo incluido
       final response = await supabase
@@ -306,7 +313,7 @@ class _MainLayoutState extends State<MainLayout> {
     return lista.take(5).toList(); // Mantenemos tu límite de 5 tarjetas rápidas
   }
 
-@override
+  @override
   void initState() {
     super.initState();
     _obtenerRolActual();
@@ -373,6 +380,7 @@ class _MainLayoutState extends State<MainLayout> {
     // no vuelva a salir si el usuario navega o recarga la pantalla.
     pendingPaymentResult = null;
   }
+
   Widget _buildContenidoPanelDerecho() {
     // CASO 1: Si es Dueño de Lavadero -> Siempre ve el panel de edición si hay algo seleccionado
     if (_rolUsuario == 'lavadero') {
@@ -1262,20 +1270,13 @@ class _MainLayoutState extends State<MainLayout> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. IMAGEN DEL LAVADERO
+          // 1. IMAGEN DEL LAVADERO (MAESTRA)
           ClipRRect(
             borderRadius: BorderRadius.circular(15),
-            child: Image.network(
-              'https://picsum.photos/seed/${_lavaderoSeleccionado['id']}/400/250',
+            child: buildImagenLavadero(
+              _lavaderoSeleccionado,
               height: 180,
-              width: double.infinity,
-              fit: BoxFit.cover,
-              errorBuilder: (context, e, s) => Container(
-                height: 180,
-                color: Colors.grey[200],
-                child: const Icon(Icons.image),
-              ),
-            ),
+            ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
           ),
           const SizedBox(height: 25),
 
@@ -1860,6 +1861,36 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                   ),
                 ),
+                const SizedBox(width: 8), // Espacio entre botones
+                // --- BOTÓN NUEVO: SUBIR FOTO ---
+                TextButton.icon(
+                  style: TextButton.styleFrom(
+                    backgroundColor: azulATT.withOpacity(0.1),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  onPressed: () async {
+                    String? url = await _subirImagenACloudinary();
+                    if (url != null) {
+                      _mostrarAlerta("Foto lista: $url", Colors.green);
+                    }
+                  },
+                  icon: Icon(
+                    Icons.add_a_photo_rounded,
+                    color: azulATT,
+                    size: 18,
+                  ),
+                  label: Text(
+                    "SUBIR FOTO",
+                    style: TextStyle(
+                      color: azulATT,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1971,50 +2002,9 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
 
                       // --- 2. LA BOTONERA DE PAGINACIÓN AQUÍ ---
-                      Container(
-                        padding: const EdgeInsets.symmetric(vertical: 20),
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          border: Border(
-                            top: BorderSide(color: Colors.black12),
-                          ),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _botonPaginacion(
-                              "ANTERIOR",
-                              Icons.arrow_back_ios_new,
-                              _paginaActual > 1
-                                  ? () {
-                                      setState(() => _paginaActual--);
-                                      _cargarMisLavaderos();
-                                    }
-                                  : null,
-                            ),
-                            const SizedBox(width: 30),
-                            Text(
-                              "PÁGINA $_paginaActual",
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w900,
-                                color: Colors.blueGrey,
-                              ),
-                            ),
-                            const SizedBox(width: 30),
-                            _botonPaginacion(
-                              "SIGUIENTE",
-                              Icons.arrow_forward_ios,
-                              // Solo habilita siguiente si trajimos el máximo de items de la página
-                              _misLavaderosReales.length == _itemsPorPagina
-                                  ? () {
-                                      setState(() => _paginaActual++);
-                                      _cargarMisLavaderos();
-                                    }
-                                  : null,
-                            ),
-                          ],
-                        ),
-                      ),
+                      // --- REEMPLAZO: BOTONERA ESTILO RESERVAS (Clon exacto) ---
+                      if (!_cargandoLavaderos && _totalLavaderosDB > 0)
+                        _buildPaginacionLavaderos(),
                     ],
                   ),
           ),
@@ -2053,53 +2043,21 @@ class _MainLayoutState extends State<MainLayout> {
             width: 2,
           ),
         ),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: destaca ? 3 : 2,
               child: Stack(
-                // Usamos Stack para encimar el texto sobre la imagen
                 children: [
                   Container(
                     margin: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
+                    child: ClipRRect(
                       borderRadius: BorderRadius.circular(20),
-                      image: DecorationImage(
-                        image: NetworkImage(
-                          'https://picsum.photos/seed/${l['id']}/400/300',
-                        ),
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                  ),
-                  // --- ESTE ES EL INDICADOR DE ESTADO ---
-                  Positioned(
-                    top: 15,
-                    right: 15,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: destaca ? Colors.white : const Color(0xFF3ABEF9),
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(color: Colors.black12, blurRadius: 4),
-                        ],
-                      ),
-                      child: Text(
-                        "OPERANDO", // Más adelante lo haremos dinámico con el horario
-                        style: TextStyle(
-                          color: destaca
-                              ? const Color(0xFF3ABEF9)
-                              : Colors.white,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
+                      child: buildImagenLavadero(
+                        l,
+                        height: double.infinity,
+                      ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
                     ),
                   ),
                 ],
@@ -2271,50 +2229,144 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  Widget _botonPaginacion(String texto, IconData icono, VoidCallback? onTap) {
-    bool deshabilitado = onTap == null;
+  Widget _buildPaginacionLavaderos() {
+    int totalPaginas = (_totalLavaderosDB / _itemsPorPagina).ceil();
+    // Lógica de bloques de 3 números como en Reservas
+    int bloqueActual = (_paginaActual / 3).floor();
+    int inicioBloque = bloqueActual * 3;
+    int finBloque = (inicioBloque + 2 < totalPaginas)
+        ? inicioBloque + 2
+        : totalPaginas - 1;
 
-    return MouseRegion(
-      // ESTO PONE LA MANITO
-      cursor: deshabilitado
-          ? SystemMouseCursors.basic
-          : SystemMouseCursors.click,
-      child: Opacity(
-        opacity: deshabilitado ? 0.3 : 1.0,
-        child: InkWell(
-          // ESTO HACE LA ANIMACIÓN AL CLICKEAR
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(15),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: const Color(0xFF3ABEF9), width: 1.5),
-            ),
-            child: Row(
-              children: [
-                if (texto == "ANTERIOR")
-                  Icon(icono, size: 14, color: const Color(0xFF3ABEF9)),
-                if (texto == "ANTERIOR") const SizedBox(width: 8),
-                Text(
-                  texto,
-                  style: const TextStyle(
-                    color: Color(0xFF3ABEF9),
-                    fontWeight: FontWeight.bold,
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.9),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          // Botón Izquierdo
+          IconButton(
+            icon: const Icon(Icons.chevron_left_rounded),
+            onPressed: _paginaActual > 0
+                ? () {
+                    setState(() => _paginaActual--);
+                    _cargarMisLavaderos();
+                  }
+                : null,
+          ),
+
+          // Números de página estilizados
+          for (int i = inicioBloque; i <= finBloque; i++)
+            GestureDetector(
+              onTap: () {
+                setState(() => _paginaActual = i);
+                _cargarMisLavaderos();
+              },
+              child: MouseRegion(
+                // Agregamos la manito que querías
+                cursor: SystemMouseCursors.click,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 5),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _paginaActual == i
+                        ? const Color(0xFF3ABEF9)
+                        : Colors.black.withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    "${i + 1}",
+                    style: TextStyle(
+                      color: _paginaActual == i ? Colors.white : Colors.black54,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-                if (texto == "SIGUIENTE") const SizedBox(width: 8),
-                if (texto == "SIGUIENTE")
-                  Icon(icono, size: 14, color: const Color(0xFF3ABEF9)),
-              ],
+              ),
             ),
+
+          // Botón Derecho
+          IconButton(
+            icon: const Icon(Icons.chevron_right_rounded),
+            onPressed: _paginaActual < totalPaginas - 1
+                ? () {
+                    setState(() => _paginaActual++);
+                    _cargarMisLavaderos();
+                  }
+                : null,
           ),
-        ),
+        ],
       ),
     );
   }
-}
+
+  Future<String?> _subirImagenACloudinary() async {
+    final picker = ImagePicker();
+    // 1. El dueño elige la imagen de su PC/Celular
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image == null) return null; // El usuario canceló
+
+    setState(() => _cargandoLavaderos = true); // Mostramos un loader
+
+    try {
+      // 2. Preparamos la petición a Cloudinary
+      var request = http.MultipartRequest(
+        'POST',
+        Uri.parse(
+          'https://api.cloudinary.com/v1_1/dcmz8zzln/image/upload',
+        ), // <--- CAMBIAR
+      );
+
+      request.fields['upload_preset'] =
+          'preset_lavaderos'; // <--- CAMBIAR (el que creaste hoy)
+
+      var bytes = await image.readAsBytes();
+      request.files.add(
+        http.MultipartFile.fromBytes('file', bytes, filename: image.name),
+      );
+
+      // 3. Enviamos y esperamos respuesta
+      var response = await request.send();
+      var responseData = await response.stream.toBytes();
+      var responseString = String.fromCharCodes(responseData);
+      var jsonResponse = jsonDecode(responseString);
+
+      if (response.statusCode == 200) {
+        // Cloudinary nos da la URL segura (https)
+        return jsonResponse['secure_url'];
+      } else {
+        debugPrint("Error Cloudinary: ${jsonResponse['error']['message']}");
+        return null;
+      }
+    } catch (e) {
+      debugPrint("Error subiendo imagen: $e");
+      return null;
+    } finally {
+      setState(() => _cargandoLavaderos = false);
+    }
+  }
+
+  void _mostrarAlerta(String msg, Color color) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: color,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+} // FINAL _MAINLAYOUTSTATE
 
 // --- PANTALLA DE MAPA ---
 class MapScreen extends StatefulWidget {
@@ -2826,18 +2878,10 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.network(
-                          'https://picsum.photos/seed/${widget.l['id']}/200/120',
+                        child: buildImagenLavadero(
+                          widget.l,
                           height: 80,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) =>
-                              Container(
-                                height: 80,
-                                color: Colors.grey[200],
-                                child: const Icon(Icons.image_not_supported),
-                              ),
-                        ),
+                        ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
                       ),
                       const SizedBox(height: 8),
                       Text(
@@ -3621,4 +3665,57 @@ class _PerfilScreenState extends State<PerfilScreen> {
       ),
     );
   }
+}
+
+// --- FUNCIÓN MAESTRA GLOBAL (Accesible desde todo el archivo) ---
+Widget buildImagenLavadero(
+  dynamic l, {
+  double height = 180,
+  double width = double.infinity,
+}) {
+  final String url = l['foto_url']?.toString() ?? "";
+  final String nombre = l['razon_social']?.toString() ?? "L";
+  final String inicial = nombre.isNotEmpty ? nombre[0].toUpperCase() : "L";
+
+  // Color fijo para que no de error de variable
+  final Color colorATT = const Color(0xFF3ABEF9);
+
+  if (url.isNotEmpty) {
+    return Image.network(
+      url,
+      height: height,
+      width: width,
+      fit: BoxFit.cover,
+      // Si la URL falla por algún motivo, mostramos el avatar
+      errorBuilder: (context, error, stackTrace) =>
+          _disenarAvatar(inicial, height, width, colorATT),
+    );
+  }
+
+  return _disenarAvatar(inicial, height, width, colorATT);
+}
+
+// Función auxiliar para el diseño del círculo/cuadrado
+Widget _disenarAvatar(String inicial, double h, double w, Color color) {
+  return Container(
+    height: h,
+    width: w,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [color, color.withOpacity(0.6), Colors.blueGrey.shade800],
+      ),
+    ),
+    child: Center(
+      child: Text(
+        inicial,
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: h > 100 ? 60 : 30, // Tamaño inteligente según el lugar
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    ),
+  );
 }
