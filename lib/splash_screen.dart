@@ -66,15 +66,91 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFEF4444), // El Rojo ATT!
-      body: Center(
+      // Eliminamos el backgroundColor simple para usar el Container con Gradient
+      body: Container(
+        width: double.infinity,
+        height: double.infinity,
+        // --- DEGRADADO RADIAL ROJO (Efecto profundidad) ---
+        decoration: const BoxDecoration(
+          gradient: RadialGradient(
+            center: Alignment.center,
+            radius: 1.2,
+            colors: [
+              Color(0xFFEF4444), // Rojo ATT! central
+              Color(0xFF7F1D1D), // Rojo bordó oscuro hacia las esquinas
+            ],
+          ),
+        ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Tu logo
-            Image.asset('assets/logo_att.png', width: 200),
-            const SizedBox(height: 20),
-            const CircularProgressIndicator(color: Colors.white),
+            // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO ---
+            // Esto oculta el fondo blanco del PNG y lo hace ver premium
+            // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO (CORREGIDO) ---
+            // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO (CORRECCIÓN FINAL) ---
+            Container(
+              width: 180, // Definimos un tamaño fijo para el medallón
+              height: 180,
+              padding: const EdgeInsets.all(12), // Espacio de respeto
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 30,
+                    offset: const Offset(0, 10),
+                  ),
+                ],
+              ),
+              // ClipOval es lo que va a CORTAR esas esquinas blancas de la imagen
+              child: ClipOval(
+                child: Image.asset(
+                  'assets/logo_att.png',
+                  fit: BoxFit
+                      .cover, // "cover" asegura que llene el círculo sin dejar ver el fondo
+                ),
+              ),
+            ),
+            const SizedBox(height: 40),
+
+            // --- TEXTO DE IDENTIDAD (CON BORDE AZUL) ---
+            // --- NOMBRE DE LA APP (SERGIO TRENDY - BLANCO PURO) ---
+            const Text(
+              "A TODO TRAPO",
+              style: TextStyle(
+                fontFamily:
+                    'SergioTrendy', // Asegurate que el nombre sea igual al del pubspec.yaml
+                color: Colors.white,
+                fontSize: 40, // Más grande para que se luzca la fuente de Canva
+                fontWeight: FontWeight.normal,
+              ),
+            ),
+
+            const SizedBox(height: 5),
+
+            // --- TU FIRMA OSCAR ALHUAY ---
+            const Text(
+              "OSCAR ALHUAY",
+              style: TextStyle(
+                color: Colors.white60,
+                fontSize: 10,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 12, // Espaciado premium
+              ),
+            ),
+
+            const SizedBox(height: 60),
+
+            // --- INDICADOR DE CARGA ---
+            const SizedBox(
+              width: 35,
+              height: 35,
+              child: CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2,
+              ),
+            ),
           ],
         ),
       ),
