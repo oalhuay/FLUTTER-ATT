@@ -454,18 +454,13 @@ class _MainLayoutState extends State<MainLayout> {
   List<dynamic> _deduplicarLavaderos(List<dynamic> lista) {
     final Map<String, dynamic> unicos = {};
     for (final l in lista) {
-      final id = l['id'];
-      final String key;
-      if (id != null) {
-        key = 'id:$id';
-      } else {
-        final nombre = (l['razon_social'] ?? '').toString().toLowerCase();
-        final direccion = (l['direccion'] ?? '').toString().toLowerCase();
-        final lat = (l['latitud'] ?? '').toString();
-        final lon = (l['longitud'] ?? '').toString();
-        key = 'txt:$nombre|$direccion|$lat|$lon';
-      }
-      unicos.putIfAbsent(key, () => l);
+      // Usamos el ID de la base de datos como llave única (siempre existe en Supabase)
+      // Si por alguna razón mística el ID es nulo, usamos la razón social para no crashear
+      final String key = l['id']?.toString() ?? l['razon_social'].toString();
+
+      // Al usar el operador [], si el ID ya existe, simplemente lo pisa con la versión
+      // más nueva, asegurando que siempre tengas el dato más fresco.
+      unicos[key] = l;
     }
     return unicos.values.toList();
   }
@@ -1204,18 +1199,19 @@ class _MainLayoutState extends State<MainLayout> {
         if (Navigator.canPop(context)) Navigator.pop(context);
 
         if (index == 99) {
-          // Navigator.push devuelve un Future que se completa al volver
           Navigator.push(
             context,
             MaterialPageRoute(
               builder: (context) => const RegistroLavaderoScreen(),
             ),
           ).then((_) {
-            // --- ESTO SE EJECUTA AL VOLVER ---
+            // --- ESTO SE EJECUTA AL VOLVER DEL REGISTRO ---
             setState(() {
               _indiceActual = 0; // Volvemos al mapa
-              _sidebarAbierto = true; // Forzamos que la barra sea visible
+              _sidebarAbierto = true;
             });
+            // LE AVISAMOS AL MAPA QUE RECARGUE TODO DE SUPABASE
+            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
           });
         } else {
           // ... resto de tu código de índices (0, 100, 101)
@@ -2440,7 +2436,10 @@ class _MapScreenState extends State<MapScreen> {
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'lavaderos',
-          callback: (payload) => cargarLavaderosDeSupabase(),
+          callback: (payload) {
+            debugPrint("🔥 Cambio detectado en Realtime!");
+            cargarLavaderosDeSupabase(); // Esto recarga la lista local y dispara el onLavaderosCargados
+          },
         )
         .subscribe();
   }

@@ -88,27 +88,35 @@ class _SplashScreenState extends State<SplashScreen> {
             // Esto oculta el fondo blanco del PNG y lo hace ver premium
             // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO (CORREGIDO) ---
             // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO (CORRECCIÓN FINAL) ---
+            // --- EL LOGO COMPACTO CON ANILLO AZUL (CAMBIO AQUÍ) ---
             Container(
-              width: 180, // Definimos un tamaño fijo para el medallón
-              height: 180,
-              padding: const EdgeInsets.all(12), // Espacio de respeto
+              padding: const EdgeInsets.all(
+                6,
+              ), // El "aire" blanco entre el logo y el borde azul
               decoration: BoxDecoration(
                 color: Colors.white,
-                shape: BoxShape.circle,
+                // Usamos StadiumBorder o BorderRadius alto para que sea OVALADO como tu logo
+                borderRadius: BorderRadius.circular(60),
+                border: Border.all(
+                  color: const Color(0xFF003366), // Azul ATT!
+                  width: 4, // El anillo exterior
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.3),
-                    blurRadius: 30,
-                    offset: const Offset(0, 10),
+                    blurRadius: 25,
+                    offset: const Offset(0, 8),
                   ),
                 ],
               ),
-              // ClipOval es lo que va a CORTAR esas esquinas blancas de la imagen
-              child: ClipOval(
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(50),
                 child: Image.asset(
                   'assets/logo_att.png',
+                  height:
+                      120, // Altura controlada para que el ancho se ajuste solo
                   fit: BoxFit
-                      .cover, // "cover" asegura que llene el círculo sin dejar ver el fondo
+                      .contain, // Mantiene la proporción original del óvalo
                 ),
               ),
             ),
