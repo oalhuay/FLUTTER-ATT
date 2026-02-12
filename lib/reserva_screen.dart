@@ -136,31 +136,54 @@ class _ReservaScreenState extends State<ReservaScreen>
 
     try {
       final mp = MPService();
-      // ENVIAMOS METADATA: Esto es lo que el Webhook recibirá para crear el turno
+
+      // IMPORTANTE: Los nombres de estas llaves (fecha_turno, hora_turno, etc)
+      // deben ser EXACTAMENTE iguales a los que busca el Webhook en Node.js.
+      // En reserva_screen.dart
       final urlPago = await mp.crearPreferencia(
         titulo: "Reserva ATT: ${widget.lavadero['razon_social']}",
         precio: _totalAPagar,
-        // Añadimos este mapa de datos extra
         metadata: {
-          "userId": usuario.id,
+          "user_id": usuario.id, // Verifica que el servidor busque "user_id"
           "fecha_turno": _fechaSeleccionada.toIso8601String().split('T')[0],
           "hora_turno": hora,
           "lavadero_nombre": widget.lavadero['razon_social'],
+          "servicios": _serviciosSeleccionados.isEmpty
+              ? "Lavado General"
+              : _serviciosSeleccionados.join(", "),
         },
       );
 
       if (urlPago != null) {
-        // Abrimos el navegador. La ejecución de la app se queda "en pausa" aquí.
-        await launchUrl(
+        // 1. Intentamos abrir Mercado Pago primero
+        final bool lanzado = await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
+
+        if (lanzado) {
+          // 2. Esperamos 1 segundo para asegurar que el navegador tomó el control
+          await Future.delayed(const Duration(seconds: 1));
+
+          // 3. Verificamos que la pantalla siga existiendo antes de cerrarla
+          if (context.mounted) {
+            setState(() {
+              _estaProcesando = false;
+              _esperandoPago = false;
+            });
+
+            // Cerramos la pantalla de reserva. El usuario al volver verá el Mapa
+            Navigator.pop(context);
+          }
+        }
       } else {
-        setState(() {
-          _estaProcesando = false;
-          _esperandoPago = false;
-        });
-        _mostrarMensajeError("No se pudo conectar con el servidor de pagos.");
+        if (context.mounted) {
+          setState(() {
+            _estaProcesando = false;
+            _esperandoPago = false;
+          });
+          _mostrarMensajeError("No se pudo conectar con el servidor de pagos.");
+        }
       }
     } catch (e) {
       setState(() {
@@ -192,6 +215,81 @@ class _ReservaScreenState extends State<ReservaScreen>
     );
   }
 
+  void _mostrarExitoFinal(Map<String, dynamic> factura) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+        title: const Icon(
+          Icons.check_circle_rounded,
+          color: Colors.green,
+          size: 70,
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "¡Turno confirmado!",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              "Tu reserva y comprobante ya están listos en la sección 'Mis Turnos'.",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.black54, fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444), // Rojo ATT!
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              minimumSize: const Size(double.infinity, 45),
+            ),
+            onPressed: () {
+              PdfHelper.descargarComprobante(
+                nroFactura: factura['payment_id'].toString(),
+                lavadero: widget.lavadero['razon_social'],
+                fecha: DateFormat(
+                  'dd/MM/yyyy HH:mm',
+                ).format(DateTime.parse(factura['fecha_emision'])),
+                servicios: factura['servicios'] ?? "Servicio ATT!",
+                total: (factura['total'] as num).toDouble(),
+              );
+            },
+            icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
+            label: const Text(
+              "DESCARGAR COMPROBANTE",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+          Center(
+            child: TextButton(
+              onPressed: () {
+                Navigator.of(context).popUntil((route) => route.isFirst);
+              },
+              child: const Text(
+                "VOLVER AL MAPA",
+                style: TextStyle(
+                  color: Color(0xFF3ABEF9),
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _ejecutarRegistroEnBaseDeDatos({
     required String status,
     required String paymentId,
@@ -201,28 +299,38 @@ class _ReservaScreenState extends State<ReservaScreen>
     try {
       setState(() => _estaProcesando = true);
 
-      // 1. Esperamos un poco para que el Webhook trabaje
-      await Future.delayed(const Duration(seconds: 4));
+      // PASO 1: Esperamos un poco más (5-7 seg) para que el Webhook trabaje en Vercel
+      int intentos = 0;
+      Map<String, dynamic>? factura;
 
-      // 2. ¿Ya existe el turno? (Lo creó el Webhook)
-      final existeTurno = await Supabase.instance.client
-          .from('turnos')
-          .select()
-          .eq('payment_id', paymentId)
-          .maybeSingle();
-
-      if (existeTurno != null) {
-        debugPrint("✅ El servidor registró el turno correctamente.");
-        return; // Salimos, no hace falta hacer nada más
+      while (intentos < 5 && factura == null) {
+        await Future.delayed(const Duration(seconds: 3));
+        factura = await Supabase.instance.client
+            .from('facturas')
+            .select()
+            .eq('payment_id', paymentId)
+            .maybeSingle();
+        intentos++;
+        debugPrint("🔍 Buscando factura (Intento $intentos)...");
       }
 
-      // 3. SOLO SI EL SERVIDOR FALLÓ (Backup local):
-      debugPrint("⚠️ Webhook no detectado. Registrando localmente...");
-      // Aquí mueves tu lógica de insert que ya tenías en el PASO C
+      // PASO 2: Si el servidor lo creó, mostramos el éxito
+      if (factura != null) {
+        _mostrarExitoFinal(factura);
+      } else {
+        // Si el servidor falló después de 15 seg, activamos el plan de respaldo
+        debugPrint(
+          "⚠️ Webhook no respondió a tiempo. Agendando desde la App...",
+        );
+        // Aquí pones tu código de insert de factura y turno que ya tenías
+      }
     } catch (e) {
-      debugPrint("❌ Error: $e");
+      debugPrint("❌ Error en el proceso final: $e");
     } finally {
-      setState(() => _estaProcesando = false);
+      setState(() {
+        _estaProcesando = false;
+        _esperandoPago = false;
+      });
     }
   }
 

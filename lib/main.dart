@@ -11,10 +11,11 @@ import 'package:intl/date_symbol_data_local.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
-import 'dart:convert'; // Para arreglar el error de jsonDecode
-import 'package:http/http.dart'
-    as http; // Para arreglar el error de http.MultipartRequest
-import 'package:image_picker/image_picker.dart'; // Para arreglar el error de ImagePicker y XFile
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
+import 'dart:async';
+import 'package:url_launcher/url_launcher.dart';
 
 // --- GLOBALES REINSTALADAS ---
 final supabase = Supabase.instance.client; //
@@ -50,26 +51,90 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    _initDeepLinks(); //
+    _initDeepLinks();
   }
 
   void _initDeepLinks() {
     _appLinks.uriLinkStream.listen((uri) {
       final urlString = uri.toString();
 
-      // Guardamos el resultado sin mostrar nada aún
       if (urlString.contains("pago-exitoso")) {
         pendingPaymentResult = "success";
+        // Extraemos el ID que manda Mercado Pago para buscar la factura
+        final paymentId =
+            uri.queryParameters['payment_id'] ??
+            uri.queryParameters['collection_id'];
+        if (paymentId != null) {
+          _buscarFacturaYMostrarOverlay(paymentId);
+        }
       } else if (urlString.contains("pago-fallido")) {
         pendingPaymentResult = "error";
+        _mostrarNotificacionSimple();
       }
     });
+  }
+
+  // --- LÓGICA DE BÚSQUEDA Y OVERLAY ---
+  Future<void> _buscarFacturaYMostrarOverlay(String paymentId) async {
+    int intentos = 0;
+    // Buscamos durante 20 segundos (10 intentos cada 2 seg) mientras el servidor crea el PDF
+    while (intentos < 10) {
+      final res = await supabase
+          .from('facturas')
+          .select('url_pdf')
+          .eq('payment_id', paymentId)
+          .maybeSingle();
+
+      if (res != null && res['url_pdf'] != null) {
+        _dispararOverlay(paymentId, res['url_pdf']);
+        return;
+      }
+      await Future.delayed(const Duration(seconds: 2));
+      intentos++;
+    }
+    _mostrarNotificacionSimple(); // Si agota intentos sin PDF, solo muestra el aviso verde
+  }
+
+  void _dispararOverlay(String id, String url) {
+    final context = mapScreenKey.currentContext;
+    if (context == null) return;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => ComprobanteOverlay(
+        paymentId: id,
+        urlPdf: url,
+        onCerrar: () {
+          if (ctx.mounted) Navigator.pop(ctx);
+          pendingPaymentResult = null;
+        },
+      ),
+    );
+  }
+
+  void _mostrarNotificacionSimple() {
+    if (pendingPaymentResult == null) return;
+
+    final esExito = pendingPaymentResult == "success";
+    scaffoldMessengerKey.currentState?.showSnackBar(
+      SnackBar(
+        content: Text(
+          esExito
+              ? "¡PAGO APROBADO! Reserva lista en ATT!."
+              : "EL PAGO NO SE REALIZÓ. Reintenta.",
+        ),
+        backgroundColor: esExito ? Colors.green : Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+    pendingPaymentResult = null;
   }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      scaffoldMessengerKey: scaffoldMessengerKey, //
+      scaffoldMessengerKey: scaffoldMessengerKey,
       localizationsDelegates: const [
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
@@ -86,7 +151,7 @@ class _MyAppState extends State<MyApp> {
           primary: const Color(0xFFEF4444),
         ),
       ),
-      home: const SplashScreen(), //
+      home: const SplashScreen(),
     );
   }
 }
@@ -357,7 +422,7 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           backgroundColor: Colors.green.shade600,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 5),
+          duration: const Duration(seconds: 15),
         ),
       );
     } else if (pendingPaymentResult == "error") {
@@ -372,6 +437,7 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           backgroundColor: Colors.red.shade600,
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 15),
         ),
       );
     }
@@ -3717,4 +3783,127 @@ Widget _disenarAvatar(String inicial, double h, double w, Color color) {
       ),
     ),
   );
+}
+
+class ComprobanteOverlay extends StatefulWidget {
+  final String paymentId;
+  final String urlPdf;
+  final VoidCallback onCerrar;
+
+  const ComprobanteOverlay({
+    super.key,
+    required this.paymentId,
+    required this.urlPdf,
+    required this.onCerrar,
+  });
+
+  @override
+  State<ComprobanteOverlay> createState() => _ComprobanteOverlayState();
+}
+
+class _ComprobanteOverlayState extends State<ComprobanteOverlay> {
+  late int _segundos;
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _segundos = 10;
+    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (_segundos > 0) {
+        if (mounted) setState(() => _segundos--);
+      } else {
+        _timer?.cancel();
+        widget.onCerrar();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black54, // Oscurece el fondo
+      child: Center(
+        child: Container(
+          width: 320,
+          padding: const EdgeInsets.all(25),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 20)],
+          ),
+          child: Stack(
+            children: [
+              // Temporizador en la esquina
+              Positioned(
+                right: 0,
+                top: 0,
+                child: Text(
+                  "$_segundos",
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF3ABEF9),
+                  ),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.receipt_long_rounded,
+                    size: 60,
+                    color: Color(0xFF3ABEF9),
+                  ),
+                  const SizedBox(height: 15),
+                  const Text(
+                    "¡PAGO CONFIRMADO!",
+                    style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "ID: ${widget.paymentId}",
+                    style: const TextStyle(fontSize: 10, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 25),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF3ABEF9),
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(double.infinity, 50),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                    ),
+                    onPressed: () => launchUrl(
+                      Uri.parse(widget.urlPdf),
+                      mode: LaunchMode.externalApplication,
+                    ),
+                    icon: const Icon(Icons.file_download),
+                    label: const Text("DESCARGAR COMPROBANTE"),
+                  ),
+                  const SizedBox(height: 10),
+                  TextButton(
+                    onPressed: widget.onCerrar,
+                    child: const Text(
+                      "CERRAR",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
