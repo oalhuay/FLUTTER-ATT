@@ -20,24 +20,47 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   @override
   void initState() {
     super.initState();
+
     // Si recibimos un lavadero, precargamos todos los controladores
     if (widget.lavaderoParaEditar != null) {
       final l = widget.lavaderoParaEditar!;
+
       _nombreController.text = l['razon_social'] ?? '';
       _direccionController.text = l['direccion'] ?? '';
       _telefonoController.text = l['telefono'] ?? '';
       _bancoController.text = l['nombre_banco'] ?? '';
       _cuentaController.text = l['cuenta_bancaria'] ?? '';
-      _fotoUrlTemporal = l['foto_url']; // Cargamos la foto actual si existe
+      _fotoUrlTemporal = l['foto_url'];
 
-      // Sincronizamos la ubicación del mapa
-      _puntoSeleccionado = LatLng(l['latitud'], l['longitud']);
+      // 1. Sincronizamos la ubicación del mapa
+      if (l['latitud'] != null && l['longitud'] != null) {
+        _puntoSeleccionado = LatLng(
+          (l['latitud'] as num).toDouble(),
+          (l['longitud'] as num).toDouble(),
+        );
+      }
 
-      // Sincronizamos precios y servicios
+      // 2. Sincronizamos Precios y Servicios desde Supabase
       if (l['servicios_precios'] != null) {
+        // Limpiamos cualquier sugerencia previa para que solo quede lo de DB
         _preciosMap.clear();
-        (l['servicios_precios'] as Map).forEach((k, v) {
-          _preciosMap[k.toString()] = (v as num).toDouble();
+        _servicios.clear();
+
+        Map<String, dynamic> data = Map<String, dynamic>.from(
+          l['servicios_precios'],
+        );
+
+        data.forEach((k, v) {
+          String nombre = k.toString();
+          double precio = (v as num).toDouble();
+
+          _preciosMap[nombre] = precio;
+
+          // Agregamos a la lista de servicios solo si no es el base "Lavado"
+          // para que no se duplique en el Wrap de etiquetas
+          if (nombre != "Lavado") {
+            _servicios.add(nombre);
+          }
         });
       }
     }
@@ -57,7 +80,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
 
   final supabase = Supabase.instance.client;
   final MapController _mapController = MapController();
-
+  Map<String, dynamic> _serviciosPrecios = {};
   // --- ESTADO MANTENIDO ---
   final Map<String, double> _preciosMap = {'Lavado': 0.0};
   final List<String> _servicios = [
@@ -250,7 +273,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     final datosLavadero = {
       'dueño_id': user.id,
       'razon_social': _nombreController.text,
-      'foto_url': _fotoUrlTemporal, //
+      'foto_url': _fotoUrlTemporal,
       'direccion': _direccionController.text,
       'telefono': _telefonoController.text,
       'nombre_banco': _bancoController.text,
@@ -301,6 +324,35 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   @override
   Widget build(BuildContext context) {
     bool lavadoHabilitado = (_preciosMap['Lavado'] ?? 0.0) > 0;
+    String? _servicioEnEdicion;
+    void _confirmarAccionServicio() {
+      if (_tagController.text.isEmpty || _precioController.text.isEmpty) return;
+
+      setState(() {
+        String nombre = _tagController.text;
+        double precio = double.tryParse(_precioController.text) ?? 0.0;
+
+        if (_servicioEnEdicion != null) {
+          // Si estamos EDITANDO
+          _preciosMap.remove(_servicioEnEdicion); // Borramos rastro del viejo
+          int index = _servicios.indexOf(_servicioEnEdicion!);
+          _servicios[index] = nombre; // Actualizamos nombre en la lista
+        } else {
+          // Si estamos AGREGANDO
+          if (!_servicios.contains(nombre)) {
+            _servicios.add(nombre);
+          }
+        }
+
+        // Actualizamos el MAPA de precios (esto es lo que se guarda en servicios_precios)
+        _preciosMap[nombre] = precio;
+
+        // Limpiamos todo para el próximo
+        _servicioEnEdicion = null;
+        _tagController.clear();
+        _precioController.clear();
+      });
+    }
 
     return Scaffold(
       backgroundColor: fondoSoft,
@@ -636,16 +688,25 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // 3. SERVICIOS Y PRECIOS
+                // 3. SECCIÓN: SERVICIOS Y PRECIOS (DINÁMICO)
                 _buildBentoCard(
                   title: "Servicios y Precios",
                   icon: Icons.payments_rounded,
                   children: [
+                    // CAMPO 1: PRECIO LAVADO BÁSICO (SERVICIO BASE)
                     TextField(
                       keyboardType: TextInputType.number,
-                      onChanged: (v) => setState(
-                        () => _preciosMap['Lavado'] = double.tryParse(v) ?? 0.0,
+                      controller: TextEditingController(
+                        // Usamos ?? "" para que si es null, el campo simplemente aparezca vacío
+                        text: _preciosMap['Lavado']?.toStringAsFixed(0) ?? "",
                       ),
+                      onChanged: (v) => setState(() {
+                        _preciosMap['Lavado'] = double.tryParse(v) ?? 0.0;
+                        // El servicio "Lavado" siempre debe estar en la lista de servicios para la DB
+                        if (!_servicios.contains('Lavado')) {
+                          // No lo agregamos a la lista visual de etiquetas, pero sí al mapa de datos
+                        }
+                      }),
                       decoration: InputDecoration(
                         labelText: "Precio Lavado Básico *",
                         prefixIcon: const Icon(Icons.water_drop_rounded),
@@ -658,6 +719,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                         ),
                       ),
                     ),
+
                     if (!lavadoHabilitado)
                       const Padding(
                         padding: EdgeInsets.only(top: 12),
@@ -672,24 +734,48 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                       )
                     else ...[
                       const SizedBox(height: 16),
+
+                      // WRAP DE ETIQUETAS DINÁMICAS (Solo servicios adicionales)
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
-                        children: _servicios.map((s) {
+                        children: _servicios.where((s) => s != 'Lavado').map((
+                          s,
+                        ) {
                           final p = _preciosMap[s] ?? 0.0;
-                          return Chip(
+                          final esEditandoEste = _servicioEnEdicion == s;
+
+                          return InputChip(
                             label: Text(
                               "$s: \$${p.toStringAsFixed(0)}",
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 11,
                                 fontWeight: FontWeight.bold,
+                                color: esEditandoEste
+                                    ? Colors.white
+                                    : Colors.black87,
                               ),
                             ),
-                            onDeleted: s == 'Lavado'
-                                ? null
-                                : () => setState(() => _servicios.remove(s)),
-                            deleteIconColor: rojoATT,
-                            backgroundColor: azulATT.withOpacity(0.1),
+                            // AL HACER CLIC: Cargamos los datos en los campos de edición abajo
+                            onPressed: () {
+                              setState(() {
+                                _servicioEnEdicion = s;
+                                _tagController.text = s;
+                                _precioController.text = p.toStringAsFixed(0);
+                              });
+                            },
+                            onDeleted: () => setState(() {
+                              _servicios.remove(s);
+                              _preciosMap.remove(s);
+                              if (_servicioEnEdicion == s)
+                                _servicioEnEdicion = null;
+                            }),
+                            deleteIconColor: esEditandoEste
+                                ? Colors.white
+                                : rojoATT,
+                            backgroundColor: esEditandoEste
+                                ? azulATT
+                                : azulATT.withOpacity(0.1),
                             side: BorderSide.none,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -697,14 +783,17 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                           );
                         }).toList(),
                       ),
+
                       const Divider(height: 32),
+
+                      // FILA DE EDICIÓN / AGREGAR
                       Row(
                         children: [
                           Expanded(
                             child: _buildModernField(
                               _tagController,
-                              "Nuevo Servicio",
-                              Icons.add_box_rounded,
+                              "Servicio",
+                              Icons.edit_attributes_rounded,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -717,26 +806,85 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+
+                          // BOTÓN DINÁMICO (CHECK O ADD)
                           IconButton.filled(
-                            onPressed: _agregarServicioConPrecio,
+                            onPressed: () {
+                              if (_tagController.text.isEmpty ||
+                                  _precioController.text.isEmpty)
+                                return;
+
+                              setState(() {
+                                String nombre = _tagController.text;
+                                double precio =
+                                    double.tryParse(_precioController.text) ??
+                                    0.0;
+
+                                if (_servicioEnEdicion != null) {
+                                  // MODO EDICIÓN: Limpiamos el anterior y actualizamos
+                                  if (_servicioEnEdicion != nombre) {
+                                    _preciosMap.remove(_servicioEnEdicion);
+                                    int index = _servicios.indexOf(
+                                      _servicioEnEdicion!,
+                                    );
+                                    _servicios[index] = nombre;
+                                  }
+                                } else {
+                                  // MODO AGREGAR: Solo si no existe
+                                  if (!_servicios.contains(nombre)) {
+                                    _servicios.add(nombre);
+                                  }
+                                }
+
+                                _preciosMap[nombre] = precio;
+
+                                // Reset de campos
+                                _servicioEnEdicion = null;
+                                _tagController.clear();
+                                _precioController.clear();
+                              });
+                            },
                             style: IconButton.styleFrom(
-                              backgroundColor: azulATT,
+                              backgroundColor: _servicioEnEdicion != null
+                                  ? Colors.green
+                                  : azulATT,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            icon: const Icon(
-                              Icons.add_rounded,
+                            icon: Icon(
+                              _servicioEnEdicion != null
+                                  ? Icons.check_rounded
+                                  : Icons.add_rounded,
                               color: Colors.white,
                             ),
                           ),
                         ],
                       ),
+
+                      // OPCIÓN DE CANCELAR EDICIÓN
+                      if (_servicioEnEdicion != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8),
+                          child: TextButton(
+                            onPressed: () => setState(() {
+                              _servicioEnEdicion = null;
+                              _tagController.clear();
+                              _precioController.clear();
+                            }),
+                            child: const Text(
+                              "Cancelar edición",
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ),
+                        ),
                     ],
                   ],
                 ),
                 const SizedBox(height: 16),
-
                 // 4. OPERACIÓN (HORARIOS)
                 _buildBentoCard(
                   title: "Horarios y Jornada",
