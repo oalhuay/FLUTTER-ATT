@@ -1046,51 +1046,41 @@ class _MainLayoutState extends State<MainLayout> {
 
                             const SizedBox(width: 15),
 
-                            // --- BOTONES LATERALES (Varita y Avatar) ---
-                            Container(
-                              decoration: const BoxDecoration(
-                                color: Colors.white,
-                                shape: BoxShape.circle,
-                              ),
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.auto_fix_high,
-                                  color: Color(0xFF3ABEF9),
+                            // --- BOTONES LATERALES: Avatar ---
+                            // --- AVATAR CON MANITO AL PASAR EL MOUSE ---
+                            MouseRegion(
+                              cursor: SystemMouseCursors
+                                  .click, // <--- LA MAGIA ESTÁ ACÁ
+                              child: GestureDetector(
+                                onTap: () => setState(() => _indiceActual = 2),
+                                child: CircleAvatar(
+                                  radius: 20,
+                                  backgroundColor: const Color(0xFF3ABEF9),
+                                  backgroundImage:
+                                      supabase
+                                              .auth
+                                              .currentUser
+                                              ?.userMetadata?['avatar_url'] !=
+                                          null
+                                      ? NetworkImage(
+                                          supabase
+                                              .auth
+                                              .currentUser!
+                                              .userMetadata!['avatar_url'],
+                                        )
+                                      : null,
+                                  child:
+                                      supabase
+                                              .auth
+                                              .currentUser
+                                              ?.userMetadata?['avatar_url'] ==
+                                          null
+                                      ? const Icon(
+                                          Icons.person,
+                                          color: Colors.white,
+                                        )
+                                      : null,
                                 ),
-                                onPressed: () => mapScreenKey.currentState
-                                    ?.generarLavaderosAutomaticos(),
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            GestureDetector(
-                              onTap: () => setState(() => _indiceActual = 2),
-                              child: CircleAvatar(
-                                radius: 20,
-                                backgroundColor: const Color(0xFF3ABEF9),
-                                backgroundImage:
-                                    supabase
-                                            .auth
-                                            .currentUser
-                                            ?.userMetadata?['avatar_url'] !=
-                                        null
-                                    ? NetworkImage(
-                                        supabase
-                                            .auth
-                                            .currentUser!
-                                            .userMetadata!['avatar_url'],
-                                      )
-                                    : null,
-                                child:
-                                    supabase
-                                            .auth
-                                            .currentUser
-                                            ?.userMetadata?['avatar_url'] ==
-                                        null
-                                    ? const Icon(
-                                        Icons.person,
-                                        color: Colors.white,
-                                      )
-                                    : null,
                               ),
                             ),
                           ],
