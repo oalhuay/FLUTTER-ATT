@@ -154,26 +154,32 @@ class _ReservaScreenState extends State<ReservaScreen>
       );
 
       if (urlPago != null) {
-        // 1. Intentamos abrir Mercado Pago primero
+        // 1. Abrimos Mercado Pago primero
         final bool lanzado = await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
         );
 
         if (lanzado) {
-          // 2. Esperamos 1 segundo para asegurar que el navegador tomó el control
-          await Future.delayed(const Duration(seconds: 1));
+          // 2. Dejamos hasta 3 segundos la pantalla actual antes de cerrarla
+          await Future.delayed(const Duration(seconds: 3));
 
-          // 3. Verificamos que la pantalla siga existiendo antes de cerrarla
+          // 3. Cerramos esta pantalla para seguir el flujo en Mercado Pago
           if (context.mounted) {
             setState(() {
               _estaProcesando = false;
               _esperandoPago = false;
             });
 
-            // Cerramos la pantalla de reserva. El usuario al volver verá el Mapa
+            // Cerramos la pantalla de reserva para continuar solo en Mercado Pago
             Navigator.pop(context);
           }
+        } else if (context.mounted) {
+          setState(() {
+            _estaProcesando = false;
+            _esperandoPago = false;
+          });
+          _mostrarMensajeError("No se pudo abrir Mercado Pago.");
         }
       } else {
         if (context.mounted) {
@@ -712,8 +718,48 @@ class _ReservaScreenState extends State<ReservaScreen>
                 if (_estaProcesando)
                   Container(
                     color: Colors.black45,
-                    child: const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
+                    child: Center(
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 28),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 20,
+                          vertical: 18,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.72),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white24),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const CircularProgressIndicator(color: Colors.white),
+                            const SizedBox(height: 14),
+                            Text(
+                              _esperandoPago
+                                  ? "Abriendo Mercado Pago..."
+                                  : "Procesando pago...",
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 15,
+                              ),
+                            ),
+                            if (_esperandoPago) ...[
+                              const SizedBox(height: 8),
+                              const Text(
+                                "Esta pantalla se cerrará en 3 segundos.",
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
                     ),
                   ),
               ],
@@ -923,9 +969,10 @@ class _ReservaScreenState extends State<ReservaScreen>
   }
 
   void _confirmarAntesDePagar(BuildContext context, String hora) {
+    final parentContext = context;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
         title: const Text(
           "Confirmar Reserva",
@@ -936,13 +983,13 @@ class _ReservaScreenState extends State<ReservaScreen>
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text("CANCELAR"),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.pop(context);
-              _procesarPagoYReserva(context, hora);
+              Navigator.pop(dialogContext);
+              _procesarPagoYReserva(parentContext, hora);
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: azulATT,
