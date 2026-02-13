@@ -2984,7 +2984,7 @@ class TarjetaMarkerOverlay extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Positioned(
-          bottom: 55,
+          bottom:5,
           child: Container(
             width: 180,
             padding: const EdgeInsets.all(8),
