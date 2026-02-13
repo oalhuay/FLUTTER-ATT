@@ -706,11 +706,11 @@ class _MainLayoutState extends State<MainLayout> {
           duration: const Duration(milliseconds: 420),
           curve: Curves.easeOutCubic,
           builder: (context, t, child) {
-            final double dy = -2.5 * t;
-            final double scale = 1.0 + (0.004 * t);
-            final double shadowOpacity = 0.08 + (0.12 * t);
-            final double blur = 6 + (8 * t);
-            final double shadowY = 2 + (3 * t);
+            final double dy = -8.0 * t;
+            final double scale = 1.0 + (0.02 * t);
+            final double shadowOpacity = 0.10 + (0.20 * t);
+            final double blur = 8 + (16 * t);
+            final double shadowY = 3 + (7 * t);
 
             return Transform.translate(
               offset: Offset(0, dy),
