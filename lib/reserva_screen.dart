@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -964,30 +963,6 @@ class _ReservaScreenState extends State<ReservaScreen>
     );
   }
 
-  Future<void> _subirComprobanteAStorage(
-    String turnoId,
-    Uint8List pdfBytes,
-  ) async {
-    try {
-      final String path = 'tickets/comprobante_$turnoId.pdf';
-      await Supabase.instance.client.storage
-          .from('comprobantes')
-          .uploadBinary(
-            path,
-            pdfBytes,
-            fileOptions: const FileOptions(upsert: true),
-          );
-      final String publicUrl = Supabase.instance.client.storage
-          .from('comprobantes')
-          .getPublicUrl(path);
-      await Supabase.instance.client
-          .from('turnos')
-          .update({'url_comprobante': publicUrl})
-          .eq('id', turnoId);
-    } catch (e) {
-      debugPrint("❌ Error vinculando comprobante: $e");
-    }
-  }
 }
 
 //TENDENCIA tendencia de Bento Grid & Glassmorphism 2026 VER INFO EN INTERNET UX/UI

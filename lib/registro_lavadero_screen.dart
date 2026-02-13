@@ -198,19 +198,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     }
   }
 
-  void _agregarServicioConPrecio() {
-    final nombre = _tagController.text.trim();
-    final precio = double.tryParse(_precioController.text) ?? 0.0;
-    if (nombre.isNotEmpty && precio > 0) {
-      setState(() {
-        if (!_servicios.contains(nombre)) _servicios.add(nombre);
-        _preciosMap[nombre] = precio;
-        _tagController.clear();
-        _precioController.clear();
-      });
-    }
-  }
-
   Future<void> _elegirYSubirFoto() async {
     final picker = ImagePicker();
     // 1. El dueño elige la imagen
@@ -325,34 +312,6 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   Widget build(BuildContext context) {
     bool lavadoHabilitado = (_preciosMap['Lavado'] ?? 0.0) > 0;
     String? _servicioEnEdicion;
-    void _confirmarAccionServicio() {
-      if (_tagController.text.isEmpty || _precioController.text.isEmpty) return;
-
-      setState(() {
-        String nombre = _tagController.text;
-        double precio = double.tryParse(_precioController.text) ?? 0.0;
-
-        if (_servicioEnEdicion != null) {
-          // Si estamos EDITANDO
-          _preciosMap.remove(_servicioEnEdicion); // Borramos rastro del viejo
-          int index = _servicios.indexOf(_servicioEnEdicion!);
-          _servicios[index] = nombre; // Actualizamos nombre en la lista
-        } else {
-          // Si estamos AGREGANDO
-          if (!_servicios.contains(nombre)) {
-            _servicios.add(nombre);
-          }
-        }
-
-        // Actualizamos el MAPA de precios (esto es lo que se guarda en servicios_precios)
-        _preciosMap[nombre] = precio;
-
-        // Limpiamos todo para el próximo
-        _servicioEnEdicion = null;
-        _tagController.clear();
-        _precioController.clear();
-      });
-    }
 
     return Scaffold(
       backgroundColor: fondoSoft,

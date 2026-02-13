@@ -274,27 +274,8 @@ class _MainLayoutState extends State<MainLayout> {
       3; // Mostramos 8 por página (2 filas de 4 o 4 filas de 2)
   int _totalLavaderosDB = 0; // Para saber hasta dónde podemos avanzar
   void _aplicarOrdenamiento() {
-    setState(() {
-      if (_filtroPrecio) {
-        _lavaderosFiltrados.sort(
-          (a, b) => (a['precio'] ?? 2500).toDouble().compareTo(
-            (b['precio'] ?? 2500).toDouble(),
-          ),
-        );
-      } else if (_filtroRating) {
-        _lavaderosFiltrados.sort(
-          (a, b) => (b['rating'] ?? 0.0).toDouble().compareTo(
-            (a['rating'] ?? 0.0).toDouble(),
-          ),
-        );
-      } else if (_filtroDistancia) {
-        _lavaderosFiltrados.sort(
-          (a, b) => (a['distancia'] ?? 0.0).toDouble().compareTo(
-            (b['distancia'] ?? 0.0).toDouble(),
-          ),
-        );
-      }
-    });
+    _lavaderosFiltrados = _obtenerListaOrdenada();
+    mapScreenKey.currentState?.actualizarMarkersExternos(_lavaderosFiltrados);
   }
 
   List<dynamic> _misClientesReales = [];
@@ -343,39 +324,80 @@ class _MainLayoutState extends State<MainLayout> {
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _todosLosLavaderos = []; // Lista maestra
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
-  List<dynamic> _obtenerListaOrdenada() {
-    List<dynamic> lista = List.from(_lavaderosFiltrados);
-    // --- LISTA DE CLIENTES REALES ---
+  double? _obtenerPrecioLavado(dynamic lavadero) {
+    final dynamic serviciosPrecios = lavadero['servicios_precios'];
+    if (serviciosPrecios is! Map) return null;
 
-    // Aplicamos los criterios (se pueden combinar)
+    dynamic valorLavado;
+    if (serviciosPrecios.containsKey('Lavado')) {
+      valorLavado = serviciosPrecios['Lavado'];
+    } else if (serviciosPrecios.containsKey('lavado')) {
+      valorLavado = serviciosPrecios['lavado'];
+    } else {
+      for (final entry in serviciosPrecios.entries) {
+        final key = entry.key?.toString().trim().toLowerCase();
+        if (key == 'lavado') {
+          valorLavado = entry.value;
+          break;
+        }
+      }
+    }
+
+    if (valorLavado is num) return valorLavado.toDouble();
+    if (valorLavado is String) return double.tryParse(valorLavado);
+    return null;
+  }
+
+  List<dynamic> _obtenerListaOrdenada() {
+    final lista = List<dynamic>.from(_lavaderosFiltrados);
+    double asDouble(dynamic value, [double fallback = 0.0]) {
+      if (value is num) return value.toDouble();
+      if (value is String) return double.tryParse(value) ?? fallback;
+      return fallback;
+    }
+
     lista.sort((a, b) {
       int cmp = 0;
 
-      // 1. Prioridad: Distancia (si está activo)
-      if (_filtroDistancia) {
-        // Por ahora comparamos latitud como simulacro de distancia
-        cmp = a['latitud'].compareTo(b['latitud']);
-        if (cmp != 0) return cmp;
-      }
-
-      // 2. Prioridad: Rating (Suponiendo que tienes un campo 'rating')
-      if (_filtroRating) {
-        double ratingA = (a['rating'] ?? 0.0).toDouble();
-        double ratingB = (b['rating'] ?? 0.0).toDouble();
-        cmp = ratingB.compareTo(ratingA); // De mayor a menor
-        if (cmp != 0) return cmp;
-      }
-
-      // 3. Prioridad: Precio
       if (_filtroPrecio) {
-        // Simulacro: comparamos por ID para variar el orden hasta que tengas 'precio' en DB
-        cmp = a['id'].compareTo(b['id']);
+        final double? precioA = _obtenerPrecioLavado(a);
+        final double? precioB = _obtenerPrecioLavado(b);
+        if (precioA == null && precioB == null) {
+          cmp = 0;
+        } else if (precioA == null) {
+          cmp = 1; // "No disponible" al final
+        } else if (precioB == null) {
+          cmp = -1;
+        } else {
+          cmp = precioA.compareTo(precioB);
+        }
+        if (cmp != 0) return cmp;
+      }
+
+      if (_filtroDistancia) {
+        final double distanciaA = asDouble(
+          a['distancia'] ?? a['latitud'],
+          0.0,
+        );
+        final double distanciaB = asDouble(
+          b['distancia'] ?? b['latitud'],
+          0.0,
+        );
+        cmp = distanciaA.compareTo(distanciaB);
+        if (cmp != 0) return cmp;
+      }
+
+      if (_filtroRating) {
+        final double ratingA = asDouble(a['rating'], 0.0);
+        final double ratingB = asDouble(b['rating'], 0.0);
+        cmp = ratingB.compareTo(ratingA);
+        if (cmp != 0) return cmp;
       }
 
       return cmp;
     });
 
-    return lista.take(5).toList(); // Mantenemos tu límite de 5 tarjetas rápidas
+    return lista;
   }
 
   @override
@@ -511,6 +533,7 @@ class _MainLayoutState extends State<MainLayout> {
 
       // 2. Evitamos duplicados en la lista de resultados
       _lavaderosFiltrados = _deduplicarLavaderos(coincidencias.toList());
+      _lavaderosFiltrados = _obtenerListaOrdenada();
 
       // 3. Actualizamos los markers del mapa
       mapScreenKey.currentState?.actualizarMarkersExternos(_lavaderosFiltrados);
@@ -558,10 +581,6 @@ class _MainLayoutState extends State<MainLayout> {
                 () {
                   setState(() {
                     _filtroPrecio = !_filtroPrecio;
-                    if (_filtroPrecio) {
-                      _filtroRating = false;
-                      _filtroDistancia = false;
-                    }
                     _aplicarOrdenamiento(); // Esta es la función que arreglamos antes
                   });
                 },
@@ -573,10 +592,6 @@ class _MainLayoutState extends State<MainLayout> {
                 () {
                   setState(() {
                     _filtroRating = !_filtroRating;
-                    if (_filtroRating) {
-                      _filtroPrecio = false;
-                      _filtroDistancia = false;
-                    }
                     _aplicarOrdenamiento();
                   });
                 },
@@ -588,10 +603,6 @@ class _MainLayoutState extends State<MainLayout> {
                 () {
                   setState(() {
                     _filtroDistancia = !_filtroDistancia;
-                    if (_filtroDistancia) {
-                      _filtroPrecio = false;
-                      _filtroRating = false;
-                    }
                     _aplicarOrdenamiento();
                   });
                 },
@@ -661,6 +672,22 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   Widget _buildTargetaBusqueda(dynamic l) {
+    final String nombreLavadero = (l['razon_social'] ?? 'Lavadero').toString();
+    final String direccionLavadero = (l['direccion'] ?? 'Zárate').toString();
+    final bool nombreLargo = nombreLavadero.length > 50;
+    final bool direccionLarga = direccionLavadero.length > 50;
+    final double? precioLavado = _obtenerPrecioLavado(l);
+    final String textoPrecio = precioLavado == null
+        ? "No disponible"
+        : "\$${precioLavado.toStringAsFixed(0)}";
+    final dynamic ratingRaw = l['rating'];
+    final double? rating = ratingRaw is num
+        ? ratingRaw.toDouble()
+        : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
+    final String textoRating = rating == null
+        ? "Sin rating"
+        : rating.clamp(0.0, 5.0).toStringAsFixed(1);
+
     return GestureDetector(
       onTap: () {
         setState(() => _lavaderoSeleccionado = l);
@@ -690,38 +717,80 @@ class _MainLayoutState extends State<MainLayout> {
             mainAxisAlignment: MainAxisAlignment.end,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                l['razon_social'],
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
+              Tooltip(
+                message: nombreLavadero,
+                child: Text(
+                  nombreLavadero,
+                  maxLines: nombreLargo ? 1 : 2,
+                  overflow: nombreLargo ? TextOverflow.ellipsis : null,
+                  softWrap: true,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
                 ),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    l['direccion'] ?? 'Zárate',
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF3ABEF9),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Text(
-                      "\$2500",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
+                  Expanded(
+                    child: Tooltip(
+                      message: direccionLavadero,
+                      child: Text(
+                        direccionLavadero,
+                        maxLines: direccionLarga ? 1 : 2,
+                        overflow: direccionLarga ? TextOverflow.ellipsis : null,
+                        softWrap: true,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
+                  ),
+                  const SizedBox(width: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          "⭐ $textoRating",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.7),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          textoPrecio,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -1556,37 +1625,6 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         ),
       ],
-    );
-  }
-
-  // --- NUEVA FUNCIÓN: CARTEL DE SEGURIDAD ---
-  void _mostrarDialogoConfirmacionEdicion() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("¿Confirmar cambios?"),
-        content: const Text(
-          "Se actualizará la información de tu lavadero en el sistema. ¿Estás seguro?",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3ABEF9),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(context); // Cerramos el cartel
-              _actualizarLavaderoEnSupabase(); // Mandamos a la base de datos
-            },
-            child: const Text("SÍ, ACTUALIZAR"),
-          ),
-        ],
-      ),
     );
   }
 
@@ -2979,6 +3017,14 @@ class TarjetaMarkerOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final dynamic ratingRaw = l['rating'];
+    final double? rating = ratingRaw is num
+        ? ratingRaw.toDouble()
+        : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
+    final String ratingTexto = rating == null
+        ? 'Sin rating'
+        : 'Rating ${rating.clamp(0.0, 5.0).toStringAsFixed(1)}';
+
     return Stack(
       alignment: Alignment.bottomCenter,
       clipBehavior: Clip.none,
@@ -3020,8 +3066,8 @@ class TarjetaMarkerOverlay extends StatelessWidget {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const Text(
-                  'Rating 4.5 | Disponible',
+                Text(
+                  '$ratingTexto | Disponible',
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.green,
@@ -3951,4 +3997,6 @@ class _ComprobanteOverlayState extends State<ComprobanteOverlay> {
     );
   }
 }
+
+
 
