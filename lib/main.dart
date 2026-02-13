@@ -1055,7 +1055,7 @@ class _MainLayoutState extends State<MainLayout> {
                     if (esPantallaChica &&
                         _lavaderoSeleccionado != null &&
                         supabase.auth.currentUser != null &&
-                        _indiceActual != 101) // <--- ESTE ES EL MISIL
+                        _indiceActual == 0) // <--- Solo en el mapa
                       Positioned(
                         right: 15,
                         top: 80,
@@ -1078,9 +1078,10 @@ class _MainLayoutState extends State<MainLayout> {
               ),
 
               // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
+              // Solo visible en el mapa para evitar que se mantenga en otras páginas.
               if (!esPantallaChica &&
                   supabase.auth.currentUser != null &&
-                  _indiceActual != 101)
+                  _indiceActual == 0)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.easeInOutQuart,
