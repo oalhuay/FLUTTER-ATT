@@ -2474,9 +2474,9 @@ class _MapScreenState extends State<MapScreen> {
     return _lavaderosEnMapa.map((l) {
       return Marker(
         point: LatLng(l['latitud'], l['longitud']),
-        width: 60,
-        height: 60,
-        alignment: Alignment.topCenter,
+        width: 34,
+        height: 42,
+        alignment: Alignment.bottomCenter,
         child: MarkerConPopup(
           alTocar: () {
             setState(() => _markerTarjetaActivaId = l['id']);
@@ -2950,17 +2950,22 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
         widget.onHoverCambio?.call(false);
       },
       cursor: SystemMouseCursors.click,
-      child: GestureDetector(
-        onTap: widget.alTocar,
-        child: AnimatedScale(
-          duration: const Duration(milliseconds: 200),
-          scale: _isHovered ? 1.2 : 1.0,
-          child: Icon(
-            Icons.location_on,
-            color: _isHovered
-                ? const Color(0xFFEF4444)
-                : const Color(0xFF3ABEF9),
-            size: 45,
+      child: SizedBox.expand(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.alTocar,
+          child: Center(
+            child: AnimatedScale(
+              duration: const Duration(milliseconds: 200),
+              scale: _isHovered ? 1.2 : 1.0,
+              child: Icon(
+                Icons.location_on,
+                color: _isHovered
+                    ? const Color(0xFFEF4444)
+                    : const Color(0xFF3ABEF9),
+                size: 38,
+              ),
+            ),
           ),
         ),
       ),
