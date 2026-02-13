@@ -2434,7 +2434,8 @@ class MapScreen extends StatefulWidget {
 }
 
 class _MapScreenState extends State<MapScreen> {
-  List<Marker> _markers = [];
+  List<dynamic> _lavaderosEnMapa = [];
+  dynamic _markerTarjetaActivaId;
   String _userRol = 'pendiente';
   void moverAMarcador(LatLng posicion) {
     _animatedMapMove(posicion, 16);
@@ -2446,16 +2447,56 @@ class _MapScreenState extends State<MapScreen> {
     if (!mounted) return;
 
     setState(() {
-      _markers = listaFiltrada.map((l) {
-        return Marker(
-          point: LatLng(l['latitud'], l['longitud']),
-          width: 200,
-          height: 250,
-          alignment: Alignment.topCenter,
-          child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
-        );
-      }).toList();
+      _lavaderosEnMapa = List.from(listaFiltrada);
+      if (_markerTarjetaActivaId != null &&
+          !_lavaderosEnMapa.any((l) => l['id'] == _markerTarjetaActivaId)) {
+        _markerTarjetaActivaId = null;
+      }
     });
+  }
+
+  List<Marker> _buildMarkersBase() {
+    return _lavaderosEnMapa.map((l) {
+      return Marker(
+        point: LatLng(l['latitud'], l['longitud']),
+        width: 34,
+        height: 42,
+        alignment: Alignment.bottomCenter,
+        child: MarkerConPopup(
+          alTocar: () {
+            setState(() => _markerTarjetaActivaId = l['id']);
+            _mostrarCartel(l);
+          },
+          onHoverCambio: (hover) {
+            if (!mounted) return;
+            if (hover) {
+              if (_markerTarjetaActivaId != l['id']) {
+                setState(() => _markerTarjetaActivaId = l['id']);
+              }
+            } else if (_markerTarjetaActivaId == l['id']) {
+              setState(() => _markerTarjetaActivaId = null);
+            }
+          },
+        ),
+      );
+    }).toList();
+  }
+
+  List<Marker> _buildMarkerTarjetaOverlay() {
+    if (_markerTarjetaActivaId == null) return const [];
+    final activo = _lavaderosEnMapa.where((l) => l['id'] == _markerTarjetaActivaId);
+    if (activo.isEmpty) return const [];
+
+    final l = activo.first;
+    return [
+      Marker(
+        point: LatLng(l['latitud'], l['longitud']),
+        width: 200,
+        height: 250,
+        alignment: Alignment.topCenter,
+        child: TarjetaMarkerOverlay(l: l),
+      ),
+    ];
   }
 
   @override
@@ -2577,15 +2618,11 @@ class _MapScreenState extends State<MapScreen> {
         }
 
         setState(() {
-          _markers = listaLavaderos.map((l) {
-            return Marker(
-              point: LatLng(l['latitud'], l['longitud']),
-              width: 200,
-              height: 250,
-              alignment: Alignment.topCenter,
-              child: MarkerConPopup(l: l, alTocar: () => _mostrarCartel(l)),
-            );
-          }).toList();
+          _lavaderosEnMapa = List.from(listaLavaderos);
+          if (_markerTarjetaActivaId != null &&
+              !_lavaderosEnMapa.any((l) => l['id'] == _markerTarjetaActivaId)) {
+            _markerTarjetaActivaId = null;
+          }
         });
       }
     } catch (e) {
@@ -2777,6 +2814,7 @@ class _MapScreenState extends State<MapScreen> {
               initialZoom: 14,
               // ESTA FUNCIÓN SE ACTIVA AL TOCAR CUALQUIER PARTE VACÍA DEL MAPA
               onTap: (tapPosition, point) {
+                setState(() => _markerTarjetaActivaId = null);
                 if (widget.onDeselccionar != null) {
                   widget.onDeselccionar!();
                 }
@@ -2786,7 +2824,8 @@ class _MapScreenState extends State<MapScreen> {
               TileLayer(
                 urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
               ),
-              MarkerLayer(markers: _markers),
+              MarkerLayer(markers: _buildMarkersBase()),
+              MarkerLayer(markers: _buildMarkerTarjetaOverlay()),
             ],
           ),
           // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
@@ -2873,9 +2912,9 @@ class _MapScreenState extends State<MapScreen> {
 
 // --- WIDGET PERSONALIZADO PARA EL MARCADOR CON POPUP ---
 class MarkerConPopup extends StatefulWidget {
-  final dynamic l;
   final VoidCallback alTocar;
-  const MarkerConPopup({super.key, required this.l, required this.alTocar});
+  final ValueChanged<bool>? onHoverCambio;
+  const MarkerConPopup({super.key, required this.alTocar, this.onHoverCambio});
 
   @override
   State<MarkerConPopup> createState() => _MarkerConPopupState();
@@ -2887,78 +2926,20 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
   @override
   Widget build(BuildContext context) {
     return MouseRegion(
-      onEnter: (_) => setState(() => _isHovered = true),
-      onExit: (_) => setState(() => _isHovered = false),
+      onEnter: (_) {
+        setState(() => _isHovered = true);
+        widget.onHoverCambio?.call(true);
+      },
+      onExit: (_) {
+        setState(() => _isHovered = false);
+        widget.onHoverCambio?.call(false);
+      },
       cursor: SystemMouseCursors.click,
-      child: Stack(
-        alignment: Alignment.bottomCenter,
-        clipBehavior: Clip.none,
-        children: [
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeOutBack,
-            bottom: _isHovered ? 55 : 30,
-            child: AnimatedScale(
-              duration: const Duration(milliseconds: 300),
-              scale: _isHovered ? 1.0 : 0.0,
-              curve: Curves.easeOutBack,
-              child: AnimatedOpacity(
-                duration: const Duration(milliseconds: 200),
-                opacity: _isHovered ? 1.0 : 0.0,
-                child: Container(
-                  width: 180,
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Colors.black26,
-                        blurRadius: 10,
-                        spreadRadius: 1,
-                      ),
-                    ],
-                    border: Border.all(
-                      color: const Color(0xFF3ABEF9),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: buildImagenLavadero(
-                          widget.l,
-                          height: 80,
-                        ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        widget.l['razon_social'] ?? 'Lavadero',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                      const Text(
-                        "⭐ 4.5 | Disponible",
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: Colors.green,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          GestureDetector(
-            onTap: widget.alTocar,
+      child: SizedBox.expand(
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.alTocar,
+          child: Center(
             child: AnimatedScale(
               duration: const Duration(milliseconds: 200),
               scale: _isHovered ? 1.2 : 1.0,
@@ -2967,16 +2948,79 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
                 color: _isHovered
                     ? const Color(0xFFEF4444)
                     : const Color(0xFF3ABEF9),
-                size: 45,
+                size: 38,
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
+class TarjetaMarkerOverlay extends StatelessWidget {
+  final dynamic l;
+  const TarjetaMarkerOverlay({super.key, required this.l});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      clipBehavior: Clip.none,
+      children: [
+        Positioned(
+          bottom:5,
+          child: Container(
+            width: 180,
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 10,
+                  spreadRadius: 1,
+                ),
+              ],
+              border: Border.all(color: const Color(0xFF3ABEF9), width: 1.5),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: buildImagenLavadero(
+                    l,
+                    height: 80,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  l['razon_social'] ?? 'Lavadero',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.black87,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const Text(
+                  'Rating 4.5 | Disponible',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.green,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 // --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
   final VoidCallback? onVolver;
@@ -3892,3 +3936,4 @@ class _ComprobanteOverlayState extends State<ComprobanteOverlay> {
     );
   }
 }
+
