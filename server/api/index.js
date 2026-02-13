@@ -189,23 +189,33 @@ app.post("/webhook", async (req, res) => {
 
       // Ejecutamos ambas tareas y esperamos su cumplimiento
       await Promise.all([
-        supabase
-          .from("turnos")
-          .insert({
+        (async () => {
+          const turnoPayload = {
             user_id: userId,
             payment_id: id.toString(),
             estado: "activo",
             monto_pagado: payment.transaction_amount,
             fecha: metadata.fecha_turno,
             hora: metadata.hora_turno,
+            lavadero_id: metadata.lavadero_id || null,
             lavadero_nombre: metadata.lavadero_nombre,
             servicios: metadata.servicios || "Lavado",
-          })
-          .then(({ error }) => {
-            if (error) console.error("❌ Error DB Turno:", error.message);
-            else console.log("✅ Turno insertado correctamente");
-          }),
+          };
 
+          let { error } = await supabase.from("turnos").insert(turnoPayload);
+
+          if (error && /lavadero_id/i.test(error.message || "")) {
+            const payloadSinLavaderoId = { ...turnoPayload };
+            delete payloadSinLavaderoId.lavadero_id;
+            const retry = await supabase
+              .from("turnos")
+              .insert(payloadSinLavaderoId);
+            error = retry.error;
+          }
+
+          if (error) console.error("Error DB Turno:", error.message);
+          else console.log("Turno insertado correctamente");
+        })(),
         procesarPDFYFactura(payment, metadata, id.toString(), userId),
       ]);
 

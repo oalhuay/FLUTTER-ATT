@@ -25,6 +25,18 @@ final GlobalKey<_MapScreenState> mapScreenKey = GlobalKey<_MapScreenState>(); //
 final GlobalKey<ScaffoldMessengerState> scaffoldMessengerKey =
     GlobalKey<ScaffoldMessengerState>(); //
 String? pendingPaymentResult; //
+
+String obtenerRatingTexto(dynamic lavadero) {
+  final dynamic raw = lavadero is Map ? lavadero['rating'] : null;
+  final double rating = raw is num
+      ? raw.toDouble()
+      : double.tryParse(raw?.toString() ?? '') ?? 0.0;
+  if (rating <= 0) return "Sin calificaciones";
+  return "Calificación ${rating.toStringAsFixed(1)}";
+}
+
+String ObtenerRatingTexto(dynamic lavadero) => obtenerRatingTexto(lavadero);
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es', null); //
@@ -281,6 +293,10 @@ class _MainLayoutState extends State<MainLayout> {
       _sidebarAbierto = true;
       _lavaderoSeleccionado = null;
     });
+    _actualizarPromedioLavadero();
+    if (_rolUsuario == 'cliente') {
+      _buscarTurnoPendienteParaRating();
+    }
   }
 
   void _aplicarOrdenamiento() {
@@ -352,6 +368,15 @@ class _MainLayoutState extends State<MainLayout> {
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _todosLosLavaderos = []; // Lista maestra
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
+  final TextEditingController _comentarioRatingCtrl = TextEditingController();
+  Map<String, dynamic>? _turnoPendienteRating;
+  double _puntuacionPendiente = 0;
+  bool _mostrarPopupRating = false;
+  bool _enviandoRating = false;
+  bool _consultandoRatingPendiente = false;
+  bool _popupRatingOcultoEnSesion = false;
+  bool _sincronizandoPromedios = false;
+  StreamSubscription<AuthState>? _authStateSub;
 
   @override
   void initState() {
@@ -364,7 +389,7 @@ class _MainLayoutState extends State<MainLayout> {
       _verificarYMostrarNotificacionDePago();
     });
 
-    supabase.auth.onAuthStateChange.listen((data) {
+    _authStateSub = supabase.auth.onAuthStateChange.listen((data) {
       if (mounted) {
         _obtenerRolActual();
 
@@ -372,8 +397,15 @@ class _MainLayoutState extends State<MainLayout> {
         if (supabase.auth.currentUser == null) {
           setState(() {
             _lavaderoSeleccionado = null;
+            _rolUsuario = 'pendiente';
+            _turnoPendienteRating = null;
+            _mostrarPopupRating = false;
+            _puntuacionPendiente = 0;
+            _popupRatingOcultoEnSesion = false;
           });
+          _comentarioRatingCtrl.clear();
         } else {
+          _popupRatingOcultoEnSesion = false;
           setState(() {});
         }
       }
@@ -422,6 +454,396 @@ class _MainLayoutState extends State<MainLayout> {
     pendingPaymentResult = null;
   }
 
+  Future<void> _buscarTurnoPendienteParaRating() async {
+    final user = supabase.auth.currentUser;
+    if (user == null || _rolUsuario != 'cliente') return;
+    if (_consultandoRatingPendiente) return;
+
+    _consultandoRatingPendiente = true;
+    try {
+      final turnosCompletados = await supabase
+          .from('turnos')
+          .select('*')
+          .eq('user_id', user.id)
+          .ilike('estado', '%completado%')
+          .order('fecha', ascending: false)
+          .order('hora', ascending: false);
+
+      final lavaderosDb = await supabase
+          .from('lavaderos')
+          .select('id, razon_social');
+
+      final ratingsUsuario = await supabase
+          .from('ratings')
+          .select('lavadero_id')
+          .eq('usuario_id', user.id);
+
+      String normalizarNombre(String valor) {
+        final lower = valor.trim().toLowerCase();
+        final sinAcentos = lower
+            .replaceAll('á', 'a')
+            .replaceAll('à', 'a')
+            .replaceAll('ä', 'a')
+            .replaceAll('â', 'a')
+            .replaceAll('é', 'e')
+            .replaceAll('è', 'e')
+            .replaceAll('ë', 'e')
+            .replaceAll('ê', 'e')
+            .replaceAll('í', 'i')
+            .replaceAll('ì', 'i')
+            .replaceAll('ï', 'i')
+            .replaceAll('î', 'i')
+            .replaceAll('ó', 'o')
+            .replaceAll('ò', 'o')
+            .replaceAll('ö', 'o')
+            .replaceAll('ô', 'o')
+            .replaceAll('ú', 'u')
+            .replaceAll('ù', 'u')
+            .replaceAll('ü', 'u')
+            .replaceAll('û', 'u')
+            .replaceAll('ñ', 'n');
+        return sinAcentos.replaceAll(RegExp(r'\s+'), ' ');
+      }
+
+      final Map<String, String> lavaderoIdPorNombre = {};
+      for (final item in (lavaderosDb as List<dynamic>)) {
+        final lavadero = Map<String, dynamic>.from(item as Map);
+        final nombreKey = normalizarNombre(
+          (lavadero['razon_social'] ?? '').toString(),
+        );
+        final id = lavadero['id']?.toString() ?? '';
+        if (nombreKey.isNotEmpty && id.isNotEmpty) {
+          lavaderoIdPorNombre[nombreKey] = id;
+        }
+      }
+
+      final Set<String> lavaderosYaCalificados = (ratingsUsuario as List)
+          .map((r) => r['lavadero_id']?.toString() ?? '')
+          .where((id) => id.isNotEmpty)
+          .toSet();
+
+      Map<String, dynamic>? turnoPendiente;
+      for (final item in (turnosCompletados as List<dynamic>)) {
+        final turno = Map<String, dynamic>.from(item as Map);
+        String lavaderoId = turno['lavadero_id']?.toString() ?? '';
+
+        if (lavaderoId.isEmpty) {
+          final nombreKey = normalizarNombre(
+            (turno['lavadero_nombre'] ?? '').toString(),
+          );
+          lavaderoId = lavaderoIdPorNombre[nombreKey] ?? '';
+          if (lavaderoId.isNotEmpty) {
+            turno['lavadero_id'] = lavaderoId;
+          }
+        }
+
+        if (lavaderoId.isEmpty) continue;
+        if (!lavaderosYaCalificados.contains(lavaderoId)) {
+          turnoPendiente = turno;
+          break;
+        }
+      }
+
+      debugPrint(
+        "⭐ Verificación de calificación pendiente -> turnos:${(turnosCompletados as List).length} | "
+        "calificados:${lavaderosYaCalificados.length} | "
+        "pendiente:${turnoPendiente != null}",
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _turnoPendienteRating = turnoPendiente;
+        _mostrarPopupRating =
+            turnoPendiente != null && !_popupRatingOcultoEnSesion;
+        if (turnoPendiente == null) {
+          _puntuacionPendiente = 0;
+          _comentarioRatingCtrl.clear();
+        }
+      });
+    } catch (e) {
+      debugPrint("❌ Error buscando rating pendiente: $e");
+    } finally {
+      _consultandoRatingPendiente = false;
+    }
+  }
+
+  Future<void> _actualizarPromedioLavadero([String? lavaderoId]) async {
+    if (_sincronizandoPromedios) return;
+    try {
+      final Set<String> idsObjetivo = lavaderoId != null
+          ? {lavaderoId}
+          : _todosLosLavaderos
+                .map((l) => l['id']?.toString() ?? '')
+                .where((id) => id.isNotEmpty)
+                .toSet();
+
+      if (idsObjetivo.isEmpty) return;
+
+      _sincronizandoPromedios = true;
+      final rows = await supabase
+          .from('ratings')
+          .select('lavadero_id, puntuacion');
+
+      final Map<String, List<double>> acumulado = {};
+      for (final row in (rows as List<dynamic>)) {
+        final id = row['lavadero_id']?.toString() ?? '';
+        if (id.isEmpty || !idsObjetivo.contains(id)) continue;
+        final score = (row['puntuacion'] as num?)?.toDouble() ?? 0;
+        acumulado.putIfAbsent(id, () => <double>[]).add(score);
+      }
+
+      final Map<String, double> promedios = {};
+      for (final id in idsObjetivo) {
+        final lista = acumulado[id] ?? const <double>[];
+        if (lista.isEmpty) {
+          promedios[id] = 0;
+          continue;
+        }
+        double suma = 0;
+        for (final valor in lista) {
+          suma += valor;
+        }
+        promedios[id] = double.parse((suma / lista.length).toStringAsFixed(1));
+      }
+
+      if (lavaderoId != null) {
+        await supabase
+            .from('lavaderos')
+            .update({'rating': promedios[lavaderoId] ?? 0})
+            .eq('id', lavaderoId);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        for (final l in _todosLosLavaderos) {
+          final id = l['id']?.toString() ?? '';
+          if (promedios.containsKey(id)) l['rating'] = promedios[id];
+        }
+        for (final l in _lavaderosFiltrados) {
+          final id = l['id']?.toString() ?? '';
+          if (promedios.containsKey(id)) l['rating'] = promedios[id];
+        }
+        final seleccionadoId = _lavaderoSeleccionado?['id']?.toString() ?? '';
+        if (promedios.containsKey(seleccionadoId)) {
+          _lavaderoSeleccionado['rating'] = promedios[seleccionadoId];
+        }
+      });
+    } catch (e) {
+      debugPrint("⚠️ No se pudo actualizar promedio del lavadero: $e");
+    } finally {
+      _sincronizandoPromedios = false;
+    }
+  }
+
+  Future<void> _enviarRatingPendiente() async {
+    final user = supabase.auth.currentUser;
+    if (user == null || _turnoPendienteRating == null) return;
+    if (_puntuacionPendiente < 1) return;
+
+    final lavaderoId = _turnoPendienteRating!['lavadero_id']?.toString();
+    if (lavaderoId == null || lavaderoId.isEmpty) return;
+
+    final comentario = _comentarioRatingCtrl.text.trim();
+
+    setState(() => _enviandoRating = true);
+    try {
+      await supabase.from('ratings').insert({
+        'lavadero_id': lavaderoId,
+        'usuario_id': user.id,
+        'puntuacion': _puntuacionPendiente,
+        'comentario': comentario.isEmpty ? null : comentario,
+      });
+
+      await _actualizarPromedioLavadero(lavaderoId);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("✅ Gracias por calificar tu experiencia"),
+          backgroundColor: Colors.green,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+
+      setState(() {
+        _puntuacionPendiente = 0;
+        _mostrarPopupRating = false;
+        _popupRatingOcultoEnSesion = false;
+      });
+      _comentarioRatingCtrl.clear();
+      await _buscarTurnoPendienteParaRating();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("❌ No se pudo guardar el rating: $e"),
+          backgroundColor: Colors.red,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _enviandoRating = false);
+    }
+  }
+
+  Widget _buildPopupRatingFlotante() {
+    if (_turnoPendienteRating == null) return const SizedBox.shrink();
+
+    final nombreLavadero =
+        (_turnoPendienteRating!['lavadero_nombre'] ?? 'Lavadero').toString();
+    String fechaTurno = '';
+    final fechaRaw = _turnoPendienteRating!['fecha']?.toString();
+    if (fechaRaw != null && fechaRaw.isNotEmpty) {
+      try {
+        fechaTurno = DateFormat('dd/MM/yyyy').format(DateTime.parse(fechaRaw));
+      } catch (_) {
+        fechaTurno = fechaRaw;
+      }
+    }
+
+    return Material(
+      color: Colors.transparent,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.18),
+              blurRadius: 16,
+              offset: const Offset(0, 8),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.star_rounded, color: Color(0xFFFFB300)),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    "Calificá tu turno",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                ),
+                IconButton(
+                  tooltip: "Más tarde",
+                  onPressed: _enviandoRating
+                      ? null
+                      : () {
+                          setState(() {
+                            _mostrarPopupRating = false;
+                            _popupRatingOcultoEnSesion = true;
+                          });
+                        },
+                  icon: const Icon(Icons.close_rounded, size: 18),
+                ),
+              ],
+            ),
+            Text(
+              nombreLavadero,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF1F2937),
+              ),
+            ),
+            if (fechaTurno.isNotEmpty)
+              Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  "Turno completado: $fechaTurno",
+                  style: const TextStyle(color: Colors.black54, fontSize: 12),
+                ),
+              ),
+            const SizedBox(height: 10),
+            Row(
+              children: List.generate(5, (index) {
+                final valor = index + 1.0;
+                return IconButton(
+                  onPressed: _enviandoRating
+                      ? null
+                      : () => setState(() => _puntuacionPendiente = valor),
+                  splashRadius: 20,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 34,
+                    height: 34,
+                  ),
+                  icon: Icon(
+                    _puntuacionPendiente >= valor
+                        ? Icons.star_rounded
+                        : Icons.star_border_rounded,
+                    color: const Color(0xFFFFB300),
+                  ),
+                );
+              }),
+            ),
+            if (_puntuacionPendiente < 1)
+              const Padding(
+                padding: EdgeInsets.only(top: 6),
+                child: Text(
+                  "Primero elige una puntuación.",
+                  style: TextStyle(fontSize: 12, color: Colors.black54),
+                ),
+              )
+            else ...[
+              const SizedBox(height: 8),
+              TextField(
+                controller: _comentarioRatingCtrl,
+                enabled: !_enviandoRating,
+                minLines: 2,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: "Comentario opcional...",
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.grey.shade100,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(10),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              ),
+            ],
+            const SizedBox(height: 10),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: (_puntuacionPendiente < 1 || _enviandoRating)
+                    ? null
+                    : _enviarRatingPendiente,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFEF4444),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+                child: _enviandoRating
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        "Enviar calificación",
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildContenidoPanelDerecho() {
     // CASO 1: Si es Dueño de Lavadero -> Siempre ve el panel de edición si hay algo seleccionado
     if (_rolUsuario == 'lavadero') {
@@ -459,10 +881,21 @@ class _MainLayoutState extends State<MainLayout> {
             MaterialPageRoute(builder: (context) => const SeleccionRolScreen()),
           );
         } else {
+          final rol = data['rol'];
           setState(() {
-            _rolUsuario = data['rol'];
+            _rolUsuario = rol;
           });
-          if (data['rol'] == 'lavadero') _cargarMisClientes();
+          if (rol == 'lavadero') {
+            setState(() {
+              _turnoPendienteRating = null;
+              _mostrarPopupRating = false;
+              _puntuacionPendiente = 0;
+            });
+            _comentarioRatingCtrl.clear();
+            _cargarMisClientes();
+          } else if (rol == 'cliente') {
+            _buscarTurnoPendienteParaRating();
+          }
         }
       }
     }
@@ -470,6 +903,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   void _filtrarBusqueda(String query) {
     final input = query.trim().toLowerCase();
+    _actualizarPromedioLavadero();
 
     setState(() {
       // 1. Creamos una lista temporal con las coincidencias de texto
@@ -542,7 +976,7 @@ class _MainLayoutState extends State<MainLayout> {
                 },
               ),
               _buildEtiquetaFiltro(
-                "Mejor Rating",
+                "Mejor calificación",
                 Icons.star_outline,
                 _filtroRating,
                 () {
@@ -719,6 +1153,7 @@ class _MainLayoutState extends State<MainLayout> {
             _todosLosLavaderos = _deduplicarLavaderos(List.from(lista));
             _lavaderosFiltrados = List.from(_todosLosLavaderos);
           });
+          _actualizarPromedioLavadero();
         },
       ),
       MisTurnosScreen(onVolver: _volverAlMapa), // <-- Usamos la nueva función
@@ -748,6 +1183,9 @@ class _MainLayoutState extends State<MainLayout> {
         builder: (context, constraints) {
           // Umbral para el panel derecho fijo
           bool esPantallaChica = constraints.maxWidth < 1100;
+          final double anchoPopupRating = esMovil
+              ? ((constraints.maxWidth - 40).clamp(240, 360)).toDouble()
+              : 320;
 
           return Row(
             children: [
@@ -901,7 +1339,7 @@ class _MainLayoutState extends State<MainLayout> {
                                       controller: _searchController,
                                       onChanged: _filtrarBusqueda,
                                       decoration: InputDecoration(
-                                        hintText: "Search lavadero...",
+                                        hintText: "Buscar lavadero...",
                                         prefixIcon: const Icon(
                                           Icons.search,
                                           color: Colors.grey,
@@ -1073,6 +1511,20 @@ class _MainLayoutState extends State<MainLayout> {
                           ),
                         ),
                       ),
+                    if (_indiceActual == 0 &&
+                        _rolUsuario == 'cliente' &&
+                        _turnoPendienteRating != null &&
+                        _mostrarPopupRating &&
+                        !(
+                          esPantallaChica && _lavaderoSeleccionado != null
+                        ) &&
+                        supabase.auth.currentUser != null)
+                      Positioned(
+                        right: 20,
+                        bottom: 20,
+                        width: anchoPopupRating,
+                        child: _buildPopupRatingFlotante(),
+                      ),
                   ],
                 ),
               ),
@@ -1237,6 +1689,9 @@ class _MainLayoutState extends State<MainLayout> {
         if (index == 0) mapScreenKey.currentState?.cargarLavaderosDeSupabase();
         if (index == 100) _cargarMisClientes();
         if (index == 101) _cargarMisLavaderos();
+        if (_rolUsuario == 'cliente' && (index == 0 || index == 1)) {
+          _buscarTurnoPendienteParaRating();
+        }
       },
     );
   }
@@ -2257,6 +2712,16 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
+  @override
+  void dispose() {
+    _authStateSub?.cancel();
+    _searchController.dispose();
+    _nombreCtrl.dispose();
+    _direccionCtrl.dispose();
+    _comentarioRatingCtrl.dispose();
+    super.dispose();
+  }
+
   Future<String?> _subirImagenACloudinary() async {
     final picker = ImagePicker();
     // 1. El dueño elige la imagen de su PC/Celular
@@ -2772,8 +3237,8 @@ class TarjetaMarkerOverlay extends StatelessWidget {
                   ),
                   textAlign: TextAlign.center,
                 ),
-                const Text(
-                  'Rating 4.5 | Disponible',
+                Text(
+                  '${ObtenerRatingTexto(l)} | Disponible',
                   style: TextStyle(
                     fontSize: 11,
                     color: Colors.green,

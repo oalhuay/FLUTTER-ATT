@@ -140,6 +140,7 @@ class _ReservaScreenState extends State<ReservaScreen>
           "user_id": usuario.id, // Verifica que el servidor busque "user_id"
           "fecha_turno": _fechaSeleccionada.toIso8601String().split('T')[0],
           "hora_turno": hora,
+          "lavadero_id": widget.lavadero['id'],
           "lavadero_nombre": widget.lavadero['razon_social'],
           "servicios": _serviciosSeleccionados.isEmpty
               ? "Lavado General"
