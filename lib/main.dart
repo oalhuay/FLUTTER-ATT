@@ -1807,36 +1807,6 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 8), // Espacio entre botones
-                // --- BOTÓN NUEVO: SUBIR FOTO ---
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    backgroundColor: azulATT.withOpacity(0.1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  onPressed: () async {
-                    String? url = await _subirImagenACloudinary();
-                    if (url != null) {
-                      _mostrarAlerta("Foto lista: $url", Colors.green);
-                    }
-                  },
-                  icon: Icon(
-                    Icons.add_a_photo_rounded,
-                    color: azulATT,
-                    size: 18,
-                  ),
-                  label: Text(
-                    "SUBIR FOTO",
-                    style: TextStyle(
-                      color: azulATT,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 10,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
