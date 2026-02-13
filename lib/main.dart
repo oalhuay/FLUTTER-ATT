@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -74,7 +74,7 @@ class _MyAppState extends State<MyApp> {
     });
   }
 
-  // --- LÓGICA DE BÚSQUEDA Y OVERLAY ---
+  // --- LÃ“GICA DE BÃšSQUEDA Y OVERLAY ---
   Future<void> _buscarFacturaYMostrarOverlay(String paymentId) async {
     int intentos = 0;
     // Buscamos durante 20 segundos (10 intentos cada 2 seg) mientras el servidor crea el PDF
@@ -121,8 +121,8 @@ class _MyAppState extends State<MyApp> {
       SnackBar(
         content: Text(
           esExito
-              ? "¡PAGO APROBADO! Reserva lista en ATT!."
-              : "EL PAGO NO SE REALIZÓ. Reintenta.",
+              ? "Â¡PAGO APROBADO! Reserva lista en ATT!."
+              : "EL PAGO NO SE REALIZÃ“. Reintenta.",
         ),
         backgroundColor: esExito ? Colors.green : Colors.red,
         behavior: SnackBarBehavior.floating,
@@ -156,7 +156,7 @@ class _MyAppState extends State<MyApp> {
   }
 }
 
-// --- PANTALLA DE SELECCIÓN DE ROL ---
+// --- PANTALLA DE SELECCIÃ“N DE ROL ---
 class SeleccionRolScreen extends StatefulWidget {
   const SeleccionRolScreen({super.key});
 
@@ -211,7 +211,7 @@ class _SeleccionRolScreenState extends State<SeleccionRolScreen> {
             ),
             const SizedBox(height: 20),
             const Text(
-              "¡Bienvenido a ATT!\n¿Cómo quieres usar la App?",
+              "Â¡Bienvenido a ATT!\nÂ¿CÃ³mo quieres usar la App?",
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
@@ -221,7 +221,7 @@ class _SeleccionRolScreenState extends State<SeleccionRolScreen> {
             else ...[
               _botonRol("QUIERO LAVAR MI AUTO", Icons.person, 'cliente'),
               const SizedBox(height: 20),
-              _botonRol("SOY DUEÑO DE LAVADERO", Icons.store, 'lavadero'),
+              _botonRol("SOY DUEÃ‘O DE LAVADERO", Icons.store, 'lavadero'),
             ],
           ],
         ),
@@ -268,11 +268,12 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroPrecio = false;
   bool _filtroRating = false;
   bool _filtroDistancia = false;
+  String? _hoverCardBusquedaId;
   final ScrollController _scrollBentoController = ScrollController();
   int _paginaActual = 0;
   final int _itemsPorPagina =
-      3; // Mostramos 8 por página (2 filas de 4 o 4 filas de 2)
-  int _totalLavaderosDB = 0; // Para saber hasta dónde podemos avanzar
+      3; // Mostramos 8 por pÃ¡gina (2 filas de 4 o 4 filas de 2)
+  int _totalLavaderosDB = 0; // Para saber hasta dÃ³nde podemos avanzar
   void _aplicarOrdenamiento() {
     _lavaderosFiltrados = _obtenerListaOrdenada();
     mapScreenKey.currentState?.actualizarMarkersExternos(_lavaderosFiltrados);
@@ -280,7 +281,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   List<dynamic> _misClientesReales = [];
 
-  List<dynamic> _misLavaderosReales = []; // Aquí guardaremos tus locales
+  List<dynamic> _misLavaderosReales = []; // AquÃ­ guardaremos tus locales
   bool _cargandoLavaderos = false;
 
   Future<void> _cargarMisLavaderos() async {
@@ -297,10 +298,10 @@ class _MainLayoutState extends State<MainLayout> {
           .from('lavaderos')
           .select(
             '*',
-          ) // Usamos select con count opcional si tu versión lo permite, o pedimos todo para el total
-          .eq('dueño_id', user.id);
+          ) // Usamos select con count opcional si tu versiÃ³n lo permite, o pedimos todo para el total
+          .eq('dueÃ±o_id', user.id);
 
-      // Simulamos el total para la botonera basado en la lista completa del dueño
+      // Simulamos el total para la botonera basado en la lista completa del dueÃ±o
       final List<dynamic> todos = response as List<dynamic>;
       _totalLavaderosDB = todos.length;
 
@@ -319,8 +320,9 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
-  // --- LAS LÍNEAS NUEVAS EMPIEZAN AQUÍ ---
-  String _rolUsuario = 'pendiente'; // Variable para saber si es dueño o cliente
+  // --- LAS LÃNEAS NUEVAS EMPIEZAN AQUÃ ---
+  String _rolUsuario =
+      'pendiente'; // Variable para saber si es dueÃ±o o cliente
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _todosLosLavaderos = []; // Lista maestra
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
@@ -375,14 +377,8 @@ class _MainLayoutState extends State<MainLayout> {
       }
 
       if (_filtroDistancia) {
-        final double distanciaA = asDouble(
-          a['distancia'] ?? a['latitud'],
-          0.0,
-        );
-        final double distanciaB = asDouble(
-          b['distancia'] ?? b['latitud'],
-          0.0,
-        );
+        final double distanciaA = asDouble(a['distancia'] ?? a['latitud'], 0.0);
+        final double distanciaB = asDouble(b['distancia'] ?? b['latitud'], 0.0);
         cmp = distanciaA.compareTo(distanciaB);
         if (cmp != 0) return cmp;
       }
@@ -405,8 +401,8 @@ class _MainLayoutState extends State<MainLayout> {
     super.initState();
     _obtenerRolActual();
 
-    // --- LÓGICA DE AVISO POS-CARGA ---
-    // Esperamos a que el primer frame se dibuje (después del Splash) para mostrar el anuncio
+    // --- LÃ“GICA DE AVISO POS-CARGA ---
+    // Esperamos a que el primer frame se dibuje (despuÃ©s del Splash) para mostrar el anuncio
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _verificarYMostrarNotificacionDePago();
     });
@@ -415,7 +411,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (mounted) {
         _obtenerRolActual();
 
-        // Si el usuario es nulo (cerró sesión), limpiamos la selección
+        // Si el usuario es nulo (cerrÃ³ sesiÃ³n), limpiamos la selecciÃ³n
         if (supabase.auth.currentUser == null) {
           setState(() {
             _lavaderoSeleccionado = null;
@@ -427,9 +423,9 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
-  // FUNCIÓN AUXILIAR PARA EL ANUNCIO
+  // FUNCIÃ“N AUXILIAR PARA EL ANUNCIO
   void _verificarYMostrarNotificacionDePago() {
-    // Si no hay ningún resultado de pago pendiente, no hacemos nada
+    // Si no hay ningÃºn resultado de pago pendiente, no hacemos nada
     if (pendingPaymentResult == null) return;
 
     if (pendingPaymentResult == "success") {
@@ -439,7 +435,7 @@ class _MainLayoutState extends State<MainLayout> {
             children: [
               Icon(Icons.check_circle, color: Colors.white),
               SizedBox(width: 10),
-              Text("¡PAGO APROBADO! Tu reserva en ATT! está lista."),
+              Text("Â¡PAGO APROBADO! Tu reserva en ATT! estÃ¡ lista."),
             ],
           ),
           backgroundColor: Colors.green.shade600,
@@ -454,7 +450,7 @@ class _MainLayoutState extends State<MainLayout> {
             children: [
               Icon(Icons.error, color: Colors.white),
               SizedBox(width: 10),
-              Text("EL PAGO NO SE REALIZÓ. Intenta nuevamente."),
+              Text("EL PAGO NO SE REALIZÃ“. Intenta nuevamente."),
             ],
           ),
           backgroundColor: Colors.red.shade600,
@@ -464,24 +460,24 @@ class _MainLayoutState extends State<MainLayout> {
       );
     }
 
-    // IMPORTANTÍSIMO: Limpiamos la variable global para que el aviso
+    // IMPORTANTÃSIMO: Limpiamos la variable global para que el aviso
     // no vuelva a salir si el usuario navega o recarga la pantalla.
     pendingPaymentResult = null;
   }
 
   Widget _buildContenidoPanelDerecho() {
-    // CASO 1: Si es Dueño de Lavadero -> Siempre ve el panel de edición si hay algo seleccionado
+    // CASO 1: Si es DueÃ±o de Lavadero -> Siempre ve el panel de ediciÃ³n si hay algo seleccionado
     if (_rolUsuario == 'lavadero') {
       return _buildPanelInformacion();
     }
 
-    // CASO 2: Si es Cliente -> Ve resultados de búsqueda o el detalle para reservar
+    // CASO 2: Si es Cliente -> Ve resultados de bÃºsqueda o el detalle para reservar
     if (_rolUsuario == 'cliente') {
-      // Si ya tocó un lavadero específico, vemos el detalle para que pueda "Solicitar Turno"
+      // Si ya tocÃ³ un lavadero especÃ­fico, vemos el detalle para que pueda "Solicitar Turno"
       if (_lavaderoSeleccionado != null) {
         return _buildPanelInformacion();
       }
-      // Si no seleccionó nada pero está buscando, vemos las tarjetitas
+      // Si no seleccionÃ³ nada pero estÃ¡ buscando, vemos las tarjetitas
       return _buildResultadosBusqueda();
     }
 
@@ -543,12 +539,12 @@ class _MainLayoutState extends State<MainLayout> {
   List<dynamic> _deduplicarLavaderos(List<dynamic> lista) {
     final Map<String, dynamic> unicos = {};
     for (final l in lista) {
-      // Usamos el ID de la base de datos como llave única (siempre existe en Supabase)
-      // Si por alguna razón mística el ID es nulo, usamos la razón social para no crashear
+      // Usamos el ID de la base de datos como llave Ãºnica (siempre existe en Supabase)
+      // Si por alguna razÃ³n mÃ­stica el ID es nulo, usamos la razÃ³n social para no crashear
       final String key = l['id']?.toString() ?? l['razon_social'].toString();
 
-      // Al usar el operador [], si el ID ya existe, simplemente lo pisa con la versión
-      // más nueva, asegurando que siempre tengas el dato más fresco.
+      // Al usar el operador [], si el ID ya existe, simplemente lo pisa con la versiÃ³n
+      // mÃ¡s nueva, asegurando que siempre tengas el dato mÃ¡s fresco.
       unicos[key] = l;
     }
     return unicos.values.toList();
@@ -581,7 +577,7 @@ class _MainLayoutState extends State<MainLayout> {
                 () {
                   setState(() {
                     _filtroPrecio = !_filtroPrecio;
-                    _aplicarOrdenamiento(); // Esta es la función que arreglamos antes
+                    _aplicarOrdenamiento(); // Esta es la funciÃ³n que arreglamos antes
                   });
                 },
               ),
@@ -597,7 +593,7 @@ class _MainLayoutState extends State<MainLayout> {
                 },
               ),
               _buildEtiquetaFiltro(
-                "Más Cerca",
+                "MÃ¡s Cerca",
                 Icons.near_me_outlined,
                 _filtroDistancia,
                 () {
@@ -673,128 +669,179 @@ class _MainLayoutState extends State<MainLayout> {
 
   Widget _buildTargetaBusqueda(dynamic l) {
     final String nombreLavadero = (l['razon_social'] ?? 'Lavadero').toString();
+    final String hoverId = (l['id'] ?? nombreLavadero).toString();
+    final bool estaHover = _hoverCardBusquedaId == hoverId;
     final String direccionLavadero = (l['direccion'] ?? 'Zárate').toString();
     final bool nombreLargo = nombreLavadero.length > 50;
     final bool direccionLarga = direccionLavadero.length > 50;
     final double? precioLavado = _obtenerPrecioLavado(l);
     final String textoPrecio = precioLavado == null
-        ? "No disponible"
-        : "\$${precioLavado.toStringAsFixed(0)}";
+        ? 'No disponible'
+        : '\$${precioLavado.toStringAsFixed(0)}';
     final dynamic ratingRaw = l['rating'];
     final double? rating = ratingRaw is num
         ? ratingRaw.toDouble()
         : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
     final String textoRating = rating == null
-        ? "Sin rating"
+        ? 'Sin rating'
         : rating.clamp(0.0, 5.0).toStringAsFixed(1);
 
-    return GestureDetector(
-      onTap: () {
-        setState(() => _lavaderoSeleccionado = l);
-        mapScreenKey.currentState?.moverAMarcador(
-          LatLng(l['latitud'], l['longitud']),
-        );
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hoverCardBusquedaId = hoverId),
+      onExit: (_) {
+        if (_hoverCardBusquedaId == hoverId) {
+          setState(() => _hoverCardBusquedaId = null);
+        }
       },
-      child: Container(
-        height: 120,
-        margin: const EdgeInsets.only(bottom: 15),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(15),
-          image: DecorationImage(
-            image: NetworkImage(
-              'https://picsum.photos/seed/${l['id']}/400/200',
-            ),
-            fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(
-              Colors.black.withOpacity(0.4),
-              BlendMode.darken,
-            ),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(15),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Tooltip(
-                message: nombreLavadero,
-                child: Text(
-                  nombreLavadero,
-                  maxLines: nombreLargo ? 1 : 2,
-                  overflow: nombreLargo ? TextOverflow.ellipsis : null,
-                  softWrap: true,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                  ),
-                ),
-              ),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Tooltip(
-                      message: direccionLavadero,
-                      child: Text(
-                        direccionLavadero,
-                        maxLines: direccionLarga ? 1 : 2,
-                        overflow: direccionLarga ? TextOverflow.ellipsis : null,
-                        softWrap: true,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
+      child: GestureDetector(
+        onTap: () {
+          setState(() => _lavaderoSeleccionado = l);
+          mapScreenKey.currentState?.moverAMarcador(
+            LatLng(l['latitud'], l['longitud']),
+          );
+        },
+        child: TweenAnimationBuilder<double>(
+          tween: Tween<double>(end: estaHover ? 1.0 : 0.0),
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          builder: (context, t, child) {
+            final double dy = -2.5 * t;
+            final double scale = 1.0 + (0.004 * t);
+            final double shadowOpacity = 0.08 + (0.12 * t);
+            final double blur = 6 + (8 * t);
+            final double shadowY = 2 + (3 * t);
+
+            return Transform.translate(
+              offset: Offset(0, dy),
+              child: Transform.scale(
+                scale: scale,
+                child: Container(
+                  height: 120,
+                  margin: const EdgeInsets.only(bottom: 15),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(15),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(shadowOpacity),
+                        blurRadius: blur,
+                        offset: Offset(0, shadowY),
+                      ),
+                    ],
+                    image: DecorationImage(
+                      image: NetworkImage(
+                        'https://picsum.photos/seed/${l['id']}/400/200',
+                      ),
+                      fit: BoxFit.cover,
+                      colorFilter: ColorFilter.mode(
+                        Colors.black.withOpacity(0.4),
+                        BlendMode.darken,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          "⭐ $textoRating",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.7),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          textoPrecio,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                  child: child,
+                ),
               ),
-            ],
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(15),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.end,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Tooltip(
+                  message: nombreLavadero,
+                  child: Text(
+                    nombreLavadero,
+                    maxLines: nombreLargo ? 1 : 2,
+                    overflow: nombreLargo ? TextOverflow.ellipsis : null,
+                    softWrap: true,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Tooltip(
+                        message: direccionLavadero,
+                        child: Text(
+                          direccionLavadero,
+                          maxLines: direccionLarga ? 1 : 2,
+                          overflow: direccionLarga
+                              ? TextOverflow.ellipsis
+                              : null,
+                          softWrap: true,
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.star,
+                                color: Colors.amber,
+                                size: 12,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                textoRating,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.7),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            textoPrecio,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -808,7 +855,7 @@ class _MainLayoutState extends State<MainLayout> {
         onIrAPerfil: () => setState(() => _indiceActual = 2),
         onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
         onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
-        // --- CAPTURAMOS LOS DATOS AQUÍ ---
+        // --- CAPTURAMOS LOS DATOS AQUÃ ---
         onLavaderosCargados: (lista) {
           setState(() {
             _todosLosLavaderos = _deduplicarLavaderos(
@@ -820,15 +867,15 @@ class _MainLayoutState extends State<MainLayout> {
       ),
       MisTurnosScreen(onVolver: () => setState(() => _indiceActual = 0)),
       PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
-      // --- NUEVA PANTALLA AQUÍ ---
+      // --- NUEVA PANTALLA AQUÃ ---
       _buildPantallaMisClientes(),
-      _buildPantallaMisLavaderos(), // Nueva pantalla posición 4
+      _buildPantallaMisLavaderos(), // Nueva pantalla posiciÃ³n 4
     ];
   }
 
   @override
   Widget build(BuildContext context) {
-    // Usamos MediaQuery para saber si la pantalla es de móvil/tablet
+    // Usamos MediaQuery para saber si la pantalla es de mÃ³vil/tablet
     final bool esMovil = MediaQuery.of(context).size.width < 950;
 
     return Scaffold(
@@ -837,7 +884,7 @@ class _MainLayoutState extends State<MainLayout> {
           ? Drawer(
               backgroundColor: const Color(0xFF1E1E2D),
               child:
-                  _buildContenidoSidebar(), // Esta función contendrá el logo y botones
+                  _buildContenidoSidebar(), // Esta funciÃ³n contendrÃ¡ el logo y botones
             )
           : null,
       body: LayoutBuilder(
@@ -847,8 +894,8 @@ class _MainLayoutState extends State<MainLayout> {
 
           return Row(
             children: [
-              // COLUMNA 1: SIDEBAR ANIMADO (Ahora sí se desliza real hacia la izquierda)
-              if (_indiceActual != 101) // <--- AGREGÁ ESTO ACÁ
+              // COLUMNA 1: SIDEBAR ANIMADO (Ahora sÃ­ se desliza real hacia la izquierda)
+              if (_indiceActual != 101) // <--- AGREGÃ ESTO ACÃ
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeInOutQuart,
@@ -867,7 +914,7 @@ class _MainLayoutState extends State<MainLayout> {
                         child: Stack(
                           children: [
                             _buildContenidoSidebar(),
-                            // BOTÓN DE CERRAR (X) A LA IZQUIERDA
+                            // BOTÃ“N DE CERRAR (X) A LA IZQUIERDA
                             Positioned(
                               top: 10,
                               left: 10,
@@ -888,14 +935,14 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                 ),
 
-              // COLUMNA 2: CONTENIDO CENTRAL (Se expande automáticamente)
+              // COLUMNA 2: CONTENIDO CENTRAL (Se expande automÃ¡ticamente)
               Expanded(
                 child: Stack(
                   children: [
                     Container(
                       color: const Color(0xFFF5F7F9),
                       child: IndexedStack(
-                        // Lógica para que entren todas las pantallas (0 a 4)
+                        // LÃ³gica para que entren todas las pantallas (0 a 4)
                         // pero que ignore el 99 (Registro) para que no crashee
                         index: (_indiceActual == 100)
                             ? 3 // Pantalla Mis Clientes
@@ -908,13 +955,13 @@ class _MainLayoutState extends State<MainLayout> {
                       ),
                     ),
 
-                    // --- BOTÓN PARA VOLVER A MOSTRAR EL SIDEBAR (Animado con la barra) ---
+                    // --- BOTÃ“N PARA VOLVER A MOSTRAR EL SIDEBAR (Animado con la barra) ---
                     if (!esMovil && _indiceActual == 0)
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 400),
                         curve: Curves.easeInOutQuart,
                         top: 20,
-                        // Si está abierto o NO estamos en el mapa, lo escondemos a la izquierda
+                        // Si estÃ¡ abierto o NO estamos en el mapa, lo escondemos a la izquierda
                         left: (_sidebarAbierto || _indiceActual != 0)
                             ? -60
                             : 15,
@@ -933,7 +980,7 @@ class _MainLayoutState extends State<MainLayout> {
                             ),
                             onPressed: () =>
                                 setState(() => _sidebarAbierto = true),
-                            tooltip: "Mostrar menú",
+                            tooltip: "Mostrar menÃº",
                           ),
                         ),
                       ),
@@ -951,7 +998,7 @@ class _MainLayoutState extends State<MainLayout> {
                           crossAxisAlignment:
                               CrossAxisAlignment.start, // Alinea arriba
                           children: [
-                            // Botón Menú (Solo móvil)
+                            // BotÃ³n MenÃº (Solo mÃ³vil)
                             if (esMovil)
                               Builder(
                                 builder: (context) => Container(
@@ -1159,7 +1206,7 @@ class _MainLayoutState extends State<MainLayout> {
                           ],
                         ),
                       ),
-                    // PANEL FLOTANTE: Bloqueado si el índice es 101
+                    // PANEL FLOTANTE: Bloqueado si el Ã­ndice es 101
                     if (esPantallaChica &&
                         _lavaderoSeleccionado != null &&
                         supabase.auth.currentUser != null &&
@@ -1185,14 +1232,14 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
 
-              // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
+              // COLUMNA 3: PANEL DERECHO DINÃMICO Y ANIMADO
               if (!esPantallaChica &&
                   supabase.auth.currentUser != null &&
                   _indiceActual != 101)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.easeInOutQuart,
-                  // --- CAMBIO AQUÍ: Si el índice es 101, el ancho es SIEMPRE 0 ---
+                  // --- CAMBIO AQUÃ: Si el Ã­ndice es 101, el ancho es SIEMPRE 0 ---
                   width: (_indiceActual == 101)
                       ? 0
                       : (_lavaderoSeleccionado != null ||
@@ -1230,9 +1277,9 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  // Mueve aquí el contenido que tenías antes en el Sidebar
+  // Mueve aquÃ­ el contenido que tenÃ­as antes en el Sidebar
   Widget _buildContenidoSidebar() {
-    // --- PASO 1: VERIFICAR SESIÓN ACTIVA ---
+    // --- PASO 1: VERIFICAR SESIÃ“N ACTIVA ---
     final bool tieneSesion = supabase.auth.currentUser != null;
 
     return Column(
@@ -1281,21 +1328,21 @@ class _MainLayoutState extends State<MainLayout> {
         ),
         const SizedBox(height: 40),
 
-        // --- BOTONES DEL MENÚ ---
+        // --- BOTONES DEL MENÃš ---
         _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
 
-        // --- BOTÓN MIS RESERVAS: Solo si tiene sesión ---
+        // --- BOTÃ“N MIS RESERVAS: Solo si tiene sesiÃ³n ---
         if (tieneSesion)
           _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
 
         _itemMenuLateral(Icons.person, "Mi Perfil", 2),
 
-        // --- BOTÓN CONFIGURAR: Solo si tiene sesión Y es dueño ---
+        // --- BOTÃ“N CONFIGURAR: Solo si tiene sesiÃ³n Y es dueÃ±o ---
         if (tieneSesion && _rolUsuario == 'lavadero')
           _itemMenuLateral(Icons.add_business, "Registrar Mi Lavadero", 99),
 
-        // --- NUEVO BOTÓN: MIS CLIENTES (Solo para Dueños) ---
-        // Lo asignamos con el índice 100 para no chocar con los demás
+        // --- NUEVO BOTÃ“N: MIS CLIENTES (Solo para DueÃ±os) ---
+        // Lo asignamos con el Ã­ndice 100 para no chocar con los demÃ¡s
         if (tieneSesion && _rolUsuario == 'lavadero')
           _itemMenuLateral(Icons.people_alt_rounded, "Mis Clientes", 100),
         if (tieneSesion && _rolUsuario == 'lavadero')
@@ -1311,8 +1358,8 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  // Función para crear los botones del menú lateral
-  // --- SUSTITUIR DESDE AQUÍ ---
+  // FunciÃ³n para crear los botones del menÃº lateral
+  // --- SUSTITUIR DESDE AQUÃ ---
   Widget _itemMenuLateral(IconData icon, String label, int index) {
     bool seleccionado = _indiceActual == index;
 
@@ -1330,7 +1377,7 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       ),
       onTap: () {
-        // Cerramos el Drawer de móvil si existe
+        // Cerramos el Drawer de mÃ³vil si existe
         if (Navigator.canPop(context)) Navigator.pop(context);
 
         if (index == 99) {
@@ -1349,7 +1396,7 @@ class _MainLayoutState extends State<MainLayout> {
             mapScreenKey.currentState?.cargarLavaderosDeSupabase();
           });
         } else {
-          // ... resto de tu código de índices (0, 100, 101)
+          // ... resto de tu cÃ³digo de Ã­ndices (0, 100, 101)
           setState(() {
             _sidebarAbierto = false;
             _indiceActual = index;
@@ -1362,13 +1409,13 @@ class _MainLayoutState extends State<MainLayout> {
       },
     );
   }
-  // --- HASTA AQUÍ ---
+  // --- HASTA AQUÃ ---
 
   Widget _buildPanelInformacion() {
     if (_lavaderoSeleccionado == null) {
       return const Center(
         child: Text(
-          "Seleccioná un lavadero\nen el mapa para ver detalle",
+          "SeleccionÃ¡ un lavadero\nen el mapa para ver detalle",
           textAlign: TextAlign.center,
           style: TextStyle(color: Colors.grey),
         ),
@@ -1376,17 +1423,17 @@ class _MainLayoutState extends State<MainLayout> {
     }
 
     final user = supabase.auth.currentUser;
-    // --- LÍNEA NUEVA: Verificamos propiedad ---
-    bool esMio = _lavaderoSeleccionado['dueño_id'] == user?.id;
+    // --- LÃNEA NUEVA: Verificamos propiedad ---
+    bool esMio = _lavaderoSeleccionado['dueÃ±o_id'] == user?.id;
 
     // --- BLOQUE DE CONTROL TOTAL ---
     debugPrint("------------------------------------------");
     debugPrint(
       "LAVADERO SELECCIONADO: ${_lavaderoSeleccionado['razon_social']}",
     );
-    debugPrint("DUEÑO ID EN DB: '${_lavaderoSeleccionado['dueño_id']}'");
+    debugPrint("DUEÃ‘O ID EN DB: '${_lavaderoSeleccionado['dueÃ±o_id']}'");
     debugPrint("MI ID (AUTH): '${user?.id}'");
-    debugPrint("¿COINCIDEN?: $esMio");
+    debugPrint("Â¿COINCIDEN?: $esMio");
     debugPrint("MI ROL ACTUAL: $_rolUsuario");
     debugPrint("------------------------------------------");
     // Cargamos los datos actuales en los controladores
@@ -1407,11 +1454,11 @@ class _MainLayoutState extends State<MainLayout> {
             child: buildImagenLavadero(
               _lavaderoSeleccionado,
               height: 180,
-            ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
+            ), // <--- LLAMADA A LA FUNCIÃ“N MAESTRA
           ),
           const SizedBox(height: 25),
 
-          // --- SELLO DE AUTOR (DUEÑO) ---
+          // --- SELLO DE AUTOR (DUEÃ‘O) ---
           if (_lavaderoSeleccionado['perfiles_usuarios'] != null)
             Container(
               margin: const EdgeInsets.only(bottom: 20),
@@ -1430,7 +1477,7 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    "Gestionado por: ${_lavaderoSeleccionado['perfiles_usuarios']['nombre'] ?? 'Dueño'} ${_lavaderoSeleccionado['perfiles_usuarios']['apellido'] ?? ''}",
+                    "Gestionado por: ${_lavaderoSeleccionado['perfiles_usuarios']['nombre'] ?? 'DueÃ±o'} ${_lavaderoSeleccionado['perfiles_usuarios']['apellido'] ?? ''}",
                     style: const TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.bold,
@@ -1440,7 +1487,7 @@ class _MainLayoutState extends State<MainLayout> {
                 ],
               ),
             ),
-          // Título dinámico según el rol
+          // TÃ­tulo dinÃ¡mico segÃºn el rol
           Text(
             esDueno ? "GESTIONAR MI NEGOCIO" : "DETALLES DEL LAVADERO",
             style: const TextStyle(
@@ -1452,22 +1499,22 @@ class _MainLayoutState extends State<MainLayout> {
           ),
           const SizedBox(height: 20),
 
-          // 2. CAMPOS DE INFORMACIÓN
-          // Campos informativos (La edición real se hace en la otra pantalla)
+          // 2. CAMPOS DE INFORMACIÃ“N
+          // Campos informativos (La ediciÃ³n real se hace en la otra pantalla)
           _inputPanel("Nombre del Negocio", _nombreCtrl, habilitado: false),
           const SizedBox(height: 15),
-          _inputPanel("Dirección", _direccionCtrl, habilitado: false),
+          _inputPanel("DirecciÃ³n", _direccionCtrl, habilitado: false),
 
           const SizedBox(height: 30),
 
-          // 3. BOTONES DE ACCIÓN (Diferenciados por Propiedad Real)
-          // 3. BOTONES DE ACCIÓN (Lógica de Roles y Propiedad)
+          // 3. BOTONES DE ACCIÃ“N (Diferenciados por Propiedad Real)
+          // 3. BOTONES DE ACCIÃ“N (LÃ³gica de Roles y Propiedad)
           if (esMio) ...[
-            // --- CASO DUEÑO: PUEDE MODIFICAR ---
+            // --- CASO DUEÃ‘O: PUEDE MODIFICAR ---
             const Divider(height: 30),
             ElevatedButton.icon(
               style: ElevatedButton.styleFrom(
-                // Estética: Azul ATT! con borde para armonía visual
+                // EstÃ©tica: Azul ATT! con borde para armonÃ­a visual
                 backgroundColor: Colors.white,
                 foregroundColor: const Color(0xFF3ABEF9),
                 side: const BorderSide(color: Color(0xFF3ABEF9), width: 2),
@@ -1548,7 +1595,7 @@ class _MainLayoutState extends State<MainLayout> {
               child: const Text("VOLVER AL LISTADO"),
             ),
           ] else ...[
-            // --- CASO OTRO DUEÑO: SOLO LECTURA ---
+            // --- CASO OTRO DUEÃ‘O: SOLO LECTURA ---
             const Divider(height: 30),
             const Center(
               child: Padding(
@@ -1617,7 +1664,7 @@ class _MainLayoutState extends State<MainLayout> {
               horizontal: 12,
               vertical: 10,
             ),
-            // Si no está habilitado, no mostramos el cursor
+            // Si no estÃ¡ habilitado, no mostramos el cursor
             disabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(8),
               borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1628,7 +1675,7 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  // LA FUNCIÓN QUE GUARDA EN SUPABASE
+  // LA FUNCIÃ“N QUE GUARDA EN SUPABASE
   Future<void> _actualizarLavaderoEnSupabase() async {
     try {
       await supabase
@@ -1641,7 +1688,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("✅ Lavadero actualizado correctamente"),
+          content: Text("âœ… Lavadero actualizado correctamente"),
           backgroundColor: Colors.green,
         ),
       );
@@ -1652,21 +1699,21 @@ class _MainLayoutState extends State<MainLayout> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("❌ Error al actualizar: $e"),
+          content: Text("âŒ Error al actualizar: $e"),
           backgroundColor: Colors.red,
         ),
       );
     }
   }
 
-  // --- FUNCIÓN PARA CONFIRMAR BORRADO ---
+  // --- FUNCIÃ“N PARA CONFIRMAR BORRADO ---
   void _confirmarBorrado() {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text("¿Eliminar lavadero?"),
+        title: const Text("Â¿Eliminar lavadero?"),
         content: Text(
-          "Estás por borrar '${_lavaderoSeleccionado['razon_social']}'. Esta acción no se puede deshacer.",
+          "EstÃ¡s por borrar '${_lavaderoSeleccionado['razon_social']}'. Esta acciÃ³n no se puede deshacer.",
         ),
         actions: [
           TextButton(
@@ -1685,7 +1732,7 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
-  // --- FUNCIÓN QUE BORRA DE SUPABASE ---
+  // --- FUNCIÃ“N QUE BORRA DE SUPABASE ---
   Future<void> _eliminarLavaderoDeSupabase() async {
     try {
       await supabase
@@ -1695,7 +1742,7 @@ class _MainLayoutState extends State<MainLayout> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("🗑️ Lavadero eliminado"),
+          content: Text("ðŸ—‘ï¸ Lavadero eliminado"),
           backgroundColor: Colors.orange,
         ),
       );
@@ -1706,7 +1753,7 @@ class _MainLayoutState extends State<MainLayout> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text("❌ Error al borrar: $e"),
+          content: Text("âŒ Error al borrar: $e"),
           backgroundColor: Colors.red,
         ),
       );
@@ -1722,16 +1769,16 @@ class _MainLayoutState extends State<MainLayout> {
       final List<dynamic> lavaderosData = await supabase
           .from('lavaderos')
           .select('razon_social')
-          .eq('dueño_id', user.id);
+          .eq('dueÃ±o_id', user.id);
 
       if (lavaderosData.isNotEmpty) {
         final nombresLavaderos = lavaderosData
             .map((l) => l['razon_social'].toString())
             .toList();
-        debugPrint("✅ Buscando clientes para: $nombresLavaderos");
+        debugPrint("âœ… Buscando clientes para: $nombresLavaderos");
 
         // 2. Traemos los turnos.
-        // USAMOS 'ilike' para que no importe si es mayúscula o minúscula
+        // USAMOS 'ilike' para que no importe si es mayÃºscula o minÃºscula
         // Y lo hacemos uno por uno para asegurar que las comillas no molesten
         List<dynamic> todosLosTurnos = [];
         for (String nombre in nombresLavaderos) {
@@ -1747,13 +1794,13 @@ class _MainLayoutState extends State<MainLayout> {
 
         if (todosLosTurnos.isEmpty) {
           debugPrint(
-            "📊 Sigue sin encontrar nada. Revisá si 'lavadero_nombre' en Turnos coincide con 'razon_social' en Lavaderos.",
+            "ðŸ“Š Sigue sin encontrar nada. RevisÃ¡ si 'lavadero_nombre' en Turnos coincide con 'razon_social' en Lavaderos.",
           );
           if (mounted) setState(() => _misClientesReales = []);
           return;
         }
 
-        // 3. Obtenemos los IDs de los clientes únicos
+        // 3. Obtenemos los IDs de los clientes Ãºnicos
         final idsClientes = todosLosTurnos
             .map((t) => t['user_id']?.toString())
             .where((id) => id != null)
@@ -1767,7 +1814,9 @@ class _MainLayoutState extends State<MainLayout> {
               .select()
               .filter('id', 'in', idsClientes);
 
-          debugPrint("👥 ¡POR FIN! Clientes encontrados: ${perfiles.length}");
+          debugPrint(
+            "ðŸ‘¥ Â¡POR FIN! Clientes encontrados: ${perfiles.length}",
+          );
 
           if (mounted) {
             setState(() {
@@ -1777,7 +1826,7 @@ class _MainLayoutState extends State<MainLayout> {
         }
       }
     } catch (e) {
-      debugPrint("🚨 ERROR CARGANDO: $e");
+      debugPrint("ðŸš¨ ERROR CARGANDO: $e");
     }
   }
 
@@ -1817,7 +1866,7 @@ class _MainLayoutState extends State<MainLayout> {
             ),
           ),
           const SizedBox(height: 24),
-          // ESTADÍSTICAS
+          // ESTADÃSTICAS
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 24),
             child: Row(
@@ -1867,7 +1916,7 @@ class _MainLayoutState extends State<MainLayout> {
                     child: _misClientesReales.isEmpty
                         ? const Center(
                             child: Text(
-                              "Aún no tienes clientes registrados.",
+                              "AÃºn no tienes clientes registrados.",
                               style: TextStyle(color: Colors.grey),
                             ),
                           )
@@ -1886,9 +1935,9 @@ class _MainLayoutState extends State<MainLayout> {
                               // 3. Lo mandamos a la tarjetita Bento
                               return _filaClienteBento(
                                 nombreAMostrar, // <--- Nombre y Apellido reales
-                                cliente['ciudad'] ?? 'Zárate',
+                                cliente['ciudad'] ?? 'ZÃ¡rate',
                                 cliente['email'] ??
-                                    'Sin email', // <--- El Gmail que ya veías
+                                    'Sin email', // <--- El Gmail que ya veÃ­as
                               );
                             },
                           ),
@@ -1932,7 +1981,7 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                   ),
                 ),
-                // --- NUEVO BOTÓN "INGRESAR NUEVO" ---
+                // --- NUEVO BOTÃ“N "INGRESAR NUEVO" ---
                 TextButton.icon(
                   style: TextButton.styleFrom(
                     backgroundColor: const Color(0xFF3ABEF9).withOpacity(0.1),
@@ -1962,7 +2011,7 @@ class _MainLayoutState extends State<MainLayout> {
                   ),
                 ),
                 const SizedBox(width: 8), // Espacio entre botones
-                // --- BOTÓN NUEVO: SUBIR FOTO ---
+                // --- BOTÃ“N NUEVO: SUBIR FOTO ---
                 TextButton.icon(
                   style: TextButton.styleFrom(
                     backgroundColor: azulATT.withOpacity(0.1),
@@ -2008,7 +2057,7 @@ class _MainLayoutState extends State<MainLayout> {
                                 focusNode: FocusNode(),
                                 autofocus: true,
                                 onKey: (event) {
-                                  // (Acá mantené toda tu lógica de teclas que ya tenés igual...)
+                                  // (AcÃ¡ mantenÃ© toda tu lÃ³gica de teclas que ya tenÃ©s igual...)
                                   if (event is RawKeyDownEvent) {
                                     int currentIndex = _misLavaderosReales
                                         .indexOf(_lavaderoSeleccionado);
@@ -2082,7 +2131,7 @@ class _MainLayoutState extends State<MainLayout> {
                                   padding: const EdgeInsets.all(20),
                                   gridDelegate:
                                       SliverGridDelegateWithFixedCrossAxisCount(
-                                        // --- 1. LAS 4 COLUMNAS AQUÍ ---
+                                        // --- 1. LAS 4 COLUMNAS AQUÃ ---
                                         crossAxisCount:
                                             MediaQuery.of(context).size.width >
                                                 1100
@@ -2101,7 +2150,7 @@ class _MainLayoutState extends State<MainLayout> {
                               ),
                       ),
 
-                      // --- 2. LA BOTONERA DE PAGINACIÓN AQUÍ ---
+                      // --- 2. LA BOTONERA DE PAGINACIÃ“N AQUÃ ---
                       // --- REEMPLAZO: BOTONERA ESTILO RESERVAS (Clon exacto) ---
                       if (!_cargandoLavaderos && _totalLavaderosDB > 0)
                         _buildPaginacionLavaderos(),
@@ -2123,7 +2172,7 @@ class _MainLayoutState extends State<MainLayout> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         decoration: BoxDecoration(
-          // Proposición: El azul fuerte solo aparece si está SELECCIONADO
+          // ProposiciÃ³n: El azul fuerte solo aparece si estÃ¡ SELECCIONADO
           color: estaSeleccionada ? const Color(0xFF3ABEF9) : Colors.white,
           borderRadius: BorderRadius.circular(25),
           boxShadow: [
@@ -2157,7 +2206,7 @@ class _MainLayoutState extends State<MainLayout> {
                       child: buildImagenLavadero(
                         l,
                         height: double.infinity,
-                      ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
+                      ), // <--- LLAMADA A LA FUNCIÃ“N MAESTRA
                     ),
                   ),
                 ],
@@ -2179,7 +2228,7 @@ class _MainLayoutState extends State<MainLayout> {
                     ),
                   ),
                   Text(
-                    l['direccion'] ?? 'Zárate',
+                    l['direccion'] ?? 'ZÃ¡rate',
                     maxLines: 1,
                     style: TextStyle(
                       fontSize: 10,
@@ -2203,7 +2252,7 @@ class _MainLayoutState extends State<MainLayout> {
           Icon(Icons.store_outlined, size: 80, color: Colors.grey[300]),
           const SizedBox(height: 10),
           const Text(
-            "No tienes lavaderos registrados todavía.",
+            "No tienes lavaderos registrados todavÃ­a.",
             style: TextStyle(color: Colors.grey),
           ),
         ],
@@ -2272,7 +2321,7 @@ class _MainLayoutState extends State<MainLayout> {
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
         ),
         subtitle: Text(
-          "$auto • $patente",
+          "$auto â€¢ $patente",
           style: const TextStyle(fontSize: 12),
         ),
         trailing: const Icon(Icons.chevron_right, color: Colors.black26),
@@ -2293,7 +2342,7 @@ class _MainLayoutState extends State<MainLayout> {
           ],
         ),
         content: Text(
-          "¿Deseas modificar los datos de '${lavadero['razon_social']}'?",
+          "Â¿Deseas modificar los datos de '${lavadero['razon_social']}'?",
         ),
         actions: [
           TextButton(
@@ -2310,7 +2359,7 @@ class _MainLayoutState extends State<MainLayout> {
             onPressed: () {
               Navigator.pop(context); // Cierra el cartel
               setState(() => _lavaderoSeleccionado = lavadero);
-              // Salto a la edición
+              // Salto a la ediciÃ³n
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -2320,7 +2369,7 @@ class _MainLayoutState extends State<MainLayout> {
               );
             },
             child: const Text(
-              "SÍ, EDITAR",
+              "SÃ, EDITAR",
               style: TextStyle(color: Colors.white),
             ),
           ),
@@ -2331,7 +2380,7 @@ class _MainLayoutState extends State<MainLayout> {
 
   Widget _buildPaginacionLavaderos() {
     int totalPaginas = (_totalLavaderosDB / _itemsPorPagina).ceil();
-    // Lógica de bloques de 3 números como en Reservas
+    // LÃ³gica de bloques de 3 nÃºmeros como en Reservas
     int bloqueActual = (_paginaActual / 3).floor();
     int inicioBloque = bloqueActual * 3;
     int finBloque = (inicioBloque + 2 < totalPaginas)
@@ -2350,7 +2399,7 @@ class _MainLayoutState extends State<MainLayout> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          // Botón Izquierdo
+          // BotÃ³n Izquierdo
           IconButton(
             icon: const Icon(Icons.chevron_left_rounded),
             onPressed: _paginaActual > 0
@@ -2361,7 +2410,7 @@ class _MainLayoutState extends State<MainLayout> {
                 : null,
           ),
 
-          // Números de página estilizados
+          // NÃºmeros de pÃ¡gina estilizados
           for (int i = inicioBloque; i <= finBloque; i++)
             GestureDetector(
               onTap: () {
@@ -2369,7 +2418,7 @@ class _MainLayoutState extends State<MainLayout> {
                 _cargarMisLavaderos();
               },
               child: MouseRegion(
-                // Agregamos la manito que querías
+                // Agregamos la manito que querÃ­as
                 cursor: SystemMouseCursors.click,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 200),
@@ -2395,7 +2444,7 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             ),
 
-          // Botón Derecho
+          // BotÃ³n Derecho
           IconButton(
             icon: const Icon(Icons.chevron_right_rounded),
             onPressed: _paginaActual < totalPaginas - 1
@@ -2412,15 +2461,15 @@ class _MainLayoutState extends State<MainLayout> {
 
   Future<String?> _subirImagenACloudinary() async {
     final picker = ImagePicker();
-    // 1. El dueño elige la imagen de su PC/Celular
+    // 1. El dueÃ±o elige la imagen de su PC/Celular
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
 
-    if (image == null) return null; // El usuario canceló
+    if (image == null) return null; // El usuario cancelÃ³
 
     setState(() => _cargandoLavaderos = true); // Mostramos un loader
 
     try {
-      // 2. Preparamos la petición a Cloudinary
+      // 2. Preparamos la peticiÃ³n a Cloudinary
       var request = http.MultipartRequest(
         'POST',
         Uri.parse(
@@ -2478,7 +2527,7 @@ class MapScreen extends StatefulWidget {
     super.key,
     this.onIrAPerfil,
     this.onSelectLavadero,
-    this.onDeselccionar, // <--- AGREGA ESTA LÍNEA AQUÍ ADENTRO
+    this.onDeselccionar, // <--- AGREGA ESTA LÃNEA AQUÃ ADENTRO
     this.onLavaderosCargados,
   });
 
@@ -2537,7 +2586,9 @@ class _MapScreenState extends State<MapScreen> {
 
   List<Marker> _buildMarkerTarjetaOverlay() {
     if (_markerTarjetaActivaId == null) return const [];
-    final activo = _lavaderosEnMapa.where((l) => l['id'] == _markerTarjetaActivaId);
+    final activo = _lavaderosEnMapa.where(
+      (l) => l['id'] == _markerTarjetaActivaId,
+    );
     if (activo.isEmpty) return const [];
 
     final l = activo.first;
@@ -2582,14 +2633,14 @@ class _MapScreenState extends State<MapScreen> {
           schema: 'public',
           table: 'lavaderos',
           callback: (payload) {
-            debugPrint("🔥 Cambio detectado en Realtime!");
+            debugPrint("ðŸ”¥ Cambio detectado en Realtime!");
             cargarLavaderosDeSupabase(); // Esto recarga la lista local y dispara el onLavaderosCargados
           },
         )
         .subscribe();
   }
 
-  // --- FUNCIÓN PARA MOVIMIENTO SUAVE (PEGAR AQUÍ) ---
+  // --- FUNCIÃ“N PARA MOVIMIENTO SUAVE (PEGAR AQUÃ) ---
   void _animatedMapMove(LatLng destLocation, double destZoom) {
     final latTween = Tween<double>(
       begin: _mapController.camera.center.latitude,
@@ -2635,9 +2686,9 @@ class _MapScreenState extends State<MapScreen> {
       final List<dynamic> listaLavaderos = data as List;
 
       if (mounted) {
-        // 2. Extraemos los IDs de los dueños (dueño_id) de forma única
+        // 2. Extraemos los IDs de los dueÃ±os (dueÃ±o_id) de forma Ãºnica
         final idsDuenos = listaLavaderos
-            .map((l) => l['dueño_id']?.toString())
+            .map((l) => l['dueÃ±o_id']?.toString())
             .where((id) => id != null)
             .toSet()
             .toList();
@@ -2645,24 +2696,24 @@ class _MapScreenState extends State<MapScreen> {
         Map<String, dynamic> mapaNombres = {};
 
         if (idsDuenos.isNotEmpty) {
-          // 3. Buscamos los perfiles de esos dueños en la tabla perfiles_usuarios
+          // 3. Buscamos los perfiles de esos dueÃ±os en la tabla perfiles_usuarios
           final perfilesData = await supabase
               .from('perfiles_usuarios')
               .select('id, nombre, apellido')
               .filter('id', 'in', idsDuenos);
 
           debugPrint(
-            "🔍 Perfiles encontrados para dueños: ${perfilesData.length}",
+            "ðŸ” Perfiles encontrados para dueÃ±os: ${perfilesData.length}",
           );
-          // Guardamos los nombres en un mapa para acceso rápido
+          // Guardamos los nombres en un mapa para acceso rÃ¡pido
           for (var p in perfilesData) {
             mapaNombres[p['id']] = p;
           }
         }
 
-        // 4. "Pegamos" manualmente la info del dueño a cada lavadero
+        // 4. "Pegamos" manualmente la info del dueÃ±o a cada lavadero
         for (var lav in listaLavaderos) {
-          lav['perfiles_usuarios'] = mapaNombres[lav['dueño_id']];
+          lav['perfiles_usuarios'] = mapaNombres[lav['dueÃ±o_id']];
         }
 
         // 5. Enviamos los datos actualizados al MainLayout
@@ -2679,7 +2730,7 @@ class _MapScreenState extends State<MapScreen> {
         });
       }
     } catch (e) {
-      debugPrint("🚨 ERROR EN MAPA: $e");
+      debugPrint("ðŸš¨ ERROR EN MAPA: $e");
     }
   }
 
@@ -2689,8 +2740,8 @@ class _MapScreenState extends State<MapScreen> {
 
     final nuevosLavaderos = [
       {
-        'dueño_id': user.id,
-        'razon_social': 'Lavadero Express Zárate',
+        'dueÃ±o_id': user.id,
+        'razon_social': 'Lavadero Express ZÃ¡rate',
         'direccion': 'Av. Lavalle 1200',
         'latitud': -34.098,
         'longitud': -59.028,
@@ -2699,7 +2750,7 @@ class _MapScreenState extends State<MapScreen> {
         'cuenta_bancaria': 'AL-123456',
       },
       {
-        'dueño_id': user.id,
+        'dueÃ±o_id': user.id,
         'razon_social': 'A Todo Trapo Premium',
         'direccion': 'Justa Lima 500',
         'latitud': -34.102,
@@ -2714,11 +2765,11 @@ class _MapScreenState extends State<MapScreen> {
       await supabase.from('lavaderos').insert(nuevosLavaderos);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("✅ Lavaderos de prueba creados")),
+          const SnackBar(content: Text("âœ… Lavaderos de prueba creados")),
         );
       }
     } catch (e) {
-      debugPrint("❌ Error al generar: $e");
+      debugPrint("âŒ Error al generar: $e");
       if (mounted) {
         ScaffoldMessenger.of(
           context,
@@ -2728,11 +2779,11 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _mostrarCartel(dynamic l) {
-    // Esta línea le avisa al Dashboard qué lavadero tocaste
+    // Esta lÃ­nea le avisa al Dashboard quÃ© lavadero tocaste
     if (widget.onSelectLavadero != null) widget.onSelectLavadero!(l);
-    // ... el resto de tu código del showModalBottomSheet ...
+    // ... el resto de tu cÃ³digo del showModalBottomSheet ...
     if (_userRol == 'lavadero') {
-      debugPrint("🛠️ Modo gestión activado para este marcador");
+      debugPrint("ðŸ› ï¸ Modo gestiÃ³n activado para este marcador");
       return;
     }
     showModalBottomSheet(
@@ -2758,7 +2809,7 @@ class _MapScreenState extends State<MapScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              "Dirección: ${l['direccion'] ?? 'Zárate'}",
+              "DirecciÃ³n: ${l['direccion'] ?? 'ZÃ¡rate'}",
               style: TextStyle(color: Colors.grey[600]),
             ),
             // --- REEMPLAZO DENTRO DE _mostrarCartel ---
@@ -2771,24 +2822,24 @@ class _MapScreenState extends State<MapScreen> {
                     backgroundColor: const Color(0xFFEF4444),
                   ),
                   onPressed: () {
-                    // 1. VALIDAMOS SESIÓN EN TIEMPO REAL
+                    // 1. VALIDAMOS SESIÃ“N EN TIEMPO REAL
                     final usuarioActivo = supabase.auth.currentUser;
 
                     if (usuarioActivo == null) {
-                      // 2. SI NO HAY SESIÓN: Cerramos cartel, avisamos y mandamos al perfil
+                      // 2. SI NO HAY SESIÃ“N: Cerramos cartel, avisamos y mandamos al perfil
                       Navigator.pop(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text(
-                            "⚠️ Debes iniciar sesión para solicitar un turno",
+                            "âš ï¸ Debes iniciar sesiÃ³n para solicitar un turno",
                           ),
                           backgroundColor: Colors.orange,
                         ),
                       );
-                      // Llamamos a la función para cambiar de pestaña al perfil
+                      // Llamamos a la funciÃ³n para cambiar de pestaÃ±a al perfil
                       if (widget.onIrAPerfil != null) widget.onIrAPerfil!();
                     } else {
-                      // 3. SI HAY SESIÓN: Vamos a la reserva normalmente
+                      // 3. SI HAY SESIÃ“N: Vamos a la reserva normalmente
                       Navigator.pop(context);
                       Navigator.push(
                         context,
@@ -2865,7 +2916,7 @@ class _MapScreenState extends State<MapScreen> {
             options: MapOptions(
               initialCenter: const LatLng(-34.098, -59.028),
               initialZoom: 14,
-              // ESTA FUNCIÓN SE ACTIVA AL TOCAR CUALQUIER PARTE VACÍA DEL MAPA
+              // ESTA FUNCIÃ“N SE ACTIVA AL TOCAR CUALQUIER PARTE VACÃA DEL MAPA
               onTap: (tapPosition, point) {
                 setState(() => _markerTarjetaActivaId = null);
                 if (widget.onDeselccionar != null) {
@@ -2881,7 +2932,7 @@ class _MapScreenState extends State<MapScreen> {
               MarkerLayer(markers: _buildMarkerTarjetaOverlay()),
             ],
           ),
-          // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
+          // AquÃ­ siguen tus botones circulares de GPS y Zoom que ya tienes...
           // --- PANEL DE BOTONES FACHEROS ---
           Positioned(
             top: 100, // Bajado para no tapar el Avatar
@@ -2929,11 +2980,11 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
-          // --- BLOQUE 2: BOTÓN "+" DE AÑADIR TURNO (ABAJO A LA DERECHA) ---
-          // Solo aparece en la versión móvil/tablet
+          // --- BLOQUE 2: BOTÃ“N "+" DE AÃ‘ADIR TURNO (ABAJO A LA DERECHA) ---
+          // Solo aparece en la versiÃ³n mÃ³vil/tablet
           if (MediaQuery.of(context).size.width < 950)
             Positioned(
-              bottom: 30, // Posición clásica de pulgar
+              bottom: 30, // PosiciÃ³n clÃ¡sica de pulgar
               right: 20,
               child: Container(
                 width: 60,
@@ -2952,7 +3003,7 @@ class _MapScreenState extends State<MapScreen> {
                 child: IconButton(
                   icon: const Icon(Icons.add, color: Colors.white, size: 35),
                   onPressed: () {
-                    // Aquí tu lógica para añadir turno
+                    // AquÃ­ tu lÃ³gica para aÃ±adir turno
                   },
                 ),
               ),
@@ -3011,13 +3062,20 @@ class _MarkerConPopupState extends State<MarkerConPopup> {
   }
 }
 
-class TarjetaMarkerOverlay extends StatelessWidget {
+class TarjetaMarkerOverlay extends StatefulWidget {
   final dynamic l;
   const TarjetaMarkerOverlay({super.key, required this.l});
 
   @override
+  State<TarjetaMarkerOverlay> createState() => _TarjetaMarkerOverlayState();
+}
+
+class _TarjetaMarkerOverlayState extends State<TarjetaMarkerOverlay> {
+  bool _isHovered = false;
+
+  @override
   Widget build(BuildContext context) {
-    final dynamic ratingRaw = l['rating'];
+    final dynamic ratingRaw = widget.l['rating'];
     final double? rating = ratingRaw is num
         ? ratingRaw.toDouble()
         : (ratingRaw is String ? double.tryParse(ratingRaw) : null);
@@ -3025,63 +3083,83 @@ class TarjetaMarkerOverlay extends StatelessWidget {
         ? 'Sin rating'
         : 'Rating ${rating.clamp(0.0, 5.0).toStringAsFixed(1)}';
 
-    return Stack(
-      alignment: Alignment.bottomCenter,
-      clipBehavior: Clip.none,
-      children: [
-        Positioned(
-          bottom:5,
-          child: Container(
-            width: 180,
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black26,
-                  blurRadius: 10,
-                  spreadRadius: 1,
+    return TweenAnimationBuilder<double>(
+      tween: Tween(begin: 0.0, end: 1.0),
+      duration: const Duration(milliseconds: 320),
+      curve: Curves.easeOutBack,
+      builder: (context, value, child) {
+        final double appearOffset = (1 - value) * 16;
+        final double hoverOffset = _isHovered ? -6 : 0;
+        final double scale = _isHovered ? 1.02 : 1.0;
+        return Transform.translate(
+          offset: Offset(0, appearOffset + hoverOffset),
+          child: Transform.scale(scale: scale, child: child),
+        );
+      },
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        onEnter: (_) => setState(() => _isHovered = true),
+        onExit: (_) => setState(() => _isHovered = false),
+        child: Stack(
+          alignment: Alignment.bottomCenter,
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              bottom: 5,
+              child: Container(
+                width: 180,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: const [
+                    BoxShadow(
+                      color: Colors.black26,
+                      blurRadius: 10,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                  border: Border.all(
+                    color: const Color(0xFF3ABEF9),
+                    width: 1.5,
+                  ),
                 ),
-              ],
-              border: Border.all(color: const Color(0xFF3ABEF9), width: 1.5),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: buildImagenLavadero(widget.l, height: 80),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.l['razon_social'] ?? 'Lavadero',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    Text(
+                      '$ratingTexto | Disponible',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.green,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: buildImagenLavadero(
-                    l,
-                    height: 80,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  l['razon_social'] ?? 'Lavadero',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-                Text(
-                  '$ratingTexto | Disponible',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: Colors.green,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
+
 // --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
   final VoidCallback? onVolver;
@@ -3104,7 +3182,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   final _marcaController = TextEditingController();
   final _colorController = TextEditingController();
 
-  // DUEÑO (Lavadero) - AGREGAR ESTOS 3
+  // DUEÃ‘O (Lavadero) - AGREGAR ESTOS 3
   final _cuitController = TextEditingController();
   final _cpController = TextEditingController();
   final _descripcionController = TextEditingController();
@@ -3152,7 +3230,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
             _patenteController.text = data['patente'] ?? '';
             _marcaController.text = data['marca_modelo'] ?? '';
             _colorController.text = data['color_vehiculo'] ?? '';
-            // Campos de Dueño
+            // Campos de DueÃ±o
             _cuitController.text = data['cuil_cuit'] ?? '';
             _cpController.text = data['codigo_postal'] ?? '';
             _descripcionController.text = data['descripcion_negocio'] ?? '';
@@ -3163,11 +3241,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
     } catch (e) {
       if (mounted) setState(() => _cargando = false);
 
-      // 🚨 ESTO ES CLAVE: Mirá la consola de VS Code/Android Studio
+      // ðŸš¨ ESTO ES CLAVE: MirÃ¡ la consola de VS Code/Android Studio
       // Te va a decir "column cuil_cuit does not exist" o algo similar.
-      debugPrint("❌ ERROR DE SUPABASE: $e");
+      debugPrint("âŒ ERROR DE SUPABASE: $e");
 
-      _mostrarAlerta("❌ Error al guardar datos", rojoATT);
+      _mostrarAlerta("âŒ Error al guardar datos", rojoATT);
     }
   }
 
@@ -3186,14 +3264,14 @@ class _PerfilScreenState extends State<PerfilScreen> {
       'fecha_nacimiento': _fechaNacController.text,
     };
 
-    // 2. Datos según Rol (Evita errores de columnas)
+    // 2. Datos segÃºn Rol (Evita errores de columnas)
     if (_rolUsuario == 'cliente') {
       updates.addAll({
         'patente': _patenteController.text.toUpperCase(),
         'marca_modelo': _marcaController.text,
         'color_vehiculo': _colorController.text,
       });
-    } else if (_rolUsuario == 'dueño') {
+    } else if (_rolUsuario == 'dueÃ±o') {
       updates.addAll({
         'cuil_cuit': _cuitController.text,
         'codigo_postal': _cpController.text,
@@ -3212,11 +3290,11 @@ class _PerfilScreenState extends State<PerfilScreen> {
           _estaEditando = false;
           _cargando = false;
         });
-        _mostrarAlerta("✨ Perfil ATT! sincronizado", Colors.green);
+        _mostrarAlerta("âœ¨ Perfil ATT! sincronizado", Colors.green);
       }
     } catch (e) {
       if (mounted) setState(() => _cargando = false);
-      _mostrarAlerta("❌ Error al guardar datos", rojoATT);
+      _mostrarAlerta("âŒ Error al guardar datos", rojoATT);
     }
   }
 
@@ -3301,9 +3379,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   _buildIdentityHeader(usuarioAuth),
                   const SizedBox(height: 24),
 
-                  // MÓDULO 1: DATOS PERSONALES
+                  // MÃ“DULO 1: DATOS PERSONALES
                   _buildBentoCard(
-                    title: "Información Personal",
+                    title: "InformaciÃ³n Personal",
                     icon: Icons.person_outline_rounded,
                     child: Column(
                       children: [
@@ -3334,7 +3412,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             Expanded(
                               child: _buildField(
                                 _telefonoController,
-                                "Teléfono",
+                                "TelÃ©fono",
                                 Icons.phone_android_rounded,
                                 _estaEditando,
                                 type: TextInputType.phone,
@@ -3363,7 +3441,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   ),
                   const SizedBox(height: 16),
 
-                  // MÓDULO 2: ESPECÍFICO SEGÚN ROL
+                  // MÃ“DULO 2: ESPECÃFICO SEGÃšN ROL
                   if (_rolUsuario == 'cliente')
                     _buildBentoCard(
                       title: "Mi Garage Digital",
@@ -3400,9 +3478,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         ],
                       ),
                     )
-                  else if (_rolUsuario == 'dueño')
+                  else if (_rolUsuario == 'dueÃ±o')
                     _buildBentoCard(
-                      title: "Información del Lavadero",
+                      title: "InformaciÃ³n del Lavadero",
                       icon: Icons.storefront_rounded,
                       child: Column(
                         children: [
@@ -3425,10 +3503,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              const Spacer(), // Espacio para diseño bento desparejo
+                              const Spacer(), // Espacio para diseÃ±o bento desparejo
                             ],
                           ),
-                          // CAMPO DE DESCRIPCIÓN
+                          // CAMPO DE DESCRIPCIÃ“N
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
                             child: TextField(
@@ -3442,7 +3520,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                                     : Colors.black45,
                               ),
                               decoration: InputDecoration(
-                                labelText: "Descripción del Negocio",
+                                labelText: "DescripciÃ³n del Negocio",
                                 alignLabelWithHint: true,
                                 filled: true,
                                 fillColor: _estaEditando
@@ -3459,10 +3537,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
                       ),
                     ),
 
-                  // MÓDULO 3: PAGOS GLASSMORHPISM
+                  // MÃ“DULO 3: PAGOS GLASSMORHPISM
                   if (_rolUsuario == 'cliente')
                     _buildBentoCard(
-                      title: "Métodos de Pago",
+                      title: "MÃ©todos de Pago",
                       icon: Icons.account_balance_wallet_rounded,
                       child: Column(
                         children: [
@@ -3474,7 +3552,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                             azulATT,
                             () {
                               _mostrarAlerta(
-                                "Función disponible próximamente",
+                                "FunciÃ³n disponible prÃ³ximamente",
                                 azulATT,
                               );
                             },
@@ -3488,7 +3566,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   _buildBentoCard(
                     child: _actionRow(
                       Icons.logout_rounded,
-                      "Cerrar Sesión",
+                      "Cerrar SesiÃ³n",
                       rojoATT,
                       onTap: _cerrarSesion,
                     ),
@@ -3686,7 +3764,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      "•••• •••• •••• $ultimoCuatro",
+                      "â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ â€¢â€¢â€¢â€¢ $ultimoCuatro",
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 18,
@@ -3695,7 +3773,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      "MÉTODO ATT! PREDETERMINADO",
+                      "MÃ‰TODO ATT! PREDETERMINADO",
                       style: TextStyle(
                         color: Colors.white.withOpacity(0.6),
                         fontSize: 8,
@@ -3781,7 +3859,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
           ),
           const SizedBox(height: 16),
           const Text(
-            "Inicia sesión para ver tu perfil",
+            "Inicia sesiÃ³n para ver tu perfil",
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 24),
@@ -3822,7 +3900,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
   }
 }
 
-// --- FUNCIÓN MAESTRA GLOBAL (Accesible desde todo el archivo) ---
+// --- FUNCIÃ“N MAESTRA GLOBAL (Accesible desde todo el archivo) ---
 Widget buildImagenLavadero(
   dynamic l, {
   double height = 180,
@@ -3841,7 +3919,7 @@ Widget buildImagenLavadero(
       height: height,
       width: width,
       fit: BoxFit.cover,
-      // Si la URL falla por algún motivo, mostramos el avatar
+      // Si la URL falla por algÃºn motivo, mostramos el avatar
       errorBuilder: (context, error, stackTrace) =>
           _disenarAvatar(inicial, height, width, colorATT),
     );
@@ -3850,7 +3928,7 @@ Widget buildImagenLavadero(
   return _disenarAvatar(inicial, height, width, colorATT);
 }
 
-// Función auxiliar para el diseño del círculo/cuadrado
+// FunciÃ³n auxiliar para el diseÃ±o del cÃ­rculo/cuadrado
 Widget _disenarAvatar(String inicial, double h, double w, Color color) {
   return Container(
     height: h,
@@ -3867,7 +3945,7 @@ Widget _disenarAvatar(String inicial, double h, double w, Color color) {
         inicial,
         style: TextStyle(
           color: Colors.white,
-          fontSize: h > 100 ? 60 : 30, // Tamaño inteligente según el lugar
+          fontSize: h > 100 ? 60 : 30, // TamaÃ±o inteligente segÃºn el lugar
           fontWeight: FontWeight.w900,
         ),
       ),
@@ -3952,7 +4030,7 @@ class _ComprobanteOverlayState extends State<ComprobanteOverlay> {
                   ),
                   const SizedBox(height: 15),
                   const Text(
-                    "¡PAGO CONFIRMADO!",
+                    "Â¡PAGO CONFIRMADO!",
                     style: TextStyle(fontWeight: FontWeight.w900, fontSize: 18),
                   ),
                   const SizedBox(height: 10),
@@ -3997,6 +4075,3 @@ class _ComprobanteOverlayState extends State<ComprobanteOverlay> {
     );
   }
 }
-
-
-
