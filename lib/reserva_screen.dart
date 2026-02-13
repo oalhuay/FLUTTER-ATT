@@ -5,6 +5,10 @@ import 'package:intl/intl.dart';
 import 'services/mp_service.dart';
 import 'services/pdf_helper.dart';
 import 'package:app_links/app_links.dart';
+import 'package:flutter/foundation.dart';
+import 'package:window_manager/window_manager.dart';
+import 'utils/browser_close_stub.dart'
+    if (dart.library.html) 'utils/browser_close_web.dart';
 
 class ReservaScreen extends StatefulWidget {
   final dynamic lavadero;
@@ -154,7 +158,23 @@ class _ReservaScreenState extends State<ReservaScreen>
       );
 
       if (urlPago != null) {
-        // 1. Abrimos Mercado Pago primero
+        // En web navegamos en la misma pestaña para salir de la app directamente.
+        if (kIsWeb) {
+          final bool lanzado = await launchUrl(
+            Uri.parse(urlPago),
+            webOnlyWindowName: '_self',
+          );
+          if (!lanzado && context.mounted) {
+            setState(() {
+              _estaProcesando = false;
+              _esperandoPago = false;
+            });
+            _mostrarMensajeError("No se pudo abrir Mercado Pago.");
+          }
+          return;
+        }
+
+        // En desktop/mobile abrimos externo y cerramos esta vista después.
         final bool lanzado = await launchUrl(
           Uri.parse(urlPago),
           mode: LaunchMode.externalApplication,
@@ -164,15 +184,14 @@ class _ReservaScreenState extends State<ReservaScreen>
           // 2. Dejamos hasta 3 segundos la pantalla actual antes de cerrarla
           await Future.delayed(const Duration(seconds: 3));
 
-          // 3. Cerramos esta pantalla para seguir el flujo en Mercado Pago
+          // 3. Cerramos esta pantalla/ventana para seguir el flujo en Mercado Pago
           if (context.mounted) {
             setState(() {
               _estaProcesando = false;
               _esperandoPago = false;
             });
 
-            // Cerramos la pantalla de reserva para continuar solo en Mercado Pago
-            Navigator.pop(context);
+            await _cerrarVistaActual(context);
           }
         } else if (context.mounted) {
           setState(() {
@@ -196,6 +215,36 @@ class _ReservaScreenState extends State<ReservaScreen>
         _esperandoPago = false;
       });
       debugPrint("Error: $e");
+    }
+  }
+
+  Future<void> _cerrarVistaActual(BuildContext context) async {
+    if (kIsWeb) {
+      final bool cerrado = await tryCloseBrowserWindow();
+      if (!cerrado && mounted) {
+        _mostrarMensajeError(
+          "El navegador bloqueó el cierre automático de la pestaña.",
+        );
+      }
+      return;
+    }
+
+    final bool esDesktop = !kIsWeb &&
+        (defaultTargetPlatform == TargetPlatform.windows ||
+            defaultTargetPlatform == TargetPlatform.macOS ||
+            defaultTargetPlatform == TargetPlatform.linux);
+
+    if (esDesktop) {
+      try {
+        await windowManager.close();
+        return;
+      } catch (_) {
+        // Fallback a navegación si window_manager no está inicializado.
+      }
+    }
+
+    if (context.mounted) {
+      Navigator.pop(context);
     }
   }
 
@@ -749,7 +798,7 @@ class _ReservaScreenState extends State<ReservaScreen>
                             if (_esperandoPago) ...[
                               const SizedBox(height: 8),
                               const Text(
-                                "Esta pantalla se cerrará en 3 segundos.",
+                                "Seras redireccionado en 3 segundos.",
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
                                   color: Colors.white70,
@@ -757,6 +806,29 @@ class _ReservaScreenState extends State<ReservaScreen>
                                 ),
                               ),
                             ],
+                            const SizedBox(height: 12),
+                            TextButton.icon(
+                              onPressed: () {
+                                if (!mounted) return;
+                                setState(() {
+                                  _estaProcesando = false;
+                                  _esperandoPago = false;
+                                });
+                                _cerrarVistaActual(context);
+                              },
+                              icon: const Icon(
+                                Icons.close_rounded,
+                                color: Colors.white,
+                                size: 18,
+                              ),
+                              label: const Text(
+                                "Cerrar ahora",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -1014,3 +1086,4 @@ class _ReservaScreenState extends State<ReservaScreen>
 
 //TENDENCIA tendencia de Bento Grid & Glassmorphism 2026 VER INFO EN INTERNET UX/UI
 //tambien la 2040 queda ahora.
+
