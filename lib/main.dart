@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -2884,34 +2884,6 @@ class _MapScreenState extends State<MapScreen> {
               ],
             ),
           ),
-          // --- BLOQUE 2: BOTÓN "+" DE AÑADIR TURNO (ABAJO A LA DERECHA) ---
-          // Solo aparece en la versión móvil/tablet
-          if (MediaQuery.of(context).size.width < 950)
-            Positioned(
-              bottom: 30, // Posición clásica de pulgar
-              right: 20,
-              child: Container(
-                width: 60,
-                height: 60,
-                decoration: const BoxDecoration(
-                  color: Color(0xFF3ABEF9), // Rojo ATT!
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black38,
-                      blurRadius: 10,
-                      offset: Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: IconButton(
-                  icon: const Icon(Icons.add, color: Colors.white, size: 35),
-                  onPressed: () {
-                    // Aquí tu lógica para añadir turno
-                  },
-                ),
-              ),
-            ),
         ],
       ),
     );
