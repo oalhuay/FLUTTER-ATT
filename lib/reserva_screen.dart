@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -21,7 +20,6 @@ class _ReservaScreenState extends State<ReservaScreen>
   final List<String> _serviciosSeleccionados = ["Lavado"];
   double _totalAPagar = 0.0;
   String? _horaSeleccionada;
-  bool _esperandoPago = false;
   bool _pagoConfirmado = false; // Controla si mostramos la pantalla de éxito
   String? _pagoID; // Guarda el ID para mostrarlo en el comprobante
   bool _estaProcesando = false;
@@ -50,7 +48,6 @@ class _ReservaScreenState extends State<ReservaScreen>
       if (path == "pago-fallido") {
         setState(() {
           _estaProcesando = false;
-          _esperandoPago = false;
         });
         _mostrarMensajeError("No se realizó el pago. Por favor, reintente.");
       } else if (path == "pago-exitoso" || path == "pago-finalizado") {
@@ -61,7 +58,6 @@ class _ReservaScreenState extends State<ReservaScreen>
           _pagoConfirmado = true;
           _pagoID = paymentId;
           _estaProcesando = false;
-          _esperandoPago = false;
         });
 
         // Seguimos registrando en la base de datos por detrás
@@ -98,7 +94,6 @@ class _ReservaScreenState extends State<ReservaScreen>
               true; // Activa la vista de éxito con el botón de volver
           _pagoID = paymentId;
           _estaProcesando = false;
-          _esperandoPago = false;
         });
 
         if (paymentId != null) {
@@ -112,7 +107,6 @@ class _ReservaScreenState extends State<ReservaScreen>
       } else if (urlString.contains("pago-fallido")) {
         setState(() {
           _estaProcesando = false;
-          _esperandoPago = false;
         });
         _mostrarMensajeError("El pago no pudo ser procesado. Reintente.");
       }
@@ -131,7 +125,6 @@ class _ReservaScreenState extends State<ReservaScreen>
 
     setState(() {
       _estaProcesando = true;
-      _esperandoPago = true;
     });
 
     try {
@@ -169,7 +162,6 @@ class _ReservaScreenState extends State<ReservaScreen>
           if (context.mounted) {
             setState(() {
               _estaProcesando = false;
-              _esperandoPago = false;
             });
 
             // Cerramos la pantalla de reserva. El usuario al volver verá el Mapa
@@ -180,7 +172,6 @@ class _ReservaScreenState extends State<ReservaScreen>
         if (context.mounted) {
           setState(() {
             _estaProcesando = false;
-            _esperandoPago = false;
           });
           _mostrarMensajeError("No se pudo conectar con el servidor de pagos.");
         }
@@ -188,7 +179,6 @@ class _ReservaScreenState extends State<ReservaScreen>
     } catch (e) {
       setState(() {
         _estaProcesando = false;
-        _esperandoPago = false;
       });
       debugPrint("Error: $e");
     }
@@ -329,7 +319,6 @@ class _ReservaScreenState extends State<ReservaScreen>
     } finally {
       setState(() {
         _estaProcesando = false;
-        _esperandoPago = false;
       });
     }
   }
@@ -406,7 +395,6 @@ class _ReservaScreenState extends State<ReservaScreen>
         if (mounted && _estaProcesando) {
           setState(() {
             _estaProcesando = false;
-            _esperandoPago = false;
           });
         }
       });
@@ -962,31 +950,6 @@ class _ReservaScreenState extends State<ReservaScreen>
         ],
       ),
     );
-  }
-
-  Future<void> _subirComprobanteAStorage(
-    String turnoId,
-    Uint8List pdfBytes,
-  ) async {
-    try {
-      final String path = 'tickets/comprobante_$turnoId.pdf';
-      await Supabase.instance.client.storage
-          .from('comprobantes')
-          .uploadBinary(
-            path,
-            pdfBytes,
-            fileOptions: const FileOptions(upsert: true),
-          );
-      final String publicUrl = Supabase.instance.client.storage
-          .from('comprobantes')
-          .getPublicUrl(path);
-      await Supabase.instance.client
-          .from('turnos')
-          .update({'url_comprobante': publicUrl})
-          .eq('id', turnoId);
-    } catch (e) {
-      debugPrint("❌ Error vinculando comprobante: $e");
-    }
   }
 }
 

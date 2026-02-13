@@ -319,7 +319,6 @@ class _MainLayoutState extends State<MainLayout> {
     try {
       // 1. Calculamos el rango
       final desde = _paginaActual * _itemsPorPagina;
-      final hasta = desde + _itemsPorPagina - 1;
 
       // 2. Pedimos los datos con conteo incluido
       final response = await supabase
@@ -353,40 +352,6 @@ class _MainLayoutState extends State<MainLayout> {
   final TextEditingController _searchController = TextEditingController();
   List<dynamic> _todosLosLavaderos = []; // Lista maestra
   List<dynamic> _lavaderosFiltrados = []; // Lo que se ve en el mapa
-  List<dynamic> _obtenerListaOrdenada() {
-    List<dynamic> lista = List.from(_lavaderosFiltrados);
-    // --- LISTA DE CLIENTES REALES ---
-
-    // Aplicamos los criterios (se pueden combinar)
-    lista.sort((a, b) {
-      int cmp = 0;
-
-      // 1. Prioridad: Distancia (si está activo)
-      if (_filtroDistancia) {
-        // Por ahora comparamos latitud como simulacro de distancia
-        cmp = a['latitud'].compareTo(b['latitud']);
-        if (cmp != 0) return cmp;
-      }
-
-      // 2. Prioridad: Rating (Suponiendo que tienes un campo 'rating')
-      if (_filtroRating) {
-        double ratingA = (a['rating'] ?? 0.0).toDouble();
-        double ratingB = (b['rating'] ?? 0.0).toDouble();
-        cmp = ratingB.compareTo(ratingA); // De mayor a menor
-        if (cmp != 0) return cmp;
-      }
-
-      // 3. Prioridad: Precio
-      if (_filtroPrecio) {
-        // Simulacro: comparamos por ID para variar el orden hasta que tengas 'precio' en DB
-        cmp = a['id'].compareTo(b['id']);
-      }
-
-      return cmp;
-    });
-
-    return lista.take(5).toList(); // Mantenemos tu límite de 5 tarjetas rápidas
-  }
 
   @override
   void initState() {
@@ -1538,68 +1503,6 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       ],
     );
-  }
-
-  // --- NUEVA FUNCIÓN: CARTEL DE SEGURIDAD ---
-  void _mostrarDialogoConfirmacionEdicion() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("¿Confirmar cambios?"),
-        content: const Text(
-          "Se actualizará la información de tu lavadero en el sistema. ¿Estás seguro?",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("CANCELAR", style: TextStyle(color: Colors.grey)),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF3ABEF9),
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () {
-              Navigator.pop(context); // Cerramos el cartel
-              _actualizarLavaderoEnSupabase(); // Mandamos a la base de datos
-            },
-            child: const Text("SÍ, ACTUALIZAR"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // LA FUNCIÓN QUE GUARDA EN SUPABASE
-  Future<void> _actualizarLavaderoEnSupabase() async {
-    try {
-      await supabase
-          .from('lavaderos')
-          .update({
-            'razon_social': _nombreCtrl.text,
-            'direccion': _direccionCtrl.text,
-          })
-          .eq('id', _lavaderoSeleccionado['id']);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("✅ Lavadero actualizado correctamente"),
-          backgroundColor: Colors.green,
-        ),
-      );
-
-      // Esto hace que el mapa se refresque solo y muestre el nuevo nombre
-      mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text("❌ Error al actualizar: $e"),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
   }
 
   // --- FUNCIÓN PARA CONFIRMAR BORRADO ---
