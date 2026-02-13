@@ -2336,7 +2336,6 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   List<dynamic> _lavaderosEnMapa = [];
   dynamic _markerTarjetaActivaId;
-  String _userRol = 'pendiente';
   void moverAMarcador(LatLng posicion) {
     _animatedMapMove(posicion, 16);
   }
@@ -2404,23 +2403,8 @@ class _MapScreenState extends State<MapScreen> {
   @override
   void initState() {
     super.initState();
-    _checkUserRol();
     cargarLavaderosDeSupabase();
     _suscribirARealtime();
-  }
-
-  Future<void> _checkUserRol() async {
-    final user = supabase.auth.currentUser;
-    if (user != null) {
-      final data = await supabase
-          .from('perfiles_usuarios')
-          .select('rol')
-          .eq('id', user.id)
-          .maybeSingle();
-      if (data != null && mounted) {
-        setState(() => _userRol = data['rol'] ?? 'pendiente');
-      }
-    }
   }
 
   void _suscribirARealtime() {
@@ -2577,96 +2561,8 @@ class _MapScreenState extends State<MapScreen> {
   }
 
   void _mostrarCartel(dynamic l) {
-    // Esta línea le avisa al Dashboard qué lavadero tocaste
+    // Avisamos al Dashboard qué lavadero tocaste y no abrimos popup.
     if (widget.onSelectLavadero != null) widget.onSelectLavadero!(l);
-    // ... el resto de tu código del showModalBottomSheet ...
-    if (_userRol == 'lavadero') {
-      debugPrint("🛠️ Modo gestión activado para este marcador");
-      return;
-    }
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
-        ),
-        padding: const EdgeInsets.all(24),
-        height: 250,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              l['razon_social'],
-              style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: Color(0xFFEF4444),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              "Dirección: ${l['direccion'] ?? 'Zárate'}",
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-            // --- REEMPLAZO DENTRO DE _mostrarCartel ---
-            const Spacer(),
-            if (_userRol == 'cliente')
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFFEF4444),
-                  ),
-                  onPressed: () {
-                    // 1. VALIDAMOS SESIÓN EN TIEMPO REAL
-                    final usuarioActivo = supabase.auth.currentUser;
-
-                    if (usuarioActivo == null) {
-                      // 2. SI NO HAY SESIÓN: Cerramos cartel, avisamos y mandamos al perfil
-                      Navigator.pop(context);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            "⚠️ Debes iniciar sesión para solicitar un turno",
-                          ),
-                          backgroundColor: Colors.orange,
-                        ),
-                      );
-                      // Llamamos a la función para cambiar de pestaña al perfil
-                      if (widget.onIrAPerfil != null) widget.onIrAPerfil!();
-                    } else {
-                      // 3. SI HAY SESIÓN: Vamos a la reserva normalmente
-                      Navigator.pop(context);
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ReservaScreen(lavadero: l),
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text(
-                    "SOLICITAR TURNO",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              )
-            else
-              const Center(
-                child: Text(
-                  "Solo clientes pueden reservar.",
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: Colors.orange,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
   }
 
   // WIDGETS DE ESTILO PARA BOTONES DEL MAPA
