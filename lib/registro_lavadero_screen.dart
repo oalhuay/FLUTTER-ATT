@@ -11,7 +11,12 @@ import 'package:image_picker/image_picker.dart';
 class RegistroLavaderoScreen extends StatefulWidget {
   final Map<String, dynamic>?
   lavaderoParaEditar; // Recibe datos si vamos a editar
-  const RegistroLavaderoScreen({super.key, this.lavaderoParaEditar});
+  final VoidCallback? onVolver; // <--- AGREGAMOS ESTO
+  const RegistroLavaderoScreen({
+    super.key,
+    this.lavaderoParaEditar,
+    this.onVolver,
+  });
   @override
   State<RegistroLavaderoScreen> createState() => _RegistroLavaderoScreenState();
 }
@@ -305,7 +310,13 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         _mostrarAlerta("✅ Lavadero registrado con éxito", Colors.green);
       }
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        if (widget.onVolver != null) {
+          widget.onVolver!(); // Vuelve al mapa manteniendo el sidebar
+        } else {
+          Navigator.pop(context);
+        }
+      }
     } catch (e) {
       _mostrarAlerta("❌ Error al procesar: $e", rojoATT);
     }
@@ -359,11 +370,29 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
       body: CustomScrollView(
         slivers: [
           // HEADER BENTO 2040
+          // HEADER BENTO 2040 CON FLECHA AZUL
           SliverAppBar(
             expandedHeight: 120,
             pinned: true,
             elevation: 0,
             backgroundColor: Colors.white,
+            // --- AQUÍ ESTÁ TU FLECHA AZUL ATT ---
+            leading: IconButton(
+              icon: const Icon(
+                Icons.arrow_back_ios_new_rounded,
+                color: Color(0xFF3ABEF9), // Azul ATT!
+                size: 20,
+              ),
+              onPressed: () {
+                // Si le pasamos la función de volver, la ejecuta
+                if (widget.onVolver != null) {
+                  widget.onVolver!();
+                } else {
+                  // Por las dudas, si no hay callback, hace el pop normal
+                  Navigator.pop(context);
+                }
+              },
+            ),
             flexibleSpace: FlexibleSpaceBar(
               centerTitle: true,
               title: Text(
@@ -371,8 +400,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                 style: TextStyle(
                   color: azulATT,
                   fontWeight: FontWeight.w900,
-                  fontSize: 16,
-                  letterSpacing: 1.5,
+                  fontSize:
+                      14, // Bajamos un punto para que no choque con la flecha
+                  letterSpacing: 2,
                 ),
               ),
             ),

@@ -273,6 +273,16 @@ class _MainLayoutState extends State<MainLayout> {
   final int _itemsPorPagina =
       3; // Mostramos 8 por página (2 filas de 4 o 4 filas de 2)
   int _totalLavaderosDB = 0; // Para saber hasta dónde podemos avanzar
+
+  // --- FUNCIÓN MAESTRA (AHORA SÍ ADENTRO DE LA CLASE) ---
+  void _volverAlMapa() {
+    setState(() {
+      _indiceActual = 0;
+      _sidebarAbierto = true;
+      _lavaderoSeleccionado = null;
+    });
+  }
+
   void _aplicarOrdenamiento() {
     setState(() {
       if (_filtroPrecio) {
@@ -739,23 +749,19 @@ class _MainLayoutState extends State<MainLayout> {
         onIrAPerfil: () => setState(() => _indiceActual = 2),
         onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
         onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
-        // --- CAPTURAMOS LOS DATOS AQUÍ ---
         onLavaderosCargados: (lista) {
           setState(() {
-            _todosLosLavaderos = _deduplicarLavaderos(
-              List.from(lista),
-            ); // Copia limpia
+            _todosLosLavaderos = _deduplicarLavaderos(List.from(lista));
             _lavaderosFiltrados = List.from(_todosLosLavaderos);
           });
         },
       ),
-      MisTurnosScreen(onVolver: () => setState(() => _indiceActual = 0)),
-      PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
-      // --- NUEVA PANTALLA AQUÍ ---
+      MisTurnosScreen(onVolver: _volverAlMapa), // <-- Usamos la nueva función
+      PerfilScreen(onVolver: _volverAlMapa), // <-- Usamos la nueva función
       _buildPantallaMisClientes(),
       _buildPantallaMisLavaderos(),
-      // --- AGREGAMOS ESTA PARA EL ÍNDICE 99 ---
-      const RegistroLavaderoScreen(), // Posición 5 en la lista // Nueva pantalla posición 4
+      // Pasamos la función a la pantalla de registro
+      RegistroLavaderoScreen(onVolver: _volverAlMapa),
     ];
   }
 
@@ -2484,7 +2490,9 @@ class _MapScreenState extends State<MapScreen> {
 
   List<Marker> _buildMarkerTarjetaOverlay() {
     if (_markerTarjetaActivaId == null) return const [];
-    final activo = _lavaderosEnMapa.where((l) => l['id'] == _markerTarjetaActivaId);
+    final activo = _lavaderosEnMapa.where(
+      (l) => l['id'] == _markerTarjetaActivaId,
+    );
     if (activo.isEmpty) return const [];
 
     final l = activo.first;
@@ -2969,7 +2977,7 @@ class TarjetaMarkerOverlay extends StatelessWidget {
       clipBehavior: Clip.none,
       children: [
         Positioned(
-          bottom:5,
+          bottom: 5,
           child: Container(
             width: 180,
             padding: const EdgeInsets.all(8),
@@ -2990,10 +2998,7 @@ class TarjetaMarkerOverlay extends StatelessWidget {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
-                  child: buildImagenLavadero(
-                    l,
-                    height: 80,
-                  ),
+                  child: buildImagenLavadero(l, height: 80),
                 ),
                 const SizedBox(height: 8),
                 Text(
@@ -3021,6 +3026,7 @@ class TarjetaMarkerOverlay extends StatelessWidget {
     );
   }
 }
+
 // --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
   final VoidCallback? onVolver;
@@ -3188,10 +3194,10 @@ class _PerfilScreenState extends State<PerfilScreen> {
             leading: IconButton(
               icon: const Icon(
                 Icons.arrow_back_ios_new_rounded,
-                color: Colors.black87,
+                color: Color(0xFF3ABEF9), // <-- AZUL ATT!
                 size: 20,
               ),
-              onPressed: widget.onVolver,
+              onPressed: widget.onVolver, // Ejecuta _volverAlMapa del padre
             ),
             actions: [
               if (usuarioAuth != null)
@@ -3936,4 +3942,3 @@ class _ComprobanteOverlayState extends State<ComprobanteOverlay> {
     );
   }
 }
-
