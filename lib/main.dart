@@ -869,7 +869,8 @@ class _MainLayoutState extends State<MainLayout> {
       PerfilScreen(onVolver: () => setState(() => _indiceActual = 0)),
       // --- NUEVA PANTALLA AQUÃ ---
       _buildPantallaMisClientes(),
-      _buildPantallaMisLavaderos(), // Nueva pantalla posiciÃ³n 4
+      _buildPantallaMisLavaderos(),
+      const RegistroLavaderoScreen(), // Índice 99
     ];
   }
 
@@ -900,9 +901,7 @@ class _MainLayoutState extends State<MainLayout> {
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeInOutQuart,
                   // El ancho es 0 si es la pantalla 101, sino depende de _sidebarAbierto
-                  width: (_indiceActual == 101)
-                      ? 0
-                      : (_sidebarAbierto ? 250 : 0),
+                  width: _sidebarAbierto ? 250 : 0,
                   child: ClipRect(
                     child: OverflowBox(
                       minWidth: 250,
@@ -942,15 +941,15 @@ class _MainLayoutState extends State<MainLayout> {
                     Container(
                       color: const Color(0xFFF5F7F9),
                       child: IndexedStack(
-                        // LÃ³gica para que entren todas las pantallas (0 a 4)
-                        // pero que ignore el 99 (Registro) para que no crashee
                         index: (_indiceActual == 100)
-                            ? 3 // Pantalla Mis Clientes
+                            ? 3 // Mis Clientes
                             : (_indiceActual == 101)
-                            ? 4 // Pantalla Mis Lavaderos
+                            ? 4 // Mis Lavaderos
+                            : (_indiceActual == 99)
+                            ? 5 // Registro (La nueva que agregamos arriba)
                             : (_indiceActual >= 0 && _indiceActual <= 2)
                             ? _indiceActual
-                            : 0, // Si es 99, se queda en el Mapa de fondo mientras abre el popup
+                            : 0,
                         children: _paginas,
                       ),
                     ),
@@ -1239,7 +1238,6 @@ class _MainLayoutState extends State<MainLayout> {
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 600),
                   curve: Curves.easeInOutQuart,
-                  // --- CAMBIO AQUÃ: Si el Ã­ndice es 101, el ancho es SIEMPRE 0 ---
                   width: (_indiceActual == 101)
                       ? 0
                       : (_lavaderoSeleccionado != null ||
@@ -1377,35 +1375,16 @@ class _MainLayoutState extends State<MainLayout> {
         ),
       ),
       onTap: () {
-        // Cerramos el Drawer de mÃ³vil si existe
         if (Navigator.canPop(context)) Navigator.pop(context);
 
-        if (index == 99) {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => const RegistroLavaderoScreen(),
-            ),
-          ).then((_) {
-            // --- ESTO SE EJECUTA AL VOLVER DEL REGISTRO ---
-            setState(() {
-              _indiceActual = 0; // Volvemos al mapa
-              _sidebarAbierto = true;
-            });
-            // LE AVISAMOS AL MAPA QUE RECARGUE TODO DE SUPABASE
-            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-          });
-        } else {
-          // ... resto de tu cÃ³digo de Ã­ndices (0, 100, 101)
-          setState(() {
-            _sidebarAbierto = false;
-            _indiceActual = index;
-          });
-          if (index == 0)
-            mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-          if (index == 100) _cargarMisClientes();
-          if (index == 101) _cargarMisLavaderos();
-        }
+        setState(() {
+          _sidebarAbierto = false;
+          _indiceActual = index;
+        });
+
+        if (index == 0) mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+        if (index == 100) _cargarMisClientes();
+        if (index == 101) _cargarMisLavaderos();
       },
     );
   }
