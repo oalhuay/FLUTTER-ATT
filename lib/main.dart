@@ -1750,182 +1750,195 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   Widget _buildPantallaMisLavaderos() {
-    return Container(
-      color: const Color(0xFFF5F7F9),
-      child: Column(
-        children: [
-          // CABECERA ESTILO BENTO
-          Container(
-            padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
-            decoration: const BoxDecoration(
-              color: Colors.white,
-              boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
-            ),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
-                  onPressed: () => setState(() => _indiceActual = 0),
-                ),
-                const Expanded(
-                  child: Center(
-                    child: Text(
-                      "MIS LAVADEROS", // <--- CAMBIO DE NOMBRE
-                      style: TextStyle(
-                        color: Color(0xFF3ABEF9),
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2,
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        setState(() {
+          _lavaderoSeleccionado = null;
+        });
+      },
+      child: Container(
+        color: const Color(0xFFF5F7F9),
+        child: Column(
+          children: [
+            // CABECERA ESTILO BENTO
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 50, 16, 20),
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 2)],
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new_rounded,
+                      size: 20,
+                    ),
+                    onPressed: () => setState(() => _indiceActual = 0),
+                  ),
+                  const Expanded(
+                    child: Center(
+                      child: Text(
+                        "MIS LAVADEROS", // <--- CAMBIO DE NOMBRE
+                        style: TextStyle(
+                          color: Color(0xFF3ABEF9),
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 2,
+                        ),
                       ),
                     ),
                   ),
-                ),
-                // --- NUEVO BOTÓN "INGRESAR NUEVO" ---
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    backgroundColor: const Color(0xFF3ABEF9).withOpacity(0.1),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
+                  // --- NUEVO BOTÓN "INGRESAR NUEVO" ---
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      backgroundColor: const Color(0xFF3ABEF9).withOpacity(0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                  ),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const RegistroLavaderoScreen(),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const RegistroLavaderoScreen(),
+                      ),
                     ),
-                  ),
-                  icon: const Icon(
-                    Icons.add_rounded,
-                    color: Color(0xFF3ABEF9),
-                    size: 18,
-                  ),
-                  label: const Text(
-                    "INGRESAR NUEVO",
-                    style: TextStyle(
+                    icon: const Icon(
+                      Icons.add_rounded,
                       color: Color(0xFF3ABEF9),
-                      fontWeight: FontWeight.bold,
-                      fontSize: 10,
+                      size: 18,
+                    ),
+                    label: const Text(
+                      "INGRESAR NUEVO",
+                      style: TextStyle(
+                        color: Color(0xFF3ABEF9),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 10,
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
 
-          Expanded(
-            child: _cargandoLavaderos
-                ? const Center(child: CircularProgressIndicator())
-                : Column(
-                    // <--- Agregamos esta columna para meter la botonera abajo
-                    children: [
-                      Expanded(
-                        child: _misLavaderosReales.isEmpty
-                            ? _buildSinLavaderos()
-                            : RawKeyboardListener(
-                                focusNode: FocusNode(),
-                                autofocus: true,
-                                onKey: (event) {
-                                  // (Acá mantené toda tu lógica de teclas que ya tenés igual...)
-                                  if (event is RawKeyDownEvent) {
-                                    int currentIndex = _misLavaderosReales
-                                        .indexOf(_lavaderoSeleccionado);
-                                    if (currentIndex == -1) currentIndex = 0;
-                                    int nuevoIndex = currentIndex;
-                                    if (event.logicalKey ==
-                                            LogicalKeyboardKey.enter ||
-                                        event.logicalKey ==
-                                            LogicalKeyboardKey.numpadEnter) {
-                                      if (_lavaderoSeleccionado != null)
-                                        _confirmarEdicionLavadero(
-                                          _lavaderoSeleccionado,
-                                        );
-                                    } else if (event.logicalKey ==
-                                        LogicalKeyboardKey.arrowRight) {
-                                      if (currentIndex <
-                                          _misLavaderosReales.length - 1)
-                                        nuevoIndex = currentIndex + 1;
-                                    } else if (event.logicalKey ==
-                                        LogicalKeyboardKey.arrowLeft) {
-                                      if (currentIndex > 0)
-                                        nuevoIndex = currentIndex - 1;
-                                    } else if (event.logicalKey ==
-                                        LogicalKeyboardKey.arrowDown) {
-                                      // CAMBIO: Si hay 4 columnas, el salto es de 4
-                                      int salto =
-                                          MediaQuery.of(context).size.width >
-                                              1100
-                                          ? 4
-                                          : 2;
-                                      if (currentIndex + salto <
-                                          _misLavaderosReales.length)
-                                        nuevoIndex = currentIndex + salto;
-                                    } else if (event.logicalKey ==
-                                        LogicalKeyboardKey.arrowUp) {
-                                      // CAMBIO: Si hay 4 columnas, el salto es de 4
-                                      int salto =
-                                          MediaQuery.of(context).size.width >
-                                              1100
-                                          ? 4
-                                          : 2;
-                                      if (currentIndex - salto >= 0)
-                                        nuevoIndex = currentIndex - salto;
-                                    }
-                                    if (nuevoIndex != currentIndex) {
-                                      setState(
-                                        () => _lavaderoSeleccionado =
-                                            _misLavaderosReales[nuevoIndex],
-                                      );
-                                      double offset =
-                                          (nuevoIndex ~/
-                                              (MediaQuery.of(
-                                                        context,
-                                                      ).size.width >
-                                                      1100
-                                                  ? 4
-                                                  : 2)) *
-                                          215.0;
-                                      _scrollBentoController.animateTo(
-                                        offset,
-                                        duration: const Duration(
-                                          milliseconds: 250,
-                                        ),
-                                        curve: Curves.easeOut,
-                                      );
-                                    }
-                                  }
-                                },
-                                child: GridView.builder(
-                                  controller: _scrollBentoController,
-                                  padding: const EdgeInsets.all(20),
-                                  gridDelegate:
-                                      SliverGridDelegateWithFixedCrossAxisCount(
-                                        // --- 1. LAS 4 COLUMNAS AQUÍ ---
-                                        crossAxisCount:
+            Expanded(
+              child: _cargandoLavaderos
+                  ? const Center(child: CircularProgressIndicator())
+                  : Column(
+                      // <--- Agregamos esta columna para meter la botonera abajo
+                      children: [
+                        Expanded(
+                          child: _misLavaderosReales.isEmpty
+                              ? _buildSinLavaderos()
+                              : RawKeyboardListener(
+                                  focusNode: FocusNode(),
+                                  autofocus: true,
+                                  onKey: (event) {
+                                    // (Acá mantené toda tu lógica de teclas que ya tenés igual...)
+                                    if (event is RawKeyDownEvent) {
+                                      int currentIndex = _misLavaderosReales
+                                          .indexOf(_lavaderoSeleccionado);
+                                      if (currentIndex == -1) currentIndex = 0;
+                                      int nuevoIndex = currentIndex;
+                                      if (event.logicalKey ==
+                                              LogicalKeyboardKey.enter ||
+                                          event.logicalKey ==
+                                              LogicalKeyboardKey.numpadEnter) {
+                                        if (_lavaderoSeleccionado != null)
+                                          _confirmarEdicionLavadero(
+                                            _lavaderoSeleccionado,
+                                          );
+                                      } else if (event.logicalKey ==
+                                          LogicalKeyboardKey.arrowRight) {
+                                        if (currentIndex <
+                                            _misLavaderosReales.length - 1)
+                                          nuevoIndex = currentIndex + 1;
+                                      } else if (event.logicalKey ==
+                                          LogicalKeyboardKey.arrowLeft) {
+                                        if (currentIndex > 0)
+                                          nuevoIndex = currentIndex - 1;
+                                      } else if (event.logicalKey ==
+                                          LogicalKeyboardKey.arrowDown) {
+                                        // CAMBIO: Si hay 4 columnas, el salto es de 4
+                                        int salto =
                                             MediaQuery.of(context).size.width >
                                                 1100
                                             ? 4
-                                            : 2,
-                                        crossAxisSpacing: 15,
-                                        mainAxisSpacing: 15,
-                                        childAspectRatio: 0.85,
-                                      ),
-                                  itemCount: _misLavaderosReales.length,
-                                  itemBuilder: (context, index) {
-                                    final l = _misLavaderosReales[index];
-                                    return _tarjetaBentoLavadero(l);
+                                            : 2;
+                                        if (currentIndex + salto <
+                                            _misLavaderosReales.length)
+                                          nuevoIndex = currentIndex + salto;
+                                      } else if (event.logicalKey ==
+                                          LogicalKeyboardKey.arrowUp) {
+                                        // CAMBIO: Si hay 4 columnas, el salto es de 4
+                                        int salto =
+                                            MediaQuery.of(context).size.width >
+                                                1100
+                                            ? 4
+                                            : 2;
+                                        if (currentIndex - salto >= 0)
+                                          nuevoIndex = currentIndex - salto;
+                                      }
+                                      if (nuevoIndex != currentIndex) {
+                                        setState(
+                                          () => _lavaderoSeleccionado =
+                                              _misLavaderosReales[nuevoIndex],
+                                        );
+                                        double offset =
+                                            (nuevoIndex ~/
+                                                (MediaQuery.of(
+                                                          context,
+                                                        ).size.width >
+                                                        1100
+                                                    ? 4
+                                                    : 2)) *
+                                            215.0;
+                                        _scrollBentoController.animateTo(
+                                          offset,
+                                          duration: const Duration(
+                                            milliseconds: 250,
+                                          ),
+                                          curve: Curves.easeOut,
+                                        );
+                                      }
+                                    }
                                   },
+                                  child: GridView.builder(
+                                    controller: _scrollBentoController,
+                                    padding: const EdgeInsets.all(20),
+                                    gridDelegate:
+                                        SliverGridDelegateWithFixedCrossAxisCount(
+                                          // --- 1. LAS 4 COLUMNAS AQUÍ ---
+                                          crossAxisCount:
+                                              MediaQuery.of(
+                                                    context,
+                                                  ).size.width >
+                                                  1100
+                                              ? 4
+                                              : 2,
+                                          crossAxisSpacing: 15,
+                                          mainAxisSpacing: 15,
+                                          childAspectRatio: 0.85,
+                                        ),
+                                    itemCount: _misLavaderosReales.length,
+                                    itemBuilder: (context, index) {
+                                      final l = _misLavaderosReales[index];
+                                      return _tarjetaBentoLavadero(l);
+                                    },
+                                  ),
                                 ),
-                              ),
-                      ),
+                        ),
 
-                      // --- 2. LA BOTONERA DE PAGINACIÓN AQUÍ ---
-                      // --- REEMPLAZO: BOTONERA ESTILO RESERVAS (Clon exacto) ---
-                      if (!_cargandoLavaderos && _totalLavaderosDB > 0)
-                        _buildPaginacionLavaderos(),
-                    ],
-                  ),
-          ),
-        ],
+                        // --- 2. LA BOTONERA DE PAGINACIÓN AQUÍ ---
+                        // --- REEMPLAZO: BOTONERA ESTILO RESERVAS (Clon exacto) ---
+                        if (!_cargandoLavaderos && _totalLavaderosDB > 0)
+                          _buildPaginacionLavaderos(),
+                      ],
+                    ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1934,87 +1947,96 @@ class _MainLayoutState extends State<MainLayout> {
     bool estaSeleccionada =
         _lavaderoSeleccionado != null && _lavaderoSeleccionado['id'] == l['id'];
 
-    return GestureDetector(
-      onTap: () => setState(() => _lavaderoSeleccionado = l),
-      onDoubleTap: () => _confirmarEdicionLavadero(l),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 300),
-        decoration: BoxDecoration(
-          // Proposición: El azul fuerte solo aparece si está SELECCIONADO
-          color: estaSeleccionada ? const Color(0xFF3ABEF9) : Colors.white,
-          borderRadius: BorderRadius.circular(25),
-          boxShadow: [
-            if (estaSeleccionada)
-              BoxShadow(
-                color: const Color(0xFF3ABEF9).withOpacity(0.5),
-                blurRadius: 20,
-                spreadRadius: 5,
-              )
-            else
-              BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10),
-          ],
-          border: Border.all(
-            color: estaSeleccionada
-                ? const Color(0xFF3ABEF9)
-                : Colors.transparent,
-            width: 2,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Expanded(
-              flex: destaca ? 3 : 2,
-              child: Stack(
-                children: [
-                  Container(
-                    margin: const EdgeInsets.all(8),
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(20),
-                      child: buildImagenLavadero(
-                        l,
-                        height: double.infinity,
-                      ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
-                    ),
+    return StatefulBuilder(
+      // Esto permite que la tarjeta se anime sin lag
+      builder: (context, setLocalState) {
+        // Usamos una clave en el mapa 'l' para rastrear el hover de cada tarjeta
+        bool isHovered = l['_hovering'] ?? false;
+
+        return MouseRegion(
+          onEnter: (_) => setLocalState(() => l['_hovering'] = true),
+          onExit: (_) => setLocalState(() => l['_hovering'] = false),
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            onTap: () => setState(() => _lavaderoSeleccionado = l),
+            onDoubleTap: () => _confirmarEdicionLavadero(l),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeInOut,
+              // --- EL EFECTO PITUCO: Escala 1.05 si el mouse está encima ---
+              transform: Matrix4.identity()..scale(isHovered ? 1.04 : 1.0),
+              transformAlignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: estaSeleccionada
+                    ? const Color(0xFF3ABEF9)
+                    : Colors.white,
+                borderRadius: BorderRadius.circular(25),
+                boxShadow: [
+                  BoxShadow(
+                    // Si está seleccionada o tiene el mouse encima, la sombra es más grande
+                    color: estaSeleccionada
+                        ? const Color(0xFF3ABEF9).withOpacity(0.4)
+                        : Colors.black.withOpacity(isHovered ? 0.15 : 0.05),
+                    blurRadius: isHovered ? 20 : 10,
+                    offset: Offset(0, isHovered ? 10 : 5),
                   ),
                 ],
+                border: Border.all(
+                  color: estaSeleccionada
+                      ? const Color(0xFF3ABEF9)
+                      : Colors.transparent,
+                  width: 2,
+                ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // --- NOMBRE DEL LAVADERO ---
-                  Text(
-                    l['razon_social'] ?? 'Sin Nombre',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: destaca ? 18 : 14,
-                      // SI ESTÁ SELECCIONADA -> BLANCO. SI NO -> NEGRO.
-                      color: estaSeleccionada ? Colors.white : Colors.black87,
+                  Expanded(
+                    flex: destaca ? 3 : 2,
+                    child: Container(
+                      margin: const EdgeInsets.all(8),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(20),
+                        child: buildImagenLavadero(l, height: double.infinity),
+                      ),
                     ),
                   ),
-                  // --- DIRECCIÓN / SUBTÍTULO ---
-                  Text(
-                    l['direccion'] ?? 'Zárate',
-                    maxLines: 1,
-                    style: TextStyle(
-                      fontSize: 10,
-                      // SI ESTÁ SELECCIONADA -> BLANCO TRASLÚCIDO. SI NO -> GRIS.
-                      color: estaSeleccionada
-                          ? Colors.white.withOpacity(0.8)
-                          : Colors.grey,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(15, 0, 15, 15),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          l['razon_social'] ?? 'Sin Nombre',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: destaca ? 18 : 14,
+                            color: estaSeleccionada
+                                ? Colors.white
+                                : Colors.black87,
+                          ),
+                        ),
+                        Text(
+                          l['direccion'] ?? 'Zárate',
+                          maxLines: 1,
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: estaSeleccionada
+                                ? Colors.white70
+                                : Colors.grey,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
