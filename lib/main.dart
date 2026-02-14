@@ -1985,6 +1985,7 @@ class _MainLayoutState extends State<MainLayout> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // --- NOMBRE DEL LAVADERO ---
                   Text(
                     l['razon_social'] ?? 'Sin Nombre',
                     maxLines: 1,
@@ -1992,15 +1993,20 @@ class _MainLayoutState extends State<MainLayout> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: destaca ? 18 : 14,
-                      color: destaca ? Colors.white : Colors.black87,
+                      // SI ESTÁ SELECCIONADA -> BLANCO. SI NO -> NEGRO.
+                      color: estaSeleccionada ? Colors.white : Colors.black87,
                     ),
                   ),
+                  // --- DIRECCIÓN / SUBTÍTULO ---
                   Text(
                     l['direccion'] ?? 'Zárate',
                     maxLines: 1,
                     style: TextStyle(
                       fontSize: 10,
-                      color: destaca ? Colors.white70 : Colors.grey,
+                      // SI ESTÁ SELECCIONADA -> BLANCO TRASLÚCIDO. SI NO -> GRIS.
+                      color: estaSeleccionada
+                          ? Colors.white.withOpacity(0.8)
+                          : Colors.grey,
                     ),
                   ),
                 ],
