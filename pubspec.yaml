@@ -48,6 +48,7 @@ dependencies:
   intl: ^0.20.0
   image_picker: ^1.2.1
   app_links: ^6.4.1
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:

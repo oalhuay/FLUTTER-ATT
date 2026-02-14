@@ -16,6 +16,7 @@ import 'package:http/http.dart' as http;
 import 'package:image_picker/image_picker.dart';
 import 'dart:async';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:geolocator/geolocator.dart';
 
 // --- GLOBALES REINSTALADAS ---
 final supabase = Supabase.instance.client; //
@@ -2306,6 +2307,7 @@ class _MapScreenState extends State<MapScreen> {
   List<dynamic> _lavaderosEnMapa = [];
   dynamic _markerTarjetaActivaId;
   String _userRol = 'pendiente';
+  LatLng? _miPosicionActual; // Para guardar el punto azul del GPS real
   void moverAMarcador(LatLng posicion) {
     _animatedMapMove(posicion, 16);
   }
@@ -2368,6 +2370,72 @@ class _MapScreenState extends State<MapScreen> {
         child: TarjetaMarkerOverlay(l: l),
       ),
     ];
+  }
+
+  // --- MOTOR DE GPS REAL (WEB & MOBILE) ---
+  Future<void> _obtenerMiUbicacionReal() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    // 1. Verificamos si el GPS del equipo está encendido
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("El GPS está desactivado en tu equipo."),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // 2. Pedimos permiso al navegador/celular
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Permiso de ubicación denegado."),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+    }
+
+    // 3. CAPTURAMOS LA POSICIÓN POSTA
+    try {
+      Position position = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      );
+
+      setState(() {
+        _miPosicionActual = LatLng(position.latitude, position.longitude);
+      });
+
+      // 4. Viajamos en el mapa a tu casa
+      _animatedMapMove(_miPosicionActual!, 17);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error al leer el sensor: $e"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  void _mostrarCartelInformativo(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
+    );
   }
 
   @override
@@ -2697,6 +2765,36 @@ class _MapScreenState extends State<MapScreen> {
               ),
               MarkerLayer(markers: _buildMarkersBase()),
               MarkerLayer(markers: _buildMarkerTarjetaOverlay()),
+              // --- PUNTO AZUL REAL (SOLO SI EL GPS RESPONDIÓ) ---
+              if (_miPosicionActual != null)
+                MarkerLayer(
+                  markers: [
+                    Marker(
+                      point: _miPosicionActual!,
+                      width: 30,
+                      height: 30,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(
+                            0.3,
+                          ), // Brillo exterior
+                          shape: BoxShape.circle,
+                        ),
+                        child: Center(
+                          child: Container(
+                            width: 12,
+                            height: 12,
+                            decoration: BoxDecoration(
+                              color: Colors.blueAccent, // Punto centro
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
             ],
           ),
           // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
@@ -2709,8 +2807,8 @@ class _MapScreenState extends State<MapScreen> {
               children: [
                 _botonCircular(
                   icon: Icons.my_location,
-                  onPressed: () =>
-                      _animatedMapMove(const LatLng(-34.098, -59.028), 15),
+                  onPressed:
+                      _obtenerMiUbicacionReal, // Llama a la detección real
                 ),
                 const SizedBox(height: 12),
                 Container(
