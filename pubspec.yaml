@@ -73,6 +73,7 @@ flutter:
     - assets/animacionSplash/fondo_blanco.png
     - assets/animacionSplash/a_todo_trapo.png
     - assets/animacionSplash/auto.png
+    - assets/animacionSplash/Espuma.png
     - assets/animacionSplash/brillo.png
 
   fonts:

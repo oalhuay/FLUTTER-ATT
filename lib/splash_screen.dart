@@ -15,7 +15,10 @@ class _SplashScreenState extends State<SplashScreen>
   late final AnimationController _sceneController;
   late final Animation<double> _carX;
   late final Animation<double> _carOpacity;
+  late final Animation<double> _foamOpacity;
   late final Animation<double> _glowOpacity;
+  late final Animation<double> _sceneFadeOut;
+  late final Animation<double> _textSweepFade;
 
   @override
   void initState() {
@@ -23,51 +26,95 @@ class _SplashScreenState extends State<SplashScreen>
 
     _sceneController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3800),
+      duration: const Duration(milliseconds: 2600),
+    );
+    final scenePhase = CurvedAnimation(
+      parent: _sceneController,
+      curve: Curves.linear,
     );
 
     _carX = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween(begin: 0.0, end: 0.56)
             .chain(CurveTween(curve: Curves.easeOutCubic)),
-        weight: 62,
+        weight: 19.2,
+      ),
+      TweenSequenceItem(
+        tween: ConstantTween(0.56),
+        weight: 34.6,
       ),
       TweenSequenceItem(
         tween: Tween(begin: 0.56, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeInCubic)),
-        weight: 38,
+            .chain(CurveTween(curve: Curves.easeInOutCubic)),
+        weight: 46.2,
       ),
-    ]).animate(_sceneController);
+    ]).animate(scenePhase);
 
     _carOpacity = TweenSequence<double>([
       TweenSequenceItem(
         tween: Tween(begin: 0.0, end: 1.0)
             .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 20,
+        weight: 7.7,
       ),
-      TweenSequenceItem(tween: ConstantTween(1.0), weight: 52),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 73.1),
       TweenSequenceItem(
         tween: Tween(begin: 1.0, end: 0.0)
             .chain(CurveTween(curve: Curves.easeIn)),
-        weight: 28,
+        weight: 19.2,
       ),
-    ]).animate(_sceneController);
+    ]).animate(scenePhase);
 
-    _glowOpacity = TweenSequence<double>([
-      TweenSequenceItem(tween: ConstantTween(0.0), weight: 44),
+    _foamOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween(0.0), weight: 19.2),
       TweenSequenceItem(
         tween: Tween(begin: 0.0, end: 1.0)
-            .chain(CurveTween(curve: Curves.easeOut)),
-        weight: 8,
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 3.4,
       ),
-      TweenSequenceItem(tween: ConstantTween(1.0), weight: 10),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 12.4),
       TweenSequenceItem(
         tween: Tween(begin: 1.0, end: 0.0)
-            .chain(CurveTween(curve: Curves.easeIn)),
-        weight: 10,
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 3.4,
       ),
-      TweenSequenceItem(tween: ConstantTween(0.0), weight: 28),
-    ]).animate(_sceneController);
+      TweenSequenceItem(tween: ConstantTween(0.0), weight: 61.6),
+    ]).animate(scenePhase);
+
+    _glowOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween(0.0), weight: 46.2),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 4.8,
+      ),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 0.4),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeInOut)),
+        weight: 4.8,
+      ),
+      TweenSequenceItem(tween: ConstantTween(0.0), weight: 43.8),
+    ]).animate(scenePhase);
+
+    _sceneFadeOut = Tween<double>(
+      begin: 1.0,
+      end: 0.0,
+    ).animate(
+      CurvedAnimation(
+        parent: _sceneController,
+        curve: const Interval(0.82, 1.0, curve: Curves.easeInOut),
+      ),
+    );
+
+    _textSweepFade = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(
+      CurvedAnimation(
+        parent: _sceneController,
+        curve: const Interval(0.80, 1.0, curve: Curves.easeInOut),
+      ),
+    );
 
     _verificarRuta();
   }
@@ -80,32 +127,30 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _verificarRuta() async {
     await _sceneController.forward();
-
     if (!mounted) return;
+    final destino = await _resolverDestino();
+    if (!mounted) return;
+    _navegarA(destino);
+  }
 
+  Future<Widget> _resolverDestino() async {
     final user = supabase.auth.currentUser;
+    if (user == null) return const MainLayout();
 
-    if (user == null) {
-      _navegarA(const MainLayout());
-    } else {
-      try {
-        final data = await supabase
-            .from('perfiles_usuarios')
-            .select('rol')
-            .eq('id', user.id)
-            .maybeSingle();
+    try {
+      final data = await supabase
+          .from('perfiles_usuarios')
+          .select('rol')
+          .eq('id', user.id)
+          .maybeSingle();
 
-        if (mounted) {
-          if (data == null || data['rol'] == 'pendiente') {
-            _navegarA(const SeleccionRolScreen());
-          } else {
-            _navegarA(const MainLayout());
-          }
-        }
-      } catch (e) {
-        debugPrint('Error en Splash: $e');
-        _navegarA(const MainLayout());
+      if (data == null || data['rol'] == 'pendiente') {
+        return const SeleccionRolScreen();
       }
+      return const MainLayout();
+    } catch (e) {
+      debugPrint('Error en Splash: $e');
+      return const MainLayout();
     }
   }
 
@@ -120,19 +165,22 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.center,
-            radius: 1.2,
-            colors: [Color(0xFFEF4444), Color(0xFF7F1D1D)],
-          ),
-        ),
-        child: Center(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
+      body: AnimatedBuilder(
+        animation: _sceneController,
+        builder: (context, _) {
+          return Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment.center,
+                radius: 1.2,
+                colors: [Color(0xFFEF4444), Color(0xFF7F1D1D)],
+              ),
+            ),
+            child: Center(
+              child: LayoutBuilder(
+                builder: (context, constraints) {
               final sceneWidth = math.min(constraints.maxWidth * 0.9, 440.0);
               final fondoHeight = sceneWidth * 0.58;
               final textoHeight = sceneWidth * 0.18;
@@ -153,6 +201,10 @@ class _SplashScreenState extends State<SplashScreen>
               final glowHeight = carHeight * 1.04;
               final glowLeft = midX + (carWidth - glowWidth) / 2;
               final glowTop = carTop - (glowHeight * 0.08);
+              final foamWidth = glowWidth + 14;
+              final foamHeight = glowHeight + 30;
+              final foamLeft = glowLeft - 8;
+              final foamTop = glowTop - 15;
 
               return AnimatedBuilder(
                 animation: _sceneController,
@@ -165,78 +217,118 @@ class _SplashScreenState extends State<SplashScreen>
                   return SizedBox(
                     width: sceneWidth,
                     height: sceneHeight,
-                    child: Stack(
-                      clipBehavior: Clip.hardEdge,
-                      children: [
-                        Positioned.fill(
-                          bottom: textoHeight + 16,
-                          child: Image.asset(
-                            'assets/animacionSplash/fondo_blanco.png',
-                            fit: BoxFit.contain,
-                          ),
-                        ),
-                        Positioned(
-                          left: clipInset,
-                          right: clipInset,
-                          top: 0,
-                          height: fondoHeight,
-                          child: ClipPath(
-                            clipper: _OvalInnerClipper(
-                              insetX: ovalInsetX,
-                              insetY: ovalInsetY,
+                    child: Opacity(
+                      opacity: _sceneFadeOut.value,
+                      child: Stack(
+                        clipBehavior: Clip.hardEdge,
+                        children: [
+                          Positioned.fill(
+                            bottom: textoHeight + 16,
+                            child: Image.asset(
+                              'assets/animacionSplash/fondo_blanco.png',
+                              fit: BoxFit.contain,
                             ),
-                            child: Stack(
-                              children: [
-                                Positioned(
-                                  left: carLeft,
-                                  top: carTop,
-                                  width: carWidth,
-                                  height: carHeight,
-                                  child: Opacity(
-                                    opacity: _carOpacity.value,
-                                    child: Image.asset(
-                                      'assets/animacionSplash/auto.png',
-                                      fit: BoxFit.contain,
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  left: glowLeft,
-                                  top: glowTop,
-                                  width: glowWidth,
-                                  height: glowHeight,
-                                  child: IgnorePointer(
+                          ),
+                          Positioned(
+                            left: clipInset,
+                            right: clipInset,
+                            top: 0,
+                            height: fondoHeight,
+                            child: ClipPath(
+                              clipper: _OvalInnerClipper(
+                                insetX: ovalInsetX,
+                                insetY: ovalInsetY,
+                              ),
+                              child: Stack(
+                                children: [
+                                  Positioned(
+                                    left: carLeft,
+                                    top: carTop,
+                                    width: carWidth,
+                                    height: carHeight,
                                     child: Opacity(
-                                      opacity: _glowOpacity.value,
+                                      opacity: _carOpacity.value,
                                       child: Image.asset(
-                                        'assets/animacionSplash/brillo.png',
+                                        'assets/animacionSplash/auto.png',
                                         fit: BoxFit.contain,
                                       ),
                                     ),
                                   ),
-                                ),
-                              ],
+                                  Positioned(
+                                    left: foamLeft,
+                                    top: foamTop,
+                                    width: foamWidth,
+                                    height: foamHeight,
+                                    child: IgnorePointer(
+                                      child: Opacity(
+                                        opacity: _foamOpacity.value,
+                                        child: Image.asset(
+                                          'assets/animacionSplash/Espuma.png',
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Positioned(
+                                    left: glowLeft,
+                                    top: glowTop,
+                                    width: glowWidth,
+                                    height: glowHeight,
+                                    child: IgnorePointer(
+                                      child: Opacity(
+                                        opacity: _glowOpacity.value,
+                                        child: Image.asset(
+                                          'assets/animacionSplash/brillo.png',
+                                          fit: BoxFit.contain,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                        Positioned(
-                          left: 0,
-                          right: 0,
-                          top: fondoHeight + 16,
-                          height: textoHeight,
-                          child: Image.asset(
-                            'assets/animacionSplash/a_todo_trapo.png',
-                            fit: BoxFit.contain,
+                          Positioned(
+                            left: 0,
+                            right: 0,
+                            top: fondoHeight + 16,
+                            height: textoHeight,
+                            child: ShaderMask(
+                              blendMode: BlendMode.dstIn,
+                              shaderCallback: (rect) {
+                                final sweep = _textSweepFade.value;
+                                final start =
+                                    (sweep - 0.12).clamp(0.0, 1.0).toDouble();
+                                final end = sweep.clamp(0.0, 1.0).toDouble();
+                                return LinearGradient(
+                                  begin: Alignment.centerLeft,
+                                  end: Alignment.centerRight,
+                                  colors: const [
+                                    Colors.transparent,
+                                    Colors.transparent,
+                                    Colors.white,
+                                    Colors.white,
+                                  ],
+                                  stops: [0.0, start, end, 1.0],
+                                ).createShader(rect);
+                              },
+                              child: Image.asset(
+                                'assets/animacionSplash/a_todo_trapo.png',
+                                fit: BoxFit.contain,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                   );
                 },
               );
-            },
-          ),
-        ),
+                },
+              ),
+            ),
+          );
+        },
       ),
     );
   }
