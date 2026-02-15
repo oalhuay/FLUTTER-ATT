@@ -1641,70 +1641,92 @@ class _MainLayoutState extends State<MainLayout> {
   // --- SUSTITUIR DESDE AQUÍ ---
   Widget _itemMenuLateral(IconData icon, String label, int index) {
     bool seleccionado = _indiceActual == index;
+    bool enHover = false;
 
     return Padding(
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 4,
       ), // Espaciado para que parezca cápsula
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          decoration: BoxDecoration(
-            // SI ESTÁ SELECCIONADO: Fondo azul sutil. SI NO: Transparente.
-            color: seleccionado
-                ? const Color(0xFF3ABEF9).withOpacity(0.15)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(
-              15,
-            ), // Bordes bien redondeados 2026
-            border: Border.all(
-              color: seleccionado
-                  ? const Color(0xFF3ABEF9).withOpacity(0.3)
-                  : Colors.transparent,
-              width: 1,
-            ),
-          ),
-          child: ListTile(
-            visualDensity: VisualDensity.compact,
-            // ICONO: Siempre Azul ATT! (puedes usar azulATT si tenés la variable)
-            leading: Icon(
-              icon,
-              color: seleccionado
-                  ? const Color(0xFF3ABEF9)
-                  : const Color(0xFF3ABEF9).withOpacity(0.7),
-              size: 22,
-            ),
-            title: Text(
-              label,
-              style: TextStyle(
-                color: seleccionado ? Colors.white : Colors.white70,
-                fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
-                fontSize: 13,
-                letterSpacing: 0.5,
+      child: StatefulBuilder(
+        builder: (context, setLocalState) {
+          return MouseRegion(
+            cursor: SystemMouseCursors.click,
+            onEnter: (_) => setLocalState(() => enHover = true),
+            onExit: (_) => setLocalState(() => enHover = false),
+            child: AnimatedScale(
+              scale: enHover ? 1.025 : 1.0,
+              duration: const Duration(milliseconds: 110),
+              curve: Curves.easeOut,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 110),
+                curve: Curves.easeOut,
+                decoration: BoxDecoration(
+                  color: seleccionado
+                      ? const Color(0xFF3ABEF9).withOpacity(0.15)
+                      : (enHover
+                            ? Colors.white.withOpacity(0.08)
+                            : Colors.transparent),
+                  borderRadius: BorderRadius.circular(15),
+                  border: Border.all(
+                    color: seleccionado
+                        ? const Color(0xFF3ABEF9).withOpacity(0.3)
+                        : (enHover
+                              ? Colors.white.withOpacity(0.18)
+                              : Colors.transparent),
+                    width: 1,
+                  ),
+                  boxShadow: enHover
+                      ? [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.16),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : null,
+                ),
+                child: ListTile(
+                  visualDensity: VisualDensity.compact,
+                  leading: Icon(
+                    icon,
+                    color: seleccionado
+                        ? const Color(0xFF3ABEF9)
+                        : const Color(0xFF3ABEF9).withOpacity(0.7),
+                    size: 22,
+                  ),
+                  title: Text(
+                    label,
+                    style: TextStyle(
+                      color: seleccionado ? Colors.white : Colors.white70,
+                      fontWeight:
+                          seleccionado ? FontWeight.bold : FontWeight.normal,
+                      fontSize: 13,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                  trailing: seleccionado
+                      ? const Icon(
+                          Icons.arrow_right,
+                          color: Color(0xFF3ABEF9),
+                          size: 18,
+                        )
+                      : null,
+                  onTap: () {
+                    if (Navigator.canPop(context)) Navigator.pop(context);
+                    setState(() {
+                      _indiceActual = index;
+                    });
+                    if (index == 0)
+                      mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+                    if (index == 100) _cargarMisClientes();
+                    if (index == 101) _cargarMisLavaderos();
+                  },
+                ),
               ),
             ),
-            // PEQUEÑA FLECHITA SI ESTÁ SELECCIONADO (Opcional, queda pituco)
-            trailing: seleccionado
-                ? const Icon(
-                    Icons.arrow_right,
-                    color: Color(0xFF3ABEF9),
-                    size: 18,
-                  )
-                : null,
-            onTap: () {
-              if (Navigator.canPop(context)) Navigator.pop(context);
-              setState(() {
-                _indiceActual = index;
-              });
-              if (index == 0)
-                mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-              if (index == 100) _cargarMisClientes();
-              if (index == 101) _cargarMisLavaderos();
-            },
-          ),
-        ),
+          );
+        },
       ),
     );
   }
