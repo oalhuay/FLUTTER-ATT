@@ -5,8 +5,65 @@ const axios = require("axios");
 require("dotenv").config();
 const { MercadoPagoConfig, Preference } = require("mercadopago");
 const PDFDocument = require("pdfkit");
+const swaggerUi = require("swagger-ui-express");
+const swaggerJsdoc = require("swagger-jsdoc");
 
 const app = express();
+
+const swaggerDefinition = {
+  openapi: "3.0.0",
+  info: {
+    title: "ATT Backend API",
+    version: "1.0.0",
+    description:
+      "API para pagos con Mercado Pago, registro de turnos y generacion de comprobantes PDF en Supabase.",
+  },
+  servers: [
+    { url: "http://localhost:3001", description: "Servidor local" },
+    {
+      url: "https://flutter-att-8xz7.vercel.app",
+      description: "Servidor produccion",
+    },
+  ],
+  components: {
+    schemas: {
+      CreatePreferenceRequest: {
+        type: "object",
+        required: ["titulo", "precio", "userId"],
+        properties: {
+          titulo: { type: "string", example: "Lavado Premium" },
+          precio: { type: "number", example: 4500 },
+          userId: { type: "string", example: "user_123" },
+          metadata: {
+            type: "object",
+            description: "Informacion extra del turno para registrar al aprobarse.",
+            properties: {
+              fecha_turno: { type: "string", example: "2026-02-20" },
+              hora_turno: { type: "string", example: "10:30" },
+              lavadero_id: { type: "string", example: "lav_001" },
+              lavadero_nombre: { type: "string", example: "ATT Centro" },
+              servicios: { type: "string", example: "Lavado + Cera" },
+            },
+          },
+        },
+      },
+      CreatePreferenceResponse: {
+        type: "object",
+        properties: {
+          init_point: {
+            type: "string",
+            example: "https://www.mercadopago.com.ar/checkout/v1/redirect?...",
+          },
+        },
+      },
+    },
+  },
+};
+
+const swaggerSpec = swaggerJsdoc({
+  definition: swaggerDefinition,
+  apis: [__filename],
+});
 
 // --- 1. CONFIGURACIÓN DE CORS ---
 const allowedOrigins = [
@@ -36,6 +93,8 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+app.get("/api-docs.json", (req, res) => res.json(swaggerSpec));
 
 // --- 2. CONFIGURACIÓN DE CLIENTES ---
 const client = new MercadoPagoConfig({
@@ -134,6 +193,30 @@ async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
 }
 
 // --- 4. ENDPOINT: CREAR PREFERENCIA ---
+/**
+ * @openapi
+ * /create-preference:
+ *   post:
+ *     summary: Crear una preferencia de pago
+ *     description: Crea una orden de pago en Mercado Pago y devuelve la URL para enviar al usuario al checkout.
+ *     tags:
+ *       - Pagos
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/CreatePreferenceRequest'
+ *     responses:
+ *       200:
+ *         description: Preferencia creada correctamente.
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/CreatePreferenceResponse'
+ *       500:
+ *         description: Error interno al crear la preferencia.
+ */
 app.post("/create-preference", async (req, res) => {
   try {
     const { titulo, precio, userId, metadata } = req.body;
@@ -165,6 +248,33 @@ app.post("/create-preference", async (req, res) => {
 });
 
 // --- 5. ENDPOINT: WEBHOOK ---
+/**
+ * @openapi
+ * /webhook:
+ *   post:
+ *     summary: Recibir notificaciones de Mercado Pago
+ *     description: |
+ *       Mercado Pago llama a este endpoint cuando cambia el estado de un pago.
+ *       Si el pago queda aprobado, se guarda el turno y se genera el comprobante PDF en segundo plano.
+ *     tags:
+ *       - Webhooks
+ *     parameters:
+ *       - in: query
+ *         name: id
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Id del pago (Mercado Pago puede enviarlo por query o body).
+ *       - in: query
+ *         name: type
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Tipo de evento esperado (`payment`).
+ *     responses:
+ *       200:
+ *         description: Se responde siempre OK para evitar reintentos innecesarios del webhook.
+ */
 app.post("/webhook", async (req, res) => {
   const id = req.query.id || (req.body.data && req.body.data.id);
   const type = req.query.type || req.body.type || req.query.topic;
