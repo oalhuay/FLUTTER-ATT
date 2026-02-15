@@ -1591,43 +1591,16 @@ class _MainLayoutState extends State<MainLayout> {
     return Column(
       children: [
         const SizedBox(height: 50),
-        // --- LOGO ATT! --- (Tu bloque de logo se mantiene igual)
+        // --- LOGO PRINCIPAL ---
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(
-                  color: Color(0xFF3ABEF9),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.directions_car_filled,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
-              const SizedBox(width: 12),
-              RichText(
-                text: const TextSpan(
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.1,
-                  ),
-                  children: [
-                    TextSpan(
-                      text: "ATT",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                    TextSpan(
-                      text: "!",
-                      style: TextStyle(color: Color(0xFF3ABEF9)),
-                    ),
-                  ],
-                ),
+              Image.asset(
+                'assets/sidebar_logo.png',
+                width: 210,
+                fit: BoxFit.contain,
               ),
             ],
           ),

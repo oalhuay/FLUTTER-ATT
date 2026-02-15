@@ -1,3 +1,5 @@
+﻿import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'main.dart';
 
@@ -8,27 +10,84 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _sceneController;
+  late final Animation<double> _carX;
+  late final Animation<double> _carOpacity;
+  late final Animation<double> _glowOpacity;
+
   @override
   void initState() {
     super.initState();
+
+    _sceneController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 3800),
+    );
+
+    _carX = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 0.56)
+            .chain(CurveTween(curve: Curves.easeOutCubic)),
+        weight: 62,
+      ),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.56, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeInCubic)),
+        weight: 38,
+      ),
+    ]).animate(_sceneController);
+
+    _carOpacity = TweenSequence<double>([
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 20,
+      ),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 52),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 28,
+      ),
+    ]).animate(_sceneController);
+
+    _glowOpacity = TweenSequence<double>([
+      TweenSequenceItem(tween: ConstantTween(0.0), weight: 44),
+      TweenSequenceItem(
+        tween: Tween(begin: 0.0, end: 1.0)
+            .chain(CurveTween(curve: Curves.easeOut)),
+        weight: 8,
+      ),
+      TweenSequenceItem(tween: ConstantTween(1.0), weight: 10),
+      TweenSequenceItem(
+        tween: Tween(begin: 1.0, end: 0.0)
+            .chain(CurveTween(curve: Curves.easeIn)),
+        weight: 10,
+      ),
+      TweenSequenceItem(tween: ConstantTween(0.0), weight: 28),
+    ]).animate(_sceneController);
+
     _verificarRuta();
   }
 
+  @override
+  void dispose() {
+    _sceneController.dispose();
+    super.dispose();
+  }
+
   Future<void> _verificarRuta() async {
-    // 1. Esperamos los 3 segundos de rigor para que se luzca el logo
-    await Future.delayed(const Duration(seconds: 3));
+    await _sceneController.forward();
 
     if (!mounted) return;
 
-    // 2. Obtenemos el usuario actual
     final user = supabase.auth.currentUser;
 
     if (user == null) {
-      // Si no hay nadie logueado, vamos al MainLayout (donde el Perfil pedirá login)
       _navegarA(const MainLayout());
     } else {
-      // 3. SI HAY SESIÓN, verificamos el ROL en la base de datos
       try {
         final data = await supabase
             .from('perfiles_usuarios')
@@ -37,131 +96,174 @@ class _SplashScreenState extends State<SplashScreen> {
             .maybeSingle();
 
         if (mounted) {
-          // Si no tiene rol en SQL o el rol es 'pendiente', lo obligamos a elegir
           if (data == null || data['rol'] == 'pendiente') {
             _navegarA(const SeleccionRolScreen());
           } else {
-            // Si ya es cliente o lavadero, entra directo a la App
             _navegarA(const MainLayout());
           }
         }
       } catch (e) {
-        // Por seguridad, si falla la red, lo mandamos al MainLayout
-        debugPrint("Error en Splash: $e");
+        debugPrint('Error en Splash: $e');
         _navegarA(const MainLayout());
       }
     }
   }
 
-  // Función auxiliar para no repetir código de navegación
   void _navegarA(Widget pantalla) {
-    if (mounted) {
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => pantalla),
-      );
-    }
+    if (!mounted) return;
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) => pantalla),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Eliminamos el backgroundColor simple para usar el Container con Gradient
       body: Container(
         width: double.infinity,
         height: double.infinity,
-        // --- DEGRADADO RADIAL ROJO (Efecto profundidad) ---
         decoration: const BoxDecoration(
           gradient: RadialGradient(
             center: Alignment.center,
             radius: 1.2,
-            colors: [
-              Color(0xFFEF4444), // Rojo ATT! central
-              Color(0xFF7F1D1D), // Rojo bordó oscuro hacia las esquinas
-            ],
+            colors: [Color(0xFFEF4444), Color(0xFF7F1D1D)],
           ),
         ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO ---
-            // Esto oculta el fondo blanco del PNG y lo hace ver premium
-            // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO (CORREGIDO) ---
-            // --- EL LOGO DENTRO DE UNA "MEDALLA" BENTO (CORRECCIÓN FINAL) ---
-            // --- EL LOGO COMPACTO CON ANILLO AZUL (CAMBIO AQUÍ) ---
-            Container(
-              padding: const EdgeInsets.all(
-                6,
-              ), // El "aire" blanco entre el logo y el borde azul
-              decoration: BoxDecoration(
-                color: Colors.white,
-                // Usamos StadiumBorder o BorderRadius alto para que sea OVALADO como tu logo
-                borderRadius: BorderRadius.circular(60),
-                border: Border.all(
-                  color: const Color(0xFF003366), // Azul ATT!
-                  width: 4, // El anillo exterior
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 25,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(50),
-                child: Image.asset(
-                  'assets/logo_att.png',
-                  height:
-                      120, // Altura controlada para que el ancho se ajuste solo
-                  fit: BoxFit
-                      .contain, // Mantiene la proporción original del óvalo
-                ),
-              ),
-            ),
-            const SizedBox(height: 40),
+        child: Center(
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final sceneWidth = math.min(constraints.maxWidth * 0.9, 440.0);
+              final fondoHeight = sceneWidth * 0.58;
+              final textoHeight = sceneWidth * 0.18;
+              final sceneHeight = fondoHeight + textoHeight + 16;
+              const clipInset = 30.0;
+              const ovalInsetX = 0.0;
+              const ovalInsetY = 0.0;
+              final animWidth = sceneWidth - (clipInset * 2);
+              final carWidth = sceneWidth * 0.62;
+              final carHeight = fondoHeight * 0.70;
 
-            // --- TEXTO DE IDENTIDAD (CON BORDE AZUL) ---
-            // --- NOMBRE DE LA APP (SERGIO TRENDY - BLANCO PURO) ---
-            const Text(
-              "A TODO TRAPO",
-              style: TextStyle(
-                fontFamily:
-                    'SergioTrendy', // Asegurate que el nombre sea igual al del pubspec.yaml
-                color: Colors.white,
-                fontSize: 40, // Más grande para que se luzca la fuente de Canva
-                fontWeight: FontWeight.normal,
-              ),
-            ),
+              final startX = -carWidth + 34;
+              final midX = (animWidth - carWidth) * 0.50;
+              final endX = animWidth + 26;
 
-            const SizedBox(height: 5),
+              final carTop = fondoHeight * 0.52 - (carHeight / 2);
+              final glowWidth = carWidth * 1.04;
+              final glowHeight = carHeight * 1.04;
+              final glowLeft = midX + (carWidth - glowWidth) / 2;
+              final glowTop = carTop - (glowHeight * 0.08);
 
-            // --- TU FIRMA OSCAR ALHUAY ---
-            const Text(
-              "OSCAR ALHUAY",
-              style: TextStyle(
-                color: Colors.white60,
-                fontSize: 10,
-                fontWeight: FontWeight.w300,
-                letterSpacing: 12, // Espaciado premium
-              ),
-            ),
+              return AnimatedBuilder(
+                animation: _sceneController,
+                builder: (context, _) {
+                  final xProgress = _carX.value;
+                  final carLeft = xProgress <= 0.56
+                      ? startX + (midX - startX) * (xProgress / 0.56)
+                      : midX + (endX - midX) * ((xProgress - 0.56) / 0.44);
 
-            const SizedBox(height: 60),
-
-            // --- INDICADOR DE CARGA ---
-            const SizedBox(
-              width: 35,
-              height: 35,
-              child: CircularProgressIndicator(
-                color: Colors.white,
-                strokeWidth: 2,
-              ),
-            ),
-          ],
+                  return SizedBox(
+                    width: sceneWidth,
+                    height: sceneHeight,
+                    child: Stack(
+                      clipBehavior: Clip.hardEdge,
+                      children: [
+                        Positioned.fill(
+                          bottom: textoHeight + 16,
+                          child: Image.asset(
+                            'assets/animacionSplash/fondo_blanco.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        Positioned(
+                          left: clipInset,
+                          right: clipInset,
+                          top: 0,
+                          height: fondoHeight,
+                          child: ClipPath(
+                            clipper: _OvalInnerClipper(
+                              insetX: ovalInsetX,
+                              insetY: ovalInsetY,
+                            ),
+                            child: Stack(
+                              children: [
+                                Positioned(
+                                  left: carLeft,
+                                  top: carTop,
+                                  width: carWidth,
+                                  height: carHeight,
+                                  child: Opacity(
+                                    opacity: _carOpacity.value,
+                                    child: Image.asset(
+                                      'assets/animacionSplash/auto.png',
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: glowLeft,
+                                  top: glowTop,
+                                  width: glowWidth,
+                                  height: glowHeight,
+                                  child: IgnorePointer(
+                                    child: Opacity(
+                                      opacity: _glowOpacity.value,
+                                      child: Image.asset(
+                                        'assets/animacionSplash/brillo.png',
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: fondoHeight + 16,
+                          height: textoHeight,
+                          child: Image.asset(
+                            'assets/animacionSplash/a_todo_trapo.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              );
+            },
+          ),
         ),
       ),
     );
+  }
+}
+
+class _OvalInnerClipper extends CustomClipper<Path> {
+  final double insetX;
+  final double insetY;
+
+  _OvalInnerClipper({
+    required this.insetX,
+    required this.insetY,
+  });
+
+  @override
+  Path getClip(Size size) {
+    final rect = Rect.fromLTWH(
+      insetX,
+      insetY,
+      size.width - (insetX * 2),
+      size.height - (insetY * 2),
+    );
+    return Path()..addOval(rect);
+  }
+
+  @override
+  bool shouldReclip(covariant _OvalInnerClipper oldClipper) {
+    return insetX != oldClipper.insetX || insetY != oldClipper.insetY;
   }
 }
