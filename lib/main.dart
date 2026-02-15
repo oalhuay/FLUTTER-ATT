@@ -1297,14 +1297,24 @@ class _MainLayoutState extends State<MainLayout> {
                               Builder(
                                 builder: (context) => Container(
                                   margin: const EdgeInsets.only(right: 10),
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     color: Colors.white,
                                     shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.1),
+                                        blurRadius: 8,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
                                   ),
                                   child: IconButton(
                                     icon: const Icon(
-                                      Icons.menu,
-                                      color: Color(0xFF1E1E2D),
+                                      Icons
+                                          .menu_open_rounded, // Ícono más moderno que el clásico menu
+                                      color: Color(
+                                        0xFF1E1E2D,
+                                      ), // Color oscuro del sidebar
                                     ),
                                     onPressed: () =>
                                         Scaffold.of(context).openDrawer(),
@@ -1516,9 +1526,7 @@ class _MainLayoutState extends State<MainLayout> {
                         _rolUsuario == 'cliente' &&
                         _turnoPendienteRating != null &&
                         _mostrarPopupRating &&
-                        !(
-                          esPantallaChica && _lavaderoSeleccionado != null
-                        ) &&
+                        !(esPantallaChica && _lavaderoSeleccionado != null) &&
                         supabase.auth.currentUser != null)
                       Positioned(
                         right: 20,
@@ -1661,39 +1669,70 @@ class _MainLayoutState extends State<MainLayout> {
   Widget _itemMenuLateral(IconData icon, String label, int index) {
     bool seleccionado = _indiceActual == index;
 
-    return ListTile(
-      selected: seleccionado,
-      leading: Icon(
-        icon,
-        color: seleccionado ? const Color(0xFF64FFDA) : Colors.white60,
-      ),
-      title: Text(
-        label,
-        style: TextStyle(
-          color: seleccionado ? Colors.white : Colors.white60,
-          fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 4,
+      ), // Espaciado para que parezca cápsula
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          decoration: BoxDecoration(
+            // SI ESTÁ SELECCIONADO: Fondo azul sutil. SI NO: Transparente.
+            color: seleccionado
+                ? const Color(0xFF3ABEF9).withOpacity(0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(
+              15,
+            ), // Bordes bien redondeados 2026
+            border: Border.all(
+              color: seleccionado
+                  ? const Color(0xFF3ABEF9).withOpacity(0.3)
+                  : Colors.transparent,
+              width: 1,
+            ),
+          ),
+          child: ListTile(
+            visualDensity: VisualDensity.compact,
+            // ICONO: Siempre Azul ATT! (puedes usar azulATT si tenés la variable)
+            leading: Icon(
+              icon,
+              color: seleccionado
+                  ? const Color(0xFF3ABEF9)
+                  : const Color(0xFF3ABEF9).withOpacity(0.7),
+              size: 22,
+            ),
+            title: Text(
+              label,
+              style: TextStyle(
+                color: seleccionado ? Colors.white : Colors.white70,
+                fontWeight: seleccionado ? FontWeight.bold : FontWeight.normal,
+                fontSize: 13,
+                letterSpacing: 0.5,
+              ),
+            ),
+            // PEQUEÑA FLECHITA SI ESTÁ SELECCIONADO (Opcional, queda pituco)
+            trailing: seleccionado
+                ? const Icon(
+                    Icons.arrow_right,
+                    color: Color(0xFF3ABEF9),
+                    size: 18,
+                  )
+                : null,
+            onTap: () {
+              if (Navigator.canPop(context)) Navigator.pop(context);
+              setState(() {
+                _indiceActual = index;
+              });
+              if (index == 0)
+                mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+              if (index == 100) _cargarMisClientes();
+              if (index == 101) _cargarMisLavaderos();
+            },
+          ),
         ),
       ),
-      onTap: () {
-        // 1. Si es móvil, cerramos el drawer
-        if (Navigator.canPop(context)) Navigator.pop(context);
-
-        // 2. CAMBIO CLAVE: No hacemos Navigator.push.
-        // Solo cambiamos el índice para que el IndexedStack cambie el centro.
-        setState(() {
-          _indiceActual = index;
-          // Mantenemos el sidebar abierto si estamos en escritorio
-          // _sidebarAbierto = true; // Opcional: podrías forzarlo a true aquí
-        });
-
-        // 3. Disparamos las recargas de datos según el índice
-        if (index == 0) mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-        if (index == 100) _cargarMisClientes();
-        if (index == 101) _cargarMisLavaderos();
-        if (_rolUsuario == 'cliente' && (index == 0 || index == 1)) {
-          _buscarTurnoPendienteParaRating();
-        }
-      },
     );
   }
   // --- HASTA AQUÍ ---
