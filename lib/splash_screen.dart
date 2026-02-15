@@ -23,7 +23,7 @@ class _SplashScreenState extends State<SplashScreen>
 
     _sceneController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2800),
+      duration: const Duration(milliseconds: 3800),
     );
 
     _carX = TweenSequence<double>([
@@ -134,17 +134,23 @@ class _SplashScreenState extends State<SplashScreen>
           child: LayoutBuilder(
             builder: (context, constraints) {
               final sceneWidth = math.min(constraints.maxWidth * 0.9, 440.0);
-              final sceneHeight = sceneWidth * 0.58;
-              final carWidth = sceneWidth * 0.30;
-              final carHeight = sceneHeight * 0.34;
+              final fondoHeight = sceneWidth * 0.58;
+              final textoHeight = sceneWidth * 0.18;
+              final sceneHeight = fondoHeight + textoHeight + 16;
+              const clipInset = 30.0;
+              const ovalInsetX = 0.0;
+              const ovalInsetY = 0.0;
+              final animWidth = sceneWidth - (clipInset * 2);
+              final carWidth = sceneWidth * 0.62;
+              final carHeight = fondoHeight * 0.70;
 
-              final startX = -carWidth + 5;
-              final midX = (sceneWidth - carWidth) * 0.50;
-              final endX = sceneWidth + 20;
+              final startX = -carWidth + 34;
+              final midX = (animWidth - carWidth) * 0.50;
+              final endX = animWidth + 26;
 
-              final carTop = sceneHeight * 0.52 - (carHeight / 2);
-              final glowWidth = carWidth * 0.95;
-              final glowHeight = carHeight * 0.95;
+              final carTop = fondoHeight * 0.52 - (carHeight / 2);
+              final glowWidth = carWidth * 1.04;
+              final glowHeight = carHeight * 1.04;
               final glowLeft = midX + (carWidth - glowWidth) / 2;
               final glowTop = carTop - (glowHeight * 0.08);
 
@@ -160,46 +166,67 @@ class _SplashScreenState extends State<SplashScreen>
                     width: sceneWidth,
                     height: sceneHeight,
                     child: Stack(
-                      clipBehavior: Clip.none,
+                      clipBehavior: Clip.hardEdge,
                       children: [
                         Positioned.fill(
+                          bottom: textoHeight + 16,
                           child: Image.asset(
                             'assets/animacionSplash/fondo_blanco.png',
                             fit: BoxFit.contain,
                           ),
                         ),
-                        Positioned.fill(
+                        Positioned(
+                          left: clipInset,
+                          right: clipInset,
+                          top: 0,
+                          height: fondoHeight,
+                          child: ClipPath(
+                            clipper: _OvalInnerClipper(
+                              insetX: ovalInsetX,
+                              insetY: ovalInsetY,
+                            ),
+                            child: Stack(
+                              children: [
+                                Positioned(
+                                  left: carLeft,
+                                  top: carTop,
+                                  width: carWidth,
+                                  height: carHeight,
+                                  child: Opacity(
+                                    opacity: _carOpacity.value,
+                                    child: Image.asset(
+                                      'assets/animacionSplash/auto.png',
+                                      fit: BoxFit.contain,
+                                    ),
+                                  ),
+                                ),
+                                Positioned(
+                                  left: glowLeft,
+                                  top: glowTop,
+                                  width: glowWidth,
+                                  height: glowHeight,
+                                  child: IgnorePointer(
+                                    child: Opacity(
+                                      opacity: _glowOpacity.value,
+                                      child: Image.asset(
+                                        'assets/animacionSplash/brillo.png',
+                                        fit: BoxFit.contain,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          top: fondoHeight + 16,
+                          height: textoHeight,
                           child: Image.asset(
                             'assets/animacionSplash/a_todo_trapo.png',
                             fit: BoxFit.contain,
-                          ),
-                        ),
-                        Positioned(
-                          left: carLeft,
-                          top: carTop,
-                          width: carWidth,
-                          height: carHeight,
-                          child: Opacity(
-                            opacity: _carOpacity.value,
-                            child: Image.asset(
-                              'assets/animacionSplash/auto.png',
-                              fit: BoxFit.contain,
-                            ),
-                          ),
-                        ),
-                        Positioned(
-                          left: glowLeft,
-                          top: glowTop,
-                          width: glowWidth,
-                          height: glowHeight,
-                          child: IgnorePointer(
-                            child: Opacity(
-                              opacity: _glowOpacity.value,
-                              child: Image.asset(
-                                'assets/animacionSplash/brillo.png',
-                                fit: BoxFit.contain,
-                              ),
-                            ),
                           ),
                         ),
                       ],
@@ -212,5 +239,31 @@ class _SplashScreenState extends State<SplashScreen>
         ),
       ),
     );
+  }
+}
+
+class _OvalInnerClipper extends CustomClipper<Path> {
+  final double insetX;
+  final double insetY;
+
+  _OvalInnerClipper({
+    required this.insetX,
+    required this.insetY,
+  });
+
+  @override
+  Path getClip(Size size) {
+    final rect = Rect.fromLTWH(
+      insetX,
+      insetY,
+      size.width - (insetX * 2),
+      size.height - (insetY * 2),
+    );
+    return Path()..addOval(rect);
+  }
+
+  @override
+  bool shouldReclip(covariant _OvalInnerClipper oldClipper) {
+    return insetX != oldClipper.insetX || insetY != oldClipper.insetY;
   }
 }

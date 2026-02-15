@@ -70,7 +70,12 @@ flutter:
 
   assets:
     - assets/
+    - assets/animacionSplash/fondo_blanco.png
+    - assets/animacionSplash/a_todo_trapo.png
+    - assets/animacionSplash/auto.png
+    - assets/animacionSplash/brillo.png
+
   fonts:
-  - family: SergioTrendy
-    fonts:
-      - asset: assets/fonts/SergioTrendy.ttf
+    - family: SergioTrendy
+      fonts:
+        - asset: assets/fonts/SergioTrendy.ttf
