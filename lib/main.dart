@@ -1191,7 +1191,7 @@ class _MainLayoutState extends State<MainLayout> {
           return Row(
             children: [
               // COLUMNA 1: SIDEBAR ANIMADO (Ahora sí se desliza real hacia la izquierda)
-              if (_indiceActual != 101) // <--- AGREGÁ ESTO ACÁ
+              if (!esMovil && _indiceActual != 101)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 400),
                   curve: Curves.easeInOutQuart,
