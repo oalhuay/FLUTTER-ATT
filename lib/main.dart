@@ -2800,11 +2800,8 @@ class MapScreen extends StatefulWidget {
 class _MapScreenState extends State<MapScreen> {
   List<dynamic> _lavaderosEnMapa = [];
   dynamic _markerTarjetaActivaId;
-<<<<<<< HEAD
   String _userRol = 'pendiente';
   LatLng? _miPosicionActual; // Para guardar el punto azul del GPS real
-=======
->>>>>>> bdee627ffdf8c384b9b95f201ebe4346723fa689
   void moverAMarcador(LatLng posicion) {
     _animatedMapMove(posicion, 16);
   }
