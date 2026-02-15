@@ -1026,6 +1026,7 @@ class _MainLayoutState extends State<MainLayout> {
         // Lista de lavaderos (Paso 3)
         Expanded(
           child: ListView.builder(
+            physics: const NeverScrollableScrollPhysics(),
             padding: const EdgeInsets.all(15),
             itemCount: _lavaderosFiltrados.length,
             itemBuilder: (context, index) {
@@ -1184,51 +1185,15 @@ class _MainLayoutState extends State<MainLayout> {
         builder: (context, constraints) {
           // Umbral para el panel derecho fijo
           bool esPantallaChica = constraints.maxWidth < 1100;
+          final bool mostrarPanelDerechoWeb =
+              _lavaderoSeleccionado != null ||
+              (_rolUsuario == 'cliente' && _searchController.text.isNotEmpty);
           final double anchoPopupRating = esMovil
               ? ((constraints.maxWidth - 40).clamp(240, 360)).toDouble()
               : 320;
 
           return Row(
             children: [
-              // COLUMNA 1: SIDEBAR ANIMADO (Ahora sí se desliza real hacia la izquierda)
-              if (!esMovil && _indiceActual != 101)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 400),
-                  curve: Curves.easeInOutQuart,
-                  // El ancho es 0 si es la pantalla 101, sino depende de _sidebarAbierto
-                  width: _sidebarAbierto ? 250 : 0,
-                  child: ClipRect(
-                    child: OverflowBox(
-                      minWidth: 250,
-                      maxWidth: 250,
-                      alignment: Alignment.centerLeft,
-                      child: Container(
-                        width: 250,
-                        color: const Color(0xFF1E1E2D),
-                        child: Stack(
-                          children: [
-                            _buildContenidoSidebar(),
-                            // BOTÓN DE CERRAR (X) A LA IZQUIERDA
-                            Positioned(
-                              top: 10,
-                              left: 10,
-                              child: IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.white60,
-                                  size: 22,
-                                ),
-                                onPressed: () =>
-                                    setState(() => _sidebarAbierto = false),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-
               // COLUMNA 2: CONTENIDO CENTRAL (Se expande automáticamente)
               Expanded(
                 child: Stack(
@@ -1248,6 +1213,42 @@ class _MainLayoutState extends State<MainLayout> {
                         children: _paginas,
                       ),
                     ),
+                    // SIDEBAR IZQUIERDO FLOTANTE (SOLO WEB)
+                    if (!esMovil && _indiceActual != 101)
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 400),
+                        curve: Curves.easeInOutQuart,
+                        top: 12,
+                        bottom: 12,
+                        left: _sidebarAbierto ? 12 : -342,
+                        child: Material(
+                          elevation: 14,
+                          borderRadius: BorderRadius.circular(20),
+                          clipBehavior: Clip.antiAlias,
+                          child: Container(
+                            width: 330,
+                            color: const Color(0xFF1E1E2D),
+                            child: Stack(
+                              children: [
+                                _buildContenidoSidebar(),
+                                Positioned(
+                                  top: 10,
+                                  left: 10,
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.close,
+                                      color: Colors.white60,
+                                      size: 22,
+                                    ),
+                                    onPressed: () =>
+                                        setState(() => _sidebarAbierto = false),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
 
                     // --- BOTÓN PARA VOLVER A MOSTRAR EL SIDEBAR (Animado con la barra) ---
                     if (!esMovil && _indiceActual == 0)
@@ -1286,7 +1287,7 @@ class _MainLayoutState extends State<MainLayout> {
                         duration: const Duration(milliseconds: 400),
                         curve: Curves.easeInOutQuart,
                         top: 20,
-                        left: esMovil ? 20 : (_sidebarAbierto ? 20 : 65),
+                        left: esMovil ? 20 : (_sidebarAbierto ? 365 : 65),
                         right: 20,
                         child: Row(
                           crossAxisAlignment:
@@ -1522,6 +1523,36 @@ class _MainLayoutState extends State<MainLayout> {
                           ),
                         ),
                       ),
+                    if (!esPantallaChica &&
+                        supabase.auth.currentUser != null &&
+                        _indiceActual == 0)
+                      AnimatedPositioned(
+                        duration: const Duration(milliseconds: 600),
+                        curve: Curves.easeInOutQuart,
+                        top: 80,
+                        bottom: 12,
+                        right: mostrarPanelDerechoWeb ? 12 : -362,
+                        child: Material(
+                          elevation: 10,
+                          borderRadius: BorderRadius.circular(20),
+                          clipBehavior: Clip.antiAlias,
+                          child: Container(
+                            width: 350,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(20),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withOpacity(0.05),
+                                  blurRadius: 10,
+                                  offset: const Offset(-5, 0),
+                                ),
+                              ],
+                            ),
+                            child: _buildContenidoPanelDerecho(),
+                          ),
+                        ),
+                      ),
                     if (_indiceActual == 0 &&
                         _rolUsuario == 'cliente' &&
                         _turnoPendienteRating != null &&
@@ -1538,44 +1569,6 @@ class _MainLayoutState extends State<MainLayout> {
                 ),
               ),
 
-              // COLUMNA 3: PANEL DERECHO DINÁMICO Y ANIMADO
-              // Solo visible en el mapa para evitar que se mantenga en otras páginas.
-              if (!esPantallaChica &&
-                  supabase.auth.currentUser != null &&
-                  _indiceActual == 0)
-                AnimatedContainer(
-                  duration: const Duration(milliseconds: 600),
-                  curve: Curves.easeInOutQuart,
-                  // --- CAMBIO AQUÍ: Si el índice es 101, el ancho es SIEMPRE 0 ---
-                  width:
-                      (_lavaderoSeleccionado != null ||
-                          (_rolUsuario == 'cliente' &&
-                              _searchController.text.isNotEmpty))
-                      ? 350
-                      : 0,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
-                        blurRadius: 10,
-                        offset: const Offset(
-                          -5,
-                          0,
-                        ), // Sombra hacia la izquierda
-                      ),
-                    ],
-                  ),
-                  // ClipRect evita que el contenido se vea "amontonado" mientras se cierra
-                  child: ClipRect(
-                    child: OverflowBox(
-                      minWidth: 350,
-                      maxWidth: 350,
-                      alignment: Alignment.centerLeft,
-                      child: _buildContenidoPanelDerecho(),
-                    ),
-                  ),
-                ),
             ],
           );
         },
@@ -1765,7 +1758,8 @@ class _MainLayoutState extends State<MainLayout> {
     bool esDueno = _rolUsuario == 'lavadero';
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1777,12 +1771,12 @@ class _MainLayoutState extends State<MainLayout> {
               height: 180,
             ), // <--- LLAMADA A LA FUNCIÓN MAESTRA
           ),
-          const SizedBox(height: 25),
+          const SizedBox(height: 18),
 
           // --- SELLO DE AUTOR (DUEÑO) ---
           if (_lavaderoSeleccionado['perfiles_usuarios'] != null)
             Container(
-              margin: const EdgeInsets.only(bottom: 20),
+              margin: const EdgeInsets.only(bottom: 14),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
                 color: const Color(0xFF3ABEF9).withOpacity(0.1),
@@ -1818,15 +1812,15 @@ class _MainLayoutState extends State<MainLayout> {
               letterSpacing: 1.2,
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
 
           // 2. CAMPOS DE INFORMACIÓN
           // Campos informativos (La edición real se hace en la otra pantalla)
           _inputPanel("Nombre del Negocio", _nombreCtrl, habilitado: false),
-          const SizedBox(height: 15),
+          const SizedBox(height: 10),
           _inputPanel("Dirección", _direccionCtrl, habilitado: false),
 
-          const SizedBox(height: 30),
+          const SizedBox(height: 12),
 
           // 3. BOTONES DE ACCIÓN (Diferenciados por Propiedad Real)
           // 3. BOTONES DE ACCIÓN (Lógica de Roles y Propiedad)
