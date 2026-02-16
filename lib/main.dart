@@ -281,6 +281,8 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroPrecio = false;
   bool _filtroRating = false;
   bool _filtroDistancia = false;
+  int _indiceAnterior = 0;
+  int _animacionContenidoKey = 0;
   final ScrollController _scrollBentoController = ScrollController();
   int _paginaActual = 0;
   final int _itemsPorPagina =
@@ -321,6 +323,20 @@ class _MainLayoutState extends State<MainLayout> {
           ),
         );
       }
+    });
+  }
+
+  void _irASeccionConTransicion(int index) {
+    if (index == 0) mapScreenKey.currentState?.cargarLavaderosDeSupabase();
+    if (index == 100) _cargarMisClientes();
+    if (index == 101) _cargarMisLavaderos();
+
+    if (_indiceActual == index) return;
+
+    setState(() {
+      _indiceAnterior = _indiceActual;
+      _indiceActual = index;
+      _animacionContenidoKey++;
     });
   }
 
@@ -1174,7 +1190,7 @@ class _MainLayoutState extends State<MainLayout> {
 
     return Scaffold(
       // 1. EL DRAWER: Solo se activa en pantallas chicas
-      drawer: esMovil
+      drawer: esMovil && _indiceActual == 0
           ? Drawer(
               backgroundColor: const Color(0xFF1E1E2D),
               child:
@@ -1198,23 +1214,47 @@ class _MainLayoutState extends State<MainLayout> {
               Expanded(
                 child: Stack(
                   children: [
-                    Container(
-                      color: const Color(0xFFF5F7F9),
-                      child: IndexedStack(
-                        index: (_indiceActual == 100)
-                            ? 3 // Mis Clientes
-                            : (_indiceActual == 101)
-                            ? 4 // Mis Lavaderos
-                            : (_indiceActual == 99)
-                            ? 5 // Registro (La nueva que agregamos arriba)
-                            : (_indiceActual >= 0 && _indiceActual <= 2)
-                            ? _indiceActual
-                            : 0,
-                        children: _paginas,
+                    TweenAnimationBuilder<double>(
+                      key: ValueKey(_animacionContenidoKey),
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeOutBack,
+                      tween: Tween(begin: 0, end: 1),
+                      builder: (context, t, child) {
+                        final bool avanza = _indiceActual >= _indiceAnterior;
+                        final double dx = (avanza ? 0.07 : -0.07) * (1 - t);
+                        final double scale = 0.975 + (0.025 * t);
+                        return Opacity(
+                          opacity: 0.7 + (0.3 * t),
+                          child: Transform.scale(
+                            scale: scale,
+                            child: Transform.translate(
+                              offset: Offset(
+                                MediaQuery.of(context).size.width * dx,
+                                0,
+                              ),
+                              child: child,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        color: const Color(0xFFF5F7F9),
+                        child: IndexedStack(
+                          index: (_indiceActual == 100)
+                              ? 3 // Mis Clientes
+                              : (_indiceActual == 101)
+                              ? 4 // Mis Lavaderos
+                              : (_indiceActual == 99)
+                              ? 5 // Registro (La nueva que agregamos arriba)
+                              : (_indiceActual >= 0 && _indiceActual <= 2)
+                              ? _indiceActual
+                              : 0,
+                          children: _paginas,
+                        ),
                       ),
                     ),
                     // SIDEBAR IZQUIERDO FLOTANTE (SOLO WEB)
-                    if (!esMovil && _indiceActual != 101)
+                    if (!esMovil && _indiceActual == 0)
                       AnimatedPositioned(
                         duration: const Duration(milliseconds: 400),
                         curve: Curves.easeInOutQuart,
@@ -1621,10 +1661,6 @@ class _MainLayoutState extends State<MainLayout> {
           _itemMenuLateral(Icons.business_center_rounded, "Mis Lavaderos", 101),
 
         const Spacer(),
-        const Text(
-          "v1.0.8",
-          style: TextStyle(color: Colors.white24, fontSize: 10),
-        ),
         const SizedBox(height: 20),
       ],
     );
@@ -1707,13 +1743,7 @@ class _MainLayoutState extends State<MainLayout> {
                       : null,
                   onTap: () {
                     if (Navigator.canPop(context)) Navigator.pop(context);
-                    setState(() {
-                      _indiceActual = index;
-                    });
-                    if (index == 0)
-                      mapScreenKey.currentState?.cargarLavaderosDeSupabase();
-                    if (index == 100) _cargarMisClientes();
-                    if (index == 101) _cargarMisLavaderos();
+                    _irASeccionConTransicion(index);
                   },
                 ),
               ),
@@ -2128,7 +2158,11 @@ class _MainLayoutState extends State<MainLayout> {
             child: Row(
               children: [
                 IconButton(
-                  icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 20),
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new_rounded,
+                    size: 20,
+                    color: Color(0xFF3ABEF9),
+                  ),
                   onPressed: () => setState(() => _indiceActual = 0),
                 ),
                 const Expanded(
@@ -2258,6 +2292,7 @@ class _MainLayoutState extends State<MainLayout> {
                     icon: const Icon(
                       Icons.arrow_back_ios_new_rounded,
                       size: 20,
+                      color: Color(0xFF3ABEF9),
                     ),
                     onPressed: () => setState(() => _indiceActual = 0),
                   ),
@@ -3219,8 +3254,8 @@ class _MapScreenState extends State<MapScreen> {
           // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
           // --- PANEL DE BOTONES FACHEROS ---
           Positioned(
-            top: 100, // Bajado para no tapar el Avatar
-            right: 15,
+            right: 16,
+            bottom: 24,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -3232,12 +3267,16 @@ class _MapScreenState extends State<MapScreen> {
                 const SizedBox(height: 12),
                 Container(
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white.withOpacity(0.96),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFF3ABEF9).withOpacity(0.18),
+                    ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.2),
-                        blurRadius: 6,
+                        color: Colors.black.withOpacity(0.18),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
                       ),
                     ],
                   ),
@@ -3250,7 +3289,11 @@ class _MapScreenState extends State<MapScreen> {
                           _mapController.camera.zoom + 1,
                         ),
                       ),
-                      Container(width: 30, height: 1, color: Colors.grey[300]),
+                      Container(
+                        width: 30,
+                        height: 1,
+                        color: Colors.grey[300],
+                      ),
                       _botonZoom(
                         icon: Icons.remove,
                         onPressed: () => _animatedMapMove(
