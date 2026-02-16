@@ -264,6 +264,22 @@ class _SeleccionRolScreenState extends State<SeleccionRolScreen> {
   }
 }
 
+class _PasoTutorialSidebarLavadero {
+  final int? menuIndex;
+  final String objetivo;
+  final bool mostrarSidebar;
+  final String titulo;
+  final String descripcion;
+
+  const _PasoTutorialSidebarLavadero({
+    this.menuIndex,
+    required this.objetivo,
+    required this.mostrarSidebar,
+    required this.titulo,
+    required this.descripcion,
+  });
+}
+
 class MainLayout extends StatefulWidget {
   const MainLayout({super.key});
 
@@ -288,6 +304,84 @@ class _MainLayoutState extends State<MainLayout> {
   final int _itemsPorPagina =
       3; // Mostramos 8 por página (2 filas de 4 o 4 filas de 2)
   int _totalLavaderosDB = 0; // Para saber hasta dónde podemos avanzar
+  final GlobalKey<ScaffoldState> _mainScaffoldKey = GlobalKey<ScaffoldState>();
+  final Map<int, GlobalKey> _menuTutorialKeys = <int, GlobalKey>{
+    1: GlobalKey(),
+    2: GlobalKey(),
+    99: GlobalKey(),
+    100: GlobalKey(),
+    101: GlobalKey(),
+  };
+  final GlobalKey _buscadorTutorialKey = GlobalKey();
+  final GlobalKey _avatarTutorialKey = GlobalKey();
+  final GlobalKey _mapaTutorialKey = GlobalKey();
+  bool _mostrarTutorialLavadero = false;
+  int _pasoTutorialLavadero = 0;
+  bool _tutorialLavaderoEvaluado = false;
+  final List<_PasoTutorialSidebarLavadero> _pasosTutorialLavadero =
+      const <_PasoTutorialSidebarLavadero>[
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'menu_reservas',
+          mostrarSidebar: true,
+          menuIndex: 1,
+          titulo: "Mis Reservas",
+          descripcion:
+              "Consulta tus turnos activos, completados o cancelados en un solo lugar.",
+        ),
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'menu_perfil',
+          mostrarSidebar: true,
+          menuIndex: 2,
+          titulo: "Mi Perfil",
+          descripcion:
+              "Actualiza tus datos personales y la información de tu cuenta.",
+        ),
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'menu_registro',
+          mostrarSidebar: true,
+          menuIndex: 99,
+          titulo: "Registrar Mi Lavadero",
+          descripcion:
+              "Configura servicios, precios, horarios y ubicación de tu negocio.",
+        ),
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'menu_clientes',
+          mostrarSidebar: true,
+          menuIndex: 100,
+          titulo: "Mis Clientes",
+          descripcion:
+              "Visualiza los usuarios que reservaron turnos en tus lavaderos.",
+        ),
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'menu_lavaderos',
+          mostrarSidebar: true,
+          menuIndex: 101,
+          titulo: "Mis Lavaderos",
+          descripcion:
+              "Gestiona todos tus locales registrados y edita su información.",
+        ),
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'buscador',
+          mostrarSidebar: false,
+          titulo: "Buscador Inteligente",
+          descripcion:
+              "Encuentra lavaderos rápido por nombre o dirección desde esta barra.",
+        ),
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'avatar',
+          mostrarSidebar: false,
+          titulo: "Avatar de Usuario",
+          descripcion:
+              "Desde aquí accedes a tu perfil y ajustes de tu cuenta.",
+        ),
+        _PasoTutorialSidebarLavadero(
+          objetivo: 'mapa',
+          mostrarSidebar: false,
+          titulo: "Marcadores del Mapa",
+          descripcion:
+              "Aquí se muestran lavaderos disponibles. Toca uno para ver su detalle.",
+        ),
+      ];
 
   // --- FUNCIÓN MAESTRA (AHORA SÍ ADENTRO DE LA CLASE) ---
   void _volverAlMapa() {
@@ -338,6 +432,154 @@ class _MainLayoutState extends State<MainLayout> {
       _indiceActual = index;
       _animacionContenidoKey++;
     });
+  }
+
+  int? get _menuTutorialLavaderoActual =>
+      _pasosTutorialLavadero[_pasoTutorialLavadero].menuIndex;
+
+  _PasoTutorialSidebarLavadero get _pasoTutorialActualLavadero =>
+      _pasosTutorialLavadero[_pasoTutorialLavadero];
+
+  GlobalKey? _obtenerKeyObjetivoTutorialLavadero(
+    _PasoTutorialSidebarLavadero paso,
+  ) {
+    switch (paso.objetivo) {
+      case 'buscador':
+        return _buscadorTutorialKey;
+      case 'avatar':
+        return _avatarTutorialKey;
+      case 'mapa':
+        return _mapaTutorialKey;
+      default:
+        if (paso.menuIndex == null) return null;
+        return _menuTutorialKeys[paso.menuIndex];
+    }
+  }
+
+  Rect? _obtenerRectGlobalDesdeKey(GlobalKey key) {
+    final context = key.currentContext;
+    if (context == null) return null;
+    final render = context.findRenderObject();
+    if (render is! RenderBox || !render.hasSize) return null;
+    final topLeft = render.localToGlobal(Offset.zero);
+    return topLeft & render.size;
+  }
+
+  void _sincronizarTutorialConPasoActual() {
+    if (!_mostrarTutorialLavadero) return;
+
+    final paso = _pasoTutorialActualLavadero;
+    if (_indiceActual != 0) {
+      setState(() {
+        _indiceAnterior = _indiceActual;
+        _indiceActual = 0;
+        _animacionContenidoKey++;
+      });
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_mostrarTutorialLavadero) return;
+      final bool esMovil = MediaQuery.of(context).size.width < 950;
+      final scaffold = _mainScaffoldKey.currentState;
+
+      if (paso.mostrarSidebar) {
+        if (esMovil) {
+          if (!(scaffold?.isDrawerOpen ?? false)) {
+            scaffold?.openDrawer();
+          }
+        } else if (!_sidebarAbierto) {
+          setState(() => _sidebarAbierto = true);
+        }
+      } else {
+        if (esMovil) {
+          if (scaffold?.isDrawerOpen ?? false) {
+            Navigator.of(context).pop();
+          }
+        } else if (_sidebarAbierto) {
+          setState(() => _sidebarAbierto = false);
+        }
+      }
+    });
+  }
+
+  Future<void> _evaluarTutorialLavadero() async {
+    if (_tutorialLavaderoEvaluado || _rolUsuario != 'lavadero') return;
+    _tutorialLavaderoEvaluado = true;
+
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final dynamic raw =
+        user.userMetadata?['tutorial_lavadero_sidebar_v1'];
+    final bool yaVisto = raw == true || raw?.toString().toLowerCase() == 'true';
+    if (yaVisto) return;
+
+    if (!mounted) return;
+    setState(() {
+      _mostrarTutorialLavadero = true;
+      _pasoTutorialLavadero = 0;
+      _indiceActual = 0;
+      _sidebarAbierto = true;
+    });
+    _sincronizarTutorialConPasoActual();
+  }
+
+  Future<void> _marcarTutorialLavaderoComoVisto() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    try {
+      final metadataActual = Map<String, dynamic>.from(
+        user.userMetadata ?? const <String, dynamic>{},
+      );
+      metadataActual['tutorial_lavadero_sidebar_v1'] = true;
+      await supabase.auth.updateUser(UserAttributes(data: metadataActual));
+    } catch (e) {
+      debugPrint("No se pudo guardar estado del tutorial: $e");
+    }
+  }
+
+  Future<void> _cerrarTutorialLavadero() async {
+    if (!_mostrarTutorialLavadero) return;
+    if (mounted) {
+      setState(() {
+        _mostrarTutorialLavadero = false;
+      });
+    }
+    await _marcarTutorialLavaderoComoVisto();
+  }
+
+  void _siguientePasoTutorialLavadero() {
+    if (_pasoTutorialLavadero >= _pasosTutorialLavadero.length - 1) {
+      _cerrarTutorialLavadero();
+      return;
+    }
+    setState(() {
+      _pasoTutorialLavadero++;
+    });
+    _sincronizarTutorialConPasoActual();
+  }
+
+  void _anteriorPasoTutorialLavadero() {
+    if (_pasoTutorialLavadero == 0) return;
+    setState(() {
+      _pasoTutorialLavadero--;
+    });
+    _sincronizarTutorialConPasoActual();
+  }
+
+  void _iniciarTutorialLavaderoManual() {
+    if (_rolUsuario != 'lavadero') return;
+    final int indicePrevio = _indiceActual;
+    setState(() {
+      _mostrarTutorialLavadero = true;
+      _pasoTutorialLavadero = 0;
+      _indiceAnterior = indicePrevio;
+      _indiceActual = 0;
+      _animacionContenidoKey++;
+      _sidebarAbierto = true;
+    });
+    _sincronizarTutorialConPasoActual();
   }
 
   List<dynamic> _misClientesReales = [];
@@ -419,7 +661,10 @@ class _MainLayoutState extends State<MainLayout> {
             _mostrarPopupRating = false;
             _puntuacionPendiente = 0;
             _popupRatingOcultoEnSesion = false;
+            _mostrarTutorialLavadero = false;
+            _pasoTutorialLavadero = 0;
           });
+          _tutorialLavaderoEvaluado = false;
           _comentarioRatingCtrl.clear();
         } else {
           _popupRatingOcultoEnSesion = false;
@@ -910,7 +1155,12 @@ class _MainLayoutState extends State<MainLayout> {
             });
             _comentarioRatingCtrl.clear();
             _cargarMisClientes();
+            _evaluarTutorialLavadero();
           } else if (rol == 'cliente') {
+            setState(() {
+              _mostrarTutorialLavadero = false;
+            });
+            _tutorialLavaderoEvaluado = false;
             _buscarTurnoPendienteParaRating();
           }
         }
@@ -1163,6 +1413,7 @@ class _MainLayoutState extends State<MainLayout> {
     return [
       MapScreen(
         key: mapScreenKey,
+        mapViewportKey: _mapaTutorialKey,
         onIrAPerfil: () => setState(() => _indiceActual = 2),
         onSelectLavadero: (l) => setState(() => _lavaderoSeleccionado = l),
         onDeselccionar: () => setState(() => _lavaderoSeleccionado = null),
@@ -1175,7 +1426,10 @@ class _MainLayoutState extends State<MainLayout> {
         },
       ),
       MisTurnosScreen(onVolver: _volverAlMapa), // <-- Usamos la nueva función
-      PerfilScreen(onVolver: _volverAlMapa), // <-- Usamos la nueva función
+      PerfilScreen(
+        onVolver: _volverAlMapa,
+        onMostrarTutorialLavadero: _iniciarTutorialLavaderoManual,
+      ), // <-- Usamos la nueva función
       _buildPantallaMisClientes(),
       _buildPantallaMisLavaderos(),
       // Pasamos la función a la pantalla de registro
@@ -1189,6 +1443,7 @@ class _MainLayoutState extends State<MainLayout> {
     final bool esMovil = MediaQuery.of(context).size.width < 950;
 
     return Scaffold(
+      key: _mainScaffoldKey,
       // 1. EL DRAWER: Solo se activa en pantallas chicas
       drawer: esMovil && _indiceActual == 0
           ? Drawer(
@@ -1388,6 +1643,7 @@ class _MainLayoutState extends State<MainLayout> {
                                 children: [
                                   // Cuadro de texto
                                   Container(
+                                    key: _buscadorTutorialKey,
                                     height: 45,
                                     decoration: BoxDecoration(
                                       color: Colors.white,
@@ -1525,6 +1781,7 @@ class _MainLayoutState extends State<MainLayout> {
                               cursor: SystemMouseCursors
                                   .click, // <--- LA MAGIA ESTÁ ACÁ
                               child: GestureDetector(
+                                key: _avatarTutorialKey,
                                 onTap: () => setState(() => _indiceActual = 2),
                                 child: CircleAvatar(
                                   radius: 20,
@@ -1623,10 +1880,11 @@ class _MainLayoutState extends State<MainLayout> {
                         width: anchoPopupRating,
                         child: _buildPopupRatingFlotante(),
                       ),
+                    if (_mostrarTutorialLavadero && _rolUsuario == 'lavadero')
+                      Positioned.fill(child: _buildOverlayTutorialLavadero()),
                   ],
                 ),
               ),
-
             ],
           );
         },
@@ -1668,20 +1926,45 @@ class _MainLayoutState extends State<MainLayout> {
 
         // --- BOTÓN MIS RESERVAS: Solo si tiene sesión ---
         if (tieneSesion)
-          _itemMenuLateral(Icons.calendar_month, "Mis Reservas", 1),
+          _itemMenuLateral(
+            Icons.calendar_month,
+            "Mis Reservas",
+            1,
+            tutorialKey: _menuTutorialKeys[1],
+          ),
 
-        _itemMenuLateral(Icons.person, "Mi Perfil", 2),
+        _itemMenuLateral(
+          Icons.person,
+          "Mi Perfil",
+          2,
+          tutorialKey: _menuTutorialKeys[2],
+        ),
 
         // --- BOTÓN CONFIGURAR: Solo si tiene sesión Y es dueño ---
         if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(Icons.add_business, "Registrar Mi Lavadero", 99),
+          _itemMenuLateral(
+            Icons.add_business,
+            "Registrar Mi Lavadero",
+            99,
+            tutorialKey: _menuTutorialKeys[99],
+          ),
 
         // --- NUEVO BOTÓN: MIS CLIENTES (Solo para Dueños) ---
         // Lo asignamos con el índice 100 para no chocar con los demás
         if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(Icons.people_alt_rounded, "Mis Clientes", 100),
+          _itemMenuLateral(
+            Icons.people_alt_rounded,
+            "Mis Clientes",
+            100,
+            tutorialKey: _menuTutorialKeys[100],
+          ),
         if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(Icons.business_center_rounded, "Mis Lavaderos", 101),
+          _itemMenuLateral(
+            Icons.business_center_rounded,
+            "Mis Lavaderos",
+            101,
+            tutorialKey: _menuTutorialKeys[101],
+          ),
 
         const Spacer(),
         const SizedBox(height: 20),
@@ -1689,13 +1972,212 @@ class _MainLayoutState extends State<MainLayout> {
     );
   }
 
+  Widget _buildOverlayTutorialLavadero() {
+    final paso = _pasoTutorialActualLavadero;
+    final keyObjetivo = _obtenerKeyObjetivoTutorialLavadero(paso);
+    final Rect? rectObjetivo = keyObjetivo == null
+        ? null
+        : _obtenerRectGlobalDesdeKey(keyObjetivo);
+    final Size pantalla = MediaQuery.of(context).size;
+    final double cardWidth = pantalla.width < 720
+        ? (pantalla.width - 32).clamp(260.0, 420.0).toDouble()
+        : 360;
+
+    double cardLeft = 16;
+    double cardTop = (pantalla.height - 240).clamp(16, pantalla.height - 210);
+
+    if (rectObjetivo != null) {
+      if (pantalla.width >= 900) {
+        if (rectObjetivo.center.dx < pantalla.width * 0.5) {
+          cardLeft = (rectObjetivo.right + 14).clamp(
+            16.0,
+            pantalla.width - cardWidth - 16,
+          );
+        } else {
+          cardLeft = (rectObjetivo.left - cardWidth - 14).clamp(
+            16.0,
+            pantalla.width - cardWidth - 16,
+          );
+        }
+        cardTop = rectObjetivo.top.clamp(20.0, pantalla.height - 230);
+      } else {
+        final double abajo = rectObjetivo.bottom + 14;
+        final double arriba = rectObjetivo.top - 220;
+        cardTop = (abajo <= pantalla.height - 210 ? abajo : arriba).clamp(
+          16.0,
+          pantalla.height - 210,
+        );
+      }
+    }
+
+    return Material(
+      color: Colors.black.withOpacity(0.56),
+      child: Stack(
+        children: [
+          if (rectObjetivo != null)
+            Positioned(
+              left: rectObjetivo.left - 6,
+              top: rectObjetivo.top - 6,
+              width: rectObjetivo.width + 12,
+              height: rectObjetivo.height + 12,
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: const Color(0xFF3ABEF9),
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF3ABEF9).withOpacity(0.45),
+                        blurRadius: 18,
+                        spreadRadius: 2,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Positioned(
+            left: cardLeft,
+            top: cardTop,
+            width: cardWidth,
+            child: _buildTarjetaTutorialLavadero(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTarjetaTutorialLavadero() {
+    final paso = _pasoTutorialActualLavadero;
+    final bool esUltimo =
+        _pasoTutorialLavadero == _pasosTutorialLavadero.length - 1;
+
+    return Material(
+      elevation: 16,
+      borderRadius: BorderRadius.circular(18),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E2D),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: const Color(0xFF3ABEF9).withOpacity(0.55)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(
+                  Icons.auto_awesome_rounded,
+                  size: 18,
+                  color: Color(0xFF3ABEF9),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "Guía rápida (${_pasoTutorialLavadero + 1}/${_pasosTutorialLavadero.length})",
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: Color(0xFFB6E8FF),
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _cerrarTutorialLavadero,
+                  child: const Text(
+                    "Saltar",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            Text(
+              paso.titulo.toUpperCase(),
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w900,
+                color: Color(0xFF3ABEF9),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              paso.descripcion,
+              style: const TextStyle(
+                fontSize: 12,
+                height: 1.25,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                if (_pasoTutorialLavadero > 0)
+                  OutlinedButton(
+                    onPressed: _anteriorPasoTutorialLavadero,
+                    style: OutlinedButton.styleFrom(
+                      side: const BorderSide(color: Color(0xFF64748B)),
+                    ),
+                    child: const Text(
+                      "Anterior",
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white70,
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                ElevatedButton.icon(
+                  onPressed: esUltimo
+                      ? _cerrarTutorialLavadero
+                      : _siguientePasoTutorialLavadero,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF3ABEF9),
+                    foregroundColor: const Color(0xFF0F172A),
+                  ),
+                  icon: Icon(
+                    esUltimo ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                    size: 16,
+                  ),
+                  label: Text(
+                    esUltimo ? "Finalizar" : "Siguiente",
+                    style: const TextStyle(fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   // Función para crear los botones del menú lateral
   // --- SUSTITUIR DESDE AQUÍ ---
-  Widget _itemMenuLateral(IconData icon, String label, int index) {
+  Widget _itemMenuLateral(
+    IconData icon,
+    String label,
+    int index, {
+    GlobalKey? tutorialKey,
+  }) {
     bool seleccionado = _indiceActual == index;
     bool enHover = false;
+    final bool esPasoTutorial =
+        _mostrarTutorialLavadero &&
+        _rolUsuario == 'lavadero' &&
+        _menuTutorialLavaderoActual == index;
+    final bool destacado = seleccionado || esPasoTutorial;
 
     return Padding(
+      key: tutorialKey,
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 4,
@@ -1714,21 +2196,33 @@ class _MainLayoutState extends State<MainLayout> {
                 duration: const Duration(milliseconds: 110),
                 curve: Curves.easeOut,
                 decoration: BoxDecoration(
-                  color: seleccionado
+                  color: esPasoTutorial
+                      ? const Color(0xFF3ABEF9).withOpacity(0.25)
+                      : destacado
                       ? const Color(0xFF3ABEF9).withOpacity(0.15)
                       : (enHover
                             ? Colors.white.withOpacity(0.08)
                             : Colors.transparent),
                   borderRadius: BorderRadius.circular(15),
                   border: Border.all(
-                    color: seleccionado
+                    color: esPasoTutorial
+                        ? const Color(0xFF3ABEF9).withOpacity(0.8)
+                        : destacado
                         ? const Color(0xFF3ABEF9).withOpacity(0.3)
                         : (enHover
                               ? Colors.white.withOpacity(0.18)
                               : Colors.transparent),
                     width: 1,
                   ),
-                  boxShadow: enHover
+                  boxShadow: esPasoTutorial
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF3ABEF9).withOpacity(0.35),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ]
+                      : enHover
                       ? [
                           BoxShadow(
                             color: Colors.black.withOpacity(0.16),
@@ -1742,7 +2236,7 @@ class _MainLayoutState extends State<MainLayout> {
                   visualDensity: VisualDensity.compact,
                   leading: Icon(
                     icon,
-                    color: seleccionado
+                    color: destacado
                         ? const Color(0xFF3ABEF9)
                         : const Color(0xFF3ABEF9).withOpacity(0.7),
                     size: 22,
@@ -1750,21 +2244,27 @@ class _MainLayoutState extends State<MainLayout> {
                   title: Text(
                     label,
                     style: TextStyle(
-                      color: seleccionado ? Colors.white : Colors.white70,
-                      fontWeight:
-                          seleccionado ? FontWeight.bold : FontWeight.normal,
+                      color: destacado ? Colors.white : Colors.white70,
+                      fontWeight: destacado
+                          ? FontWeight.bold
+                          : FontWeight.normal,
                       fontSize: 13,
                       letterSpacing: 0.5,
                     ),
                   ),
-                  trailing: seleccionado
-                      ? const Icon(
-                          Icons.arrow_right,
-                          color: Color(0xFF3ABEF9),
+                  trailing: destacado
+                      ? Icon(
+                          esPasoTutorial
+                              ? Icons.auto_awesome_rounded
+                              : Icons.arrow_right,
+                          color: const Color(0xFF3ABEF9),
                           size: 18,
                         )
                       : null,
                   onTap: () {
+                    if (_mostrarTutorialLavadero && _rolUsuario == 'lavadero') {
+                      return;
+                    }
                     if (Navigator.canPop(context)) Navigator.pop(context);
                     _irASeccionConTransicion(index);
                   },
@@ -2871,12 +3371,14 @@ class MapScreen extends StatefulWidget {
   final Function(dynamic)? onSelectLavadero;
   final VoidCallback? onDeselccionar;
   final Function(List<dynamic>)? onLavaderosCargados;
+  final GlobalKey? mapViewportKey;
   const MapScreen({
     super.key,
     this.onIrAPerfil,
     this.onSelectLavadero,
     this.onDeselccionar, // <--- AGREGA ESTA LÍNEA AQUÍ ADENTRO
     this.onLavaderosCargados,
+    this.mapViewportKey,
   });
 
   @override
@@ -3223,56 +3725,62 @@ class _MapScreenState extends State<MapScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          FlutterMap(
-            mapController: _mapController,
-            options: MapOptions(
-              initialCenter: const LatLng(-34.098, -59.028),
-              initialZoom: 14,
-              // ESTA FUNCIÓN SE ACTIVA AL TOCAR CUALQUIER PARTE VACÍA DEL MAPA
-              onTap: (tapPosition, point) {
-                setState(() => _markerTarjetaActivaId = null);
-                if (widget.onDeselccionar != null) {
-                  widget.onDeselccionar!();
-                }
-              },
-            ),
-            children: [
-              TileLayer(
-                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          Container(
+            key: widget.mapViewportKey,
+            child: FlutterMap(
+              mapController: _mapController,
+              options: MapOptions(
+                initialCenter: const LatLng(-34.098, -59.028),
+                initialZoom: 14,
+                // ESTA FUNCIÓN SE ACTIVA AL TOCAR CUALQUIER PARTE VACÍA DEL MAPA
+                onTap: (tapPosition, point) {
+                  setState(() => _markerTarjetaActivaId = null);
+                  if (widget.onDeselccionar != null) {
+                    widget.onDeselccionar!();
+                  }
+                },
               ),
-              MarkerLayer(markers: _buildMarkersBase()),
-              MarkerLayer(markers: _buildMarkerTarjetaOverlay()),
-              // --- PUNTO AZUL REAL (SOLO SI EL GPS RESPONDIÓ) ---
-              if (_miPosicionActual != null)
-                MarkerLayer(
-                  markers: [
-                    Marker(
-                      point: _miPosicionActual!,
-                      width: 30,
-                      height: 30,
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(
-                            0.3,
-                          ), // Brillo exterior
-                          shape: BoxShape.circle,
-                        ),
-                        child: Center(
-                          child: Container(
-                            width: 12,
-                            height: 12,
-                            decoration: BoxDecoration(
-                              color: Colors.blueAccent, // Punto centro
-                              shape: BoxShape.circle,
-                              border: Border.all(color: Colors.white, width: 2),
+              children: [
+                TileLayer(
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                ),
+                MarkerLayer(markers: _buildMarkersBase()),
+                MarkerLayer(markers: _buildMarkerTarjetaOverlay()),
+                // --- PUNTO AZUL REAL (SOLO SI EL GPS RESPONDIÓ) ---
+                if (_miPosicionActual != null)
+                  MarkerLayer(
+                    markers: [
+                      Marker(
+                        point: _miPosicionActual!,
+                        width: 30,
+                        height: 30,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withOpacity(
+                              0.3,
+                            ), // Brillo exterior
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Container(
+                              width: 12,
+                              height: 12,
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent, // Punto centro
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-            ],
+                    ],
+                  ),
+              ],
+            ),
           ),
           // Aquí siguen tus botones circulares de GPS y Zoom que ya tienes...
           // --- PANEL DE BOTONES FACHEROS ---
@@ -3312,11 +3820,7 @@ class _MapScreenState extends State<MapScreen> {
                           _mapController.camera.zoom + 1,
                         ),
                       ),
-                      Container(
-                        width: 30,
-                        height: 1,
-                        color: Colors.grey[300],
-                      ),
+                      Container(width: 30, height: 1, color: Colors.grey[300]),
                       _botonZoom(
                         icon: Icons.remove,
                         onPressed: () => _animatedMapMove(
@@ -3448,7 +3952,12 @@ class TarjetaMarkerOverlay extends StatelessWidget {
 // --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
   final VoidCallback? onVolver;
-  const PerfilScreen({super.key, this.onVolver});
+  final VoidCallback? onMostrarTutorialLavadero;
+  const PerfilScreen({
+    super.key,
+    this.onVolver,
+    this.onMostrarTutorialLavadero,
+  });
 
   @override
   State<PerfilScreen> createState() => _PerfilScreenState();
@@ -3846,6 +4355,20 @@ class _PerfilScreenState extends State<PerfilScreen> {
                       ),
                     ),
                   const SizedBox(height: 16),
+
+                  if ((_rolUsuario == 'lavadero' || _rolUsuario == 'dueño') &&
+                      widget.onMostrarTutorialLavadero != null)
+                    _buildBentoCard(
+                      child: _actionRow(
+                        Icons.auto_awesome_rounded,
+                        "Ver tutorial guiado",
+                        azulATT,
+                        onTap: widget.onMostrarTutorialLavadero,
+                      ),
+                    ),
+                  if ((_rolUsuario == 'lavadero' || _rolUsuario == 'dueño') &&
+                      widget.onMostrarTutorialLavadero != null)
+                    const SizedBox(height: 16),
 
                   // ACCIONES FINALES
                   _buildBentoCard(
