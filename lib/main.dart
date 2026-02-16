@@ -315,73 +315,141 @@ class _MainLayoutState extends State<MainLayout> {
   final GlobalKey _buscadorTutorialKey = GlobalKey();
   final GlobalKey _avatarTutorialKey = GlobalKey();
   final GlobalKey _mapaTutorialKey = GlobalKey();
-  bool _mostrarTutorialLavadero = false;
-  int _pasoTutorialLavadero = 0;
+  bool _mostrarTutorial = false;
+  int _pasoTutorialActual = 0;
   bool _tutorialLavaderoEvaluado = false;
-  final List<_PasoTutorialSidebarLavadero> _pasosTutorialLavadero =
-      const <_PasoTutorialSidebarLavadero>[
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'menu_reservas',
-          mostrarSidebar: true,
-          menuIndex: 1,
-          titulo: "Mis Reservas",
-          descripcion:
-              "Consulta tus turnos activos, completados o cancelados en un solo lugar.",
-        ),
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'menu_perfil',
-          mostrarSidebar: true,
-          menuIndex: 2,
-          titulo: "Mi Perfil",
-          descripcion:
-              "Actualiza tus datos personales y la información de tu cuenta.",
-        ),
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'menu_registro',
-          mostrarSidebar: true,
-          menuIndex: 99,
-          titulo: "Registrar Mi Lavadero",
-          descripcion:
-              "Configura servicios, precios, horarios y ubicación de tu negocio.",
-        ),
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'menu_clientes',
-          mostrarSidebar: true,
-          menuIndex: 100,
-          titulo: "Mis Clientes",
-          descripcion:
-              "Visualiza los usuarios que reservaron turnos en tus lavaderos.",
-        ),
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'menu_lavaderos',
-          mostrarSidebar: true,
-          menuIndex: 101,
-          titulo: "Mis Lavaderos",
-          descripcion:
-              "Gestiona todos tus locales registrados y edita su información.",
-        ),
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'buscador',
-          mostrarSidebar: false,
-          titulo: "Buscador Inteligente",
-          descripcion:
-              "Encuentra lavaderos rápido por nombre o dirección desde esta barra.",
-        ),
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'avatar',
-          mostrarSidebar: false,
-          titulo: "Avatar de Usuario",
-          descripcion:
-              "Desde aquí accedes a tu perfil y ajustes de tu cuenta.",
-        ),
-        _PasoTutorialSidebarLavadero(
-          objetivo: 'mapa',
-          mostrarSidebar: false,
-          titulo: "Marcadores del Mapa",
-          descripcion:
-              "Aquí se muestran lavaderos disponibles. Toca uno para ver su detalle.",
-        ),
-      ];
+  bool _tutorialClienteEvaluado = false;
+  String _tutorialMetadataKeyActivo = '';
+  String _tituloTutorialActivo = "Guía rápida";
+  List<_PasoTutorialSidebarLavadero> _pasosTutorialActivos =
+      const <_PasoTutorialSidebarLavadero>[];
+  final List<_PasoTutorialSidebarLavadero>
+  _pasosTutorialLavadero = const <_PasoTutorialSidebarLavadero>[
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'menu_reservas',
+      mostrarSidebar: true,
+      menuIndex: 1,
+      titulo: "Mis Reservas",
+      descripcion:
+          "Consulta tus turnos activos, completados o cancelados en un solo lugar.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'menu_perfil',
+      mostrarSidebar: true,
+      menuIndex: 2,
+      titulo: "Mi Perfil",
+      descripcion:
+          "Actualiza tus datos personales y la información de tu cuenta.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'menu_registro',
+      mostrarSidebar: true,
+      menuIndex: 99,
+      titulo: "Registrar Mi Lavadero",
+      descripcion:
+          "Configura servicios, precios, horarios y ubicación de tu negocio.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'menu_clientes',
+      mostrarSidebar: true,
+      menuIndex: 100,
+      titulo: "Mis Clientes",
+      descripcion:
+          "Visualiza los usuarios que reservaron turnos en tus lavaderos.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'menu_lavaderos',
+      mostrarSidebar: true,
+      menuIndex: 101,
+      titulo: "Mis Lavaderos",
+      descripcion:
+          "Gestiona todos tus locales registrados y edita su información.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'buscador',
+      mostrarSidebar: false,
+      titulo: "Buscador Inteligente",
+      descripcion:
+          "Encuentra lavaderos rápido por nombre o dirección desde esta barra.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'avatar',
+      mostrarSidebar: false,
+      titulo: "Avatar de Usuario",
+      descripcion: "Desde aquí accedes a tu perfil y ajustes de tu cuenta.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'mapa',
+      mostrarSidebar: false,
+      titulo: "Marcadores del Mapa",
+      descripcion:
+          "Aquí se muestran lavaderos disponibles. Toca uno para ver su detalle.",
+    ),
+  ];
+  final List<_PasoTutorialSidebarLavadero>
+  _pasosTutorialCliente = const <_PasoTutorialSidebarLavadero>[
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'buscador',
+      mostrarSidebar: false,
+      titulo: "Nos alegra que elegiste ATT!",
+      descripcion:
+          "Empieza buscando lavaderos por nombre o dirección desde aquí.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'mapa',
+      mostrarSidebar: false,
+      titulo: "Marcadores disponibles",
+      descripcion:
+          "Toca un marcador para ver detalles del lavadero y sus servicios.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'avatar',
+      mostrarSidebar: false,
+      titulo: "Mi Perfil",
+      descripcion:
+          "Desde el avatar puedes editar tus datos y ver el tutorial cuando quieras.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'menu_reservas',
+      mostrarSidebar: true,
+      menuIndex: 1,
+      titulo: "Mis Reservas",
+      descripcion:
+          "Aquí gestionas turnos activos, completados y tus comprobantes.",
+    ),
+  ];
+  final List<_PasoTutorialSidebarLavadero>
+  _pasosTutorialSolicitarTurno = const <_PasoTutorialSidebarLavadero>[
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'mapa',
+      mostrarSidebar: false,
+      titulo: "Paso 1: Elegir lavadero",
+      descripcion:
+          "Selecciona un marcador en el mapa para abrir la ficha del lavadero.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'buscador',
+      mostrarSidebar: false,
+      titulo: "Paso 2: Buscar más rápido",
+      descripcion:
+          "Si prefieres, usa el buscador para encontrar un lavadero puntual.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'mapa',
+      mostrarSidebar: false,
+      titulo: "Paso 3: Solicitar turno",
+      descripcion:
+          "En la ficha del lavadero verás el botón para solicitar turno y avanzar al pago.",
+    ),
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'menu_reservas',
+      mostrarSidebar: true,
+      menuIndex: 1,
+      titulo: "Paso 4: Seguimiento",
+      descripcion:
+          "Luego encontrarás tu reserva y comprobante en Mis Reservas.",
+    ),
+  ];
 
   // --- FUNCIÓN MAESTRA (AHORA SÍ ADENTRO DE LA CLASE) ---
   void _volverAlMapa() {
@@ -390,6 +458,7 @@ class _MainLayoutState extends State<MainLayout> {
       _sidebarAbierto = true;
       _lavaderoSeleccionado = null;
     });
+    mapScreenKey.currentState?.cargarLavaderosDeSupabase();
     _actualizarPromedioLavadero();
     if (_rolUsuario == 'cliente') {
       _buscarTurnoPendienteParaRating();
@@ -435,10 +504,10 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   int? get _menuTutorialLavaderoActual =>
-      _pasosTutorialLavadero[_pasoTutorialLavadero].menuIndex;
+      _pasosTutorialActivos[_pasoTutorialActual].menuIndex;
 
   _PasoTutorialSidebarLavadero get _pasoTutorialActualLavadero =>
-      _pasosTutorialLavadero[_pasoTutorialLavadero];
+      _pasosTutorialActivos[_pasoTutorialActual];
 
   GlobalKey? _obtenerKeyObjetivoTutorialLavadero(
     _PasoTutorialSidebarLavadero paso,
@@ -466,7 +535,7 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   void _sincronizarTutorialConPasoActual() {
-    if (!_mostrarTutorialLavadero) return;
+    if (!_mostrarTutorial) return;
 
     final paso = _pasoTutorialActualLavadero;
     if (_indiceActual != 0) {
@@ -478,7 +547,7 @@ class _MainLayoutState extends State<MainLayout> {
     }
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_mostrarTutorialLavadero) return;
+      if (!mounted || !_mostrarTutorial) return;
       final bool esMovil = MediaQuery.of(context).size.width < 950;
       final scaffold = _mainScaffoldKey.currentState;
 
@@ -502,6 +571,27 @@ class _MainLayoutState extends State<MainLayout> {
     });
   }
 
+  Future<void> _iniciarTutorial({
+    required String metadataKey,
+    required String titulo,
+    required List<_PasoTutorialSidebarLavadero> pasos,
+  }) async {
+    final int indicePrevio = _indiceActual;
+    if (!mounted) return;
+    setState(() {
+      _mostrarTutorial = true;
+      _pasoTutorialActual = 0;
+      _pasosTutorialActivos = pasos;
+      _tutorialMetadataKeyActivo = metadataKey;
+      _tituloTutorialActivo = titulo;
+      _indiceAnterior = indicePrevio;
+      _indiceActual = 0;
+      _animacionContenidoKey++;
+      _sidebarAbierto = true;
+    });
+    _sincronizarTutorialConPasoActual();
+  }
+
   Future<void> _evaluarTutorialLavadero() async {
     if (_tutorialLavaderoEvaluado || _rolUsuario != 'lavadero') return;
     _tutorialLavaderoEvaluado = true;
@@ -509,19 +599,32 @@ class _MainLayoutState extends State<MainLayout> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
-    final dynamic raw =
-        user.userMetadata?['tutorial_lavadero_sidebar_v1'];
+    final dynamic raw = user.userMetadata?['tutorial_lavadero_sidebar_v1'];
     final bool yaVisto = raw == true || raw?.toString().toLowerCase() == 'true';
     if (yaVisto) return;
 
-    if (!mounted) return;
-    setState(() {
-      _mostrarTutorialLavadero = true;
-      _pasoTutorialLavadero = 0;
-      _indiceActual = 0;
-      _sidebarAbierto = true;
-    });
-    _sincronizarTutorialConPasoActual();
+    await _iniciarTutorial(
+      metadataKey: 'tutorial_lavadero_sidebar_v1',
+      titulo: 'Guía para lavaderos',
+      pasos: _pasosTutorialLavadero,
+    );
+  }
+
+  Future<void> _evaluarTutorialCliente() async {
+    if (_tutorialClienteEvaluado || _rolUsuario != 'cliente') return;
+    _tutorialClienteEvaluado = true;
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final dynamic raw = user.userMetadata?['tutorial_cliente_general_v1'];
+    final bool yaVisto = raw == true || raw?.toString().toLowerCase() == 'true';
+    if (yaVisto) return;
+
+    await _iniciarTutorial(
+      metadataKey: 'tutorial_cliente_general_v1',
+      titulo: 'Guía para clientes',
+      pasos: _pasosTutorialCliente,
+    );
   }
 
   Future<void> _marcarTutorialLavaderoComoVisto() async {
@@ -532,7 +635,9 @@ class _MainLayoutState extends State<MainLayout> {
       final metadataActual = Map<String, dynamic>.from(
         user.userMetadata ?? const <String, dynamic>{},
       );
-      metadataActual['tutorial_lavadero_sidebar_v1'] = true;
+      if (_tutorialMetadataKeyActivo.isNotEmpty) {
+        metadataActual[_tutorialMetadataKeyActivo] = true;
+      }
       await supabase.auth.updateUser(UserAttributes(data: metadataActual));
     } catch (e) {
       debugPrint("No se pudo guardar estado del tutorial: $e");
@@ -540,46 +645,58 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   Future<void> _cerrarTutorialLavadero() async {
-    if (!_mostrarTutorialLavadero) return;
+    if (!_mostrarTutorial) return;
     if (mounted) {
       setState(() {
-        _mostrarTutorialLavadero = false;
+        _mostrarTutorial = false;
       });
     }
     await _marcarTutorialLavaderoComoVisto();
   }
 
   void _siguientePasoTutorialLavadero() {
-    if (_pasoTutorialLavadero >= _pasosTutorialLavadero.length - 1) {
+    if (_pasoTutorialActual >= _pasosTutorialActivos.length - 1) {
       _cerrarTutorialLavadero();
       return;
     }
     setState(() {
-      _pasoTutorialLavadero++;
+      _pasoTutorialActual++;
     });
     _sincronizarTutorialConPasoActual();
   }
 
   void _anteriorPasoTutorialLavadero() {
-    if (_pasoTutorialLavadero == 0) return;
+    if (_pasoTutorialActual == 0) return;
     setState(() {
-      _pasoTutorialLavadero--;
+      _pasoTutorialActual--;
     });
     _sincronizarTutorialConPasoActual();
   }
 
-  void _iniciarTutorialLavaderoManual() {
-    if (_rolUsuario != 'lavadero') return;
-    final int indicePrevio = _indiceActual;
-    setState(() {
-      _mostrarTutorialLavadero = true;
-      _pasoTutorialLavadero = 0;
-      _indiceAnterior = indicePrevio;
-      _indiceActual = 0;
-      _animacionContenidoKey++;
-      _sidebarAbierto = true;
-    });
-    _sincronizarTutorialConPasoActual();
+  void _iniciarTutorialGeneralManual() {
+    if (_rolUsuario == 'lavadero') {
+      _iniciarTutorial(
+        metadataKey: 'tutorial_lavadero_sidebar_v1',
+        titulo: 'Guía para lavaderos',
+        pasos: _pasosTutorialLavadero,
+      );
+      return;
+    }
+    if (_rolUsuario == 'cliente') {
+      _iniciarTutorial(
+        metadataKey: 'tutorial_cliente_general_v1',
+        titulo: 'Guía para clientes',
+        pasos: _pasosTutorialCliente,
+      );
+    }
+  }
+
+  void _iniciarTutorialSolicitarTurnoDesdeMenu() {
+    _iniciarTutorial(
+      metadataKey: 'tutorial_cliente_reserva_v1',
+      titulo: 'Cómo solicitar un turno en ATT!',
+      pasos: _pasosTutorialSolicitarTurno,
+    );
   }
 
   List<dynamic> _misClientesReales = [];
@@ -661,10 +778,11 @@ class _MainLayoutState extends State<MainLayout> {
             _mostrarPopupRating = false;
             _puntuacionPendiente = 0;
             _popupRatingOcultoEnSesion = false;
-            _mostrarTutorialLavadero = false;
-            _pasoTutorialLavadero = 0;
+            _mostrarTutorial = false;
+            _pasoTutorialActual = 0;
           });
           _tutorialLavaderoEvaluado = false;
+          _tutorialClienteEvaluado = false;
           _comentarioRatingCtrl.clear();
         } else {
           _popupRatingOcultoEnSesion = false;
@@ -1158,10 +1276,11 @@ class _MainLayoutState extends State<MainLayout> {
             _evaluarTutorialLavadero();
           } else if (rol == 'cliente') {
             setState(() {
-              _mostrarTutorialLavadero = false;
+              _mostrarTutorial = false;
             });
             _tutorialLavaderoEvaluado = false;
             _buscarTurnoPendienteParaRating();
+            _evaluarTutorialCliente();
           }
         }
       }
@@ -1428,7 +1547,7 @@ class _MainLayoutState extends State<MainLayout> {
       MisTurnosScreen(onVolver: _volverAlMapa), // <-- Usamos la nueva función
       PerfilScreen(
         onVolver: _volverAlMapa,
-        onMostrarTutorialLavadero: _iniciarTutorialLavaderoManual,
+        onMostrarTutorialGeneral: _iniciarTutorialGeneralManual,
       ), // <-- Usamos la nueva función
       _buildPantallaMisClientes(),
       _buildPantallaMisLavaderos(),
@@ -1489,11 +1608,15 @@ class _MainLayoutState extends State<MainLayout> {
                       curve: Curves.easeOutBack,
                       tween: Tween(begin: 0, end: 1),
                       builder: (context, t, child) {
+                        final double safeT = t.clamp(0.0, 1.0).toDouble();
                         final bool avanza = _indiceActual >= _indiceAnterior;
-                        final double dx = (avanza ? 0.07 : -0.07) * (1 - t);
-                        final double scale = 0.975 + (0.025 * t);
+                        final double dx = (avanza ? 0.07 : -0.07) * (1 - safeT);
+                        final double scale = 0.975 + (0.025 * safeT);
+                        final double opacity = (0.7 + (0.3 * safeT))
+                            .clamp(0.0, 1.0)
+                            .toDouble();
                         return Opacity(
-                          opacity: 0.7 + (0.3 * t),
+                          opacity: opacity,
                           child: Transform.scale(
                             scale: scale,
                             child: Transform.translate(
@@ -1880,7 +2003,7 @@ class _MainLayoutState extends State<MainLayout> {
                         width: anchoPopupRating,
                         child: _buildPopupRatingFlotante(),
                       ),
-                    if (_mostrarTutorialLavadero && _rolUsuario == 'lavadero')
+                    if (_mostrarTutorial)
                       Positioned.fill(child: _buildOverlayTutorialLavadero()),
                   ],
                 ),
@@ -1964,6 +2087,12 @@ class _MainLayoutState extends State<MainLayout> {
             "Mis Lavaderos",
             101,
             tutorialKey: _menuTutorialKeys[101],
+          ),
+        if (tieneSesion && _rolUsuario == 'cliente')
+          _itemMenuLateral(
+            Icons.help_outline_rounded,
+            "¿Cómo solicitar un turno en ATT!?",
+            200,
           ),
 
         const Spacer(),
@@ -2053,7 +2182,7 @@ class _MainLayoutState extends State<MainLayout> {
   Widget _buildTarjetaTutorialLavadero() {
     final paso = _pasoTutorialActualLavadero;
     final bool esUltimo =
-        _pasoTutorialLavadero == _pasosTutorialLavadero.length - 1;
+        _pasoTutorialActual == _pasosTutorialActivos.length - 1;
 
     return Material(
       elevation: 16,
@@ -2079,7 +2208,7 @@ class _MainLayoutState extends State<MainLayout> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    "Guía rápida (${_pasoTutorialLavadero + 1}/${_pasosTutorialLavadero.length})",
+                    "$_tituloTutorialActivo (${_pasoTutorialActual + 1}/${_pasosTutorialActivos.length})",
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
@@ -2117,10 +2246,22 @@ class _MainLayoutState extends State<MainLayout> {
                 color: Colors.white,
               ),
             ),
+            if (esUltimo)
+              const Padding(
+                padding: EdgeInsets.only(top: 10),
+                child: Text(
+                  "Si quieres volver a ver este tutorial, lo encuentras en Mi Perfil.",
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFB6E8FF),
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+              ),
             const SizedBox(height: 12),
             Row(
               children: [
-                if (_pasoTutorialLavadero > 0)
+                if (_pasoTutorialActual > 0)
                   OutlinedButton(
                     onPressed: _anteriorPasoTutorialLavadero,
                     style: OutlinedButton.styleFrom(
@@ -2144,7 +2285,9 @@ class _MainLayoutState extends State<MainLayout> {
                     foregroundColor: const Color(0xFF0F172A),
                   ),
                   icon: Icon(
-                    esUltimo ? Icons.check_rounded : Icons.arrow_forward_rounded,
+                    esUltimo
+                        ? Icons.check_rounded
+                        : Icons.arrow_forward_rounded,
                     size: 16,
                   ),
                   label: Text(
@@ -2171,9 +2314,7 @@ class _MainLayoutState extends State<MainLayout> {
     bool seleccionado = _indiceActual == index;
     bool enHover = false;
     final bool esPasoTutorial =
-        _mostrarTutorialLavadero &&
-        _rolUsuario == 'lavadero' &&
-        _menuTutorialLavaderoActual == index;
+        _mostrarTutorial && _menuTutorialLavaderoActual == index;
     final bool destacado = seleccionado || esPasoTutorial;
 
     return Padding(
@@ -2262,7 +2403,12 @@ class _MainLayoutState extends State<MainLayout> {
                         )
                       : null,
                   onTap: () {
-                    if (_mostrarTutorialLavadero && _rolUsuario == 'lavadero') {
+                    if (_mostrarTutorial) {
+                      return;
+                    }
+                    if (index == 200) {
+                      if (Navigator.canPop(context)) Navigator.pop(context);
+                      _iniciarTutorialSolicitarTurnoDesdeMenu();
                       return;
                     }
                     if (Navigator.canPop(context)) Navigator.pop(context);
@@ -3952,12 +4098,8 @@ class TarjetaMarkerOverlay extends StatelessWidget {
 // --- PANTALLA DE PERFIL ---
 class PerfilScreen extends StatefulWidget {
   final VoidCallback? onVolver;
-  final VoidCallback? onMostrarTutorialLavadero;
-  const PerfilScreen({
-    super.key,
-    this.onVolver,
-    this.onMostrarTutorialLavadero,
-  });
+  final VoidCallback? onMostrarTutorialGeneral;
+  const PerfilScreen({super.key, this.onVolver, this.onMostrarTutorialGeneral});
 
   @override
   State<PerfilScreen> createState() => _PerfilScreenState();
@@ -4356,18 +4498,22 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                   const SizedBox(height: 16),
 
-                  if ((_rolUsuario == 'lavadero' || _rolUsuario == 'dueño') &&
-                      widget.onMostrarTutorialLavadero != null)
+                  if ((_rolUsuario == 'lavadero' ||
+                          _rolUsuario == 'dueño' ||
+                          _rolUsuario == 'cliente') &&
+                      widget.onMostrarTutorialGeneral != null)
                     _buildBentoCard(
                       child: _actionRow(
                         Icons.auto_awesome_rounded,
                         "Ver tutorial guiado",
                         azulATT,
-                        onTap: widget.onMostrarTutorialLavadero,
+                        onTap: widget.onMostrarTutorialGeneral,
                       ),
                     ),
-                  if ((_rolUsuario == 'lavadero' || _rolUsuario == 'dueño') &&
-                      widget.onMostrarTutorialLavadero != null)
+                  if ((_rolUsuario == 'lavadero' ||
+                          _rolUsuario == 'dueño' ||
+                          _rolUsuario == 'cliente') &&
+                      widget.onMostrarTutorialGeneral != null)
                     const SizedBox(height: 16),
 
                   // ACCIONES FINALES
