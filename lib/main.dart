@@ -2201,7 +2201,7 @@ class _MainLayoutState extends State<MainLayout> {
             Row(
               children: [
                 const Icon(
-                  Icons.auto_awesome_rounded,
+                  Icons.route_rounded,
                   size: 18,
                   color: Color(0xFF3ABEF9),
                 ),
@@ -2396,7 +2396,7 @@ class _MainLayoutState extends State<MainLayout> {
                   trailing: destacado
                       ? Icon(
                           esPasoTutorial
-                              ? Icons.auto_awesome_rounded
+                              ? Icons.route_rounded
                               : Icons.arrow_right,
                           color: const Color(0xFF3ABEF9),
                           size: 18,
@@ -4504,7 +4504,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                       widget.onMostrarTutorialGeneral != null)
                     _buildBentoCard(
                       child: _actionRow(
-                        Icons.auto_awesome_rounded,
+                        Icons.route_rounded,
                         "Ver tutorial guiado",
                         azulATT,
                         onTap: widget.onMostrarTutorialGeneral,
