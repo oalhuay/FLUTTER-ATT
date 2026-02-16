@@ -1192,9 +1192,23 @@ class _MainLayoutState extends State<MainLayout> {
       // 1. EL DRAWER: Solo se activa en pantallas chicas
       drawer: esMovil && _indiceActual == 0
           ? Drawer(
-              backgroundColor: const Color(0xFF1E1E2D),
-              child:
-                  _buildContenidoSidebar(), // Esta función contendrá el logo y botones
+              width: 360,
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              child: SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  child: Material(
+                    elevation: 14,
+                    borderRadius: BorderRadius.circular(24),
+                    clipBehavior: Clip.antiAlias,
+                    child: Container(
+                      color: const Color(0xFF1E1E2D),
+                      child: _buildContenidoSidebar(),
+                    ),
+                  ),
+                ),
+              ),
             )
           : null,
       body: LayoutBuilder(
@@ -1301,17 +1315,21 @@ class _MainLayoutState extends State<MainLayout> {
                             ? -60
                             : 15,
                         child: Container(
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF1E1E2D),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
                             shape: BoxShape.circle,
                             boxShadow: [
-                              BoxShadow(color: Colors.black26, blurRadius: 5),
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.18),
+                                blurRadius: 8,
+                                offset: const Offset(0, 3),
+                              ),
                             ],
                           ),
                           child: IconButton(
                             icon: const Icon(
-                              Icons.chevron_right,
-                              color: Colors.white,
+                              Icons.menu_rounded,
+                              color: Color(0xFF1E1E2D),
                             ),
                             onPressed: () =>
                                 setState(() => _sidebarAbierto = true),
@@ -1627,15 +1645,20 @@ class _MainLayoutState extends State<MainLayout> {
         // --- LOGO PRINCIPAL ---
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Image.asset(
-                'assets/sidebar_logo.png',
-                width: 210,
-                fit: BoxFit.contain,
-              ),
-            ],
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final double logoWidth = (constraints.maxWidth - 4).clamp(
+                150.0,
+                210.0,
+              );
+              return Center(
+                child: Image.asset(
+                  'assets/sidebar_logo.png',
+                  width: logoWidth,
+                  fit: BoxFit.contain,
+                ),
+              );
+            },
           ),
         ),
         const SizedBox(height: 40),
