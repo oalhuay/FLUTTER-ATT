@@ -405,6 +405,34 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                         .maybeSingle();
 
                     if (factura != null) {
+                      Map<String, dynamic> serviciosPrecios = {};
+                      if (turno['lavadero_id'] != null) {
+                        final lavadero = await supabase
+                            .from('lavaderos')
+                            .select('servicios_precios')
+                            .eq('id', turno['lavadero_id'])
+                            .maybeSingle();
+                        if (lavadero != null) {
+                          serviciosPrecios = Map<String, dynamic>.from(
+                            lavadero['servicios_precios'] ?? {},
+                          );
+                        }
+                      }
+
+                      if (serviciosPrecios.isEmpty &&
+                          turno['lavadero_nombre'] != null) {
+                        final lavadero = await supabase
+                            .from('lavaderos')
+                            .select('servicios_precios')
+                            .eq('razon_social', turno['lavadero_nombre'])
+                            .maybeSingle();
+                        if (lavadero != null) {
+                          serviciosPrecios = Map<String, dynamic>.from(
+                            lavadero['servicios_precios'] ?? {},
+                          );
+                        }
+                      }
+
                       // 2. Usamos tu PdfHelper para generar y descargar el PDF en el momento
                       PdfHelper.descargarComprobante(
                         nroFactura: factura['payment_id']
@@ -417,6 +445,9 @@ class _MisTurnosScreenState extends State<MisTurnosScreen> {
                         ).format(DateTime.parse(factura['fecha_emision'])),
                         servicios: factura['servicios'] ?? "Reserva ATT",
                         total: (factura['total'] as num).toDouble(),
+                        fechaTurno: (turno['fecha'] ?? '').toString(),
+                        horaTurno: (turno['hora'] ?? '').toString(),
+                        serviciosPrecios: serviciosPrecios,
                       );
                     } else {
                       // Por si el webhook todavía no terminó de escribir

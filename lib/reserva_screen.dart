@@ -265,6 +265,11 @@ class _ReservaScreenState extends State<ReservaScreen>
                 ).format(DateTime.parse(factura['fecha_emision'])),
                 servicios: factura['servicios'] ?? "Servicio ATT!",
                 total: (factura['total'] as num).toDouble(),
+                fechaTurno: DateFormat('dd/MM/yyyy').format(_fechaSeleccionada),
+                horaTurno: _horaSeleccionada ?? '',
+                serviciosPrecios: Map<String, dynamic>.from(
+                  widget.lavadero['servicios_precios'] ?? {},
+                ),
               );
             },
             icon: const Icon(Icons.picture_as_pdf, color: Colors.white),
@@ -899,6 +904,13 @@ class _ReservaScreenState extends State<ReservaScreen>
                       ).format(DateTime.parse(factura['fecha_emision'])),
                       servicios: factura['servicios'] ?? "Lavado Premium ATT",
                       total: (factura['total'] as num).toDouble(),
+                      fechaTurno: DateFormat('dd/MM/yyyy').format(
+                        _fechaSeleccionada,
+                      ),
+                      horaTurno: _horaSeleccionada ?? '',
+                      serviciosPrecios: Map<String, dynamic>.from(
+                        widget.lavadero['servicios_precios'] ?? {},
+                      ),
                     ),
                   );
                 }
