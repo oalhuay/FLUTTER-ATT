@@ -289,6 +289,17 @@ async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
 app.post("/create-preference", async (req, res) => {
   try {
     const { titulo, precio, userId, metadata } = req.body;
+    const metadataNormalizada = {
+      ...(metadata || {}),
+      fecha_turno: metadata?.fecha_turno || "",
+      hora_turno: metadata?.hora_turno || "",
+      lavadero_id: metadata?.lavadero_id || "",
+      lavadero_nombre: metadata?.lavadero_nombre || "",
+      servicios: metadata?.servicios || "Lavado",
+      servicios_detalle: Array.isArray(metadata?.servicios_detalle)
+        ? JSON.stringify(metadata.servicios_detalle)
+        : metadata?.servicios_detalle || "[]",
+    };
     const preference = new Preference(client);
     const result = await preference.create({
       body: {
@@ -307,7 +318,7 @@ app.post("/create-preference", async (req, res) => {
         auto_return: "approved",
         external_reference: userId,
         notification_url: "https://flutter-att-8xz7.vercel.app/webhook",
-        metadata: metadata,
+        metadata: metadataNormalizada,
       },
     });
     res.json({ init_point: result.init_point });

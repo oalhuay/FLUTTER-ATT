@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import 'services/mp_service.dart';
 import 'services/pdf_helper.dart';
 import 'package:app_links/app_links.dart';
@@ -157,7 +158,7 @@ class _ReservaScreenState extends State<ReservaScreen>
           "servicios": _serviciosSeleccionados.isEmpty
               ? "Lavado General"
               : _serviciosSeleccionados.join(", "),
-          "servicios_detalle": serviciosDetalle,
+          "servicios_detalle": jsonEncode(serviciosDetalle),
         },
       );
 

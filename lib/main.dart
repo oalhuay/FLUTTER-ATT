@@ -40,6 +40,11 @@ String ObtenerRatingTexto(dynamic lavadero) => obtenerRatingTexto(lavadero);
 
 String obtenerGestionadoPor(dynamic lavadero) {
   if (lavadero is! Map) return 'Dueño no disponible';
+  final userId = supabase.auth.currentUser?.id;
+  final duenoId = lavadero['dueño_id']?.toString();
+  if (userId != null && duenoId != null && userId == duenoId) {
+    return 'Mi';
+  }
   final dynamic perfil = lavadero['perfiles_usuarios'];
   if (perfil is Map) {
     final nombre = (perfil['nombre'] ?? '').toString().trim();
