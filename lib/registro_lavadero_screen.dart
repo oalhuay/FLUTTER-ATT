@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -69,6 +70,25 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
         });
       }
     }
+
+    final precioLavado = _preciosMap['Lavado'] ?? 0.0;
+    _precioLavadoController.text = precioLavado > 0
+        ? precioLavado.toStringAsFixed(0)
+        : '';
+  }
+
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _nombreController.dispose();
+    _direccionController.dispose();
+    _telefonoController.dispose();
+    _bancoController.dispose();
+    _cuentaController.dispose();
+    _tagController.dispose();
+    _precioController.dispose();
+    _precioLavadoController.dispose();
+    super.dispose();
   }
 
   // --- CONTROLADORES CORE ---
@@ -82,6 +102,7 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
   final _cuentaController = TextEditingController();
   final _tagController = TextEditingController();
   final _precioController = TextEditingController();
+  final _precioLavadoController = TextEditingController();
 
   final supabase = Supabase.instance.client;
   final MapController _mapController = MapController();
@@ -685,10 +706,8 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
                     // CAMPO 1: PRECIO LAVADO BÁSICO (SERVICIO BASE)
                     TextField(
                       keyboardType: TextInputType.number,
-                      controller: TextEditingController(
-                        // Usamos ?? "" para que si es null, el campo simplemente aparezca vacío
-                        text: _preciosMap['Lavado']?.toStringAsFixed(0) ?? "",
-                      ),
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+                      controller: _precioLavadoController,
                       onChanged: (v) => setState(() {
                         _preciosMap['Lavado'] = double.tryParse(v) ?? 0.0;
                         // El servicio "Lavado" siempre debe estar en la lista de servicios para la DB
@@ -1055,6 +1074,9 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
       child: TextField(
         controller: ctrl,
         keyboardType: type,
+        inputFormatters: type == TextInputType.number
+            ? [FilteringTextInputFormatter.allow(RegExp(r'[0-9]'))]
+            : null,
         readOnly: isReadOnly,
         onChanged: onChanged, // Vincular
         onSubmitted: onSubmitted, // Vincular
@@ -1171,3 +1193,4 @@ class _RegistroLavaderoScreenState extends State<RegistroLavaderoScreen> {
     return partes[0];
   }
 }
+

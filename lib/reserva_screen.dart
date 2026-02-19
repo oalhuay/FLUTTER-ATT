@@ -96,12 +96,13 @@ class _ReservaScreenState extends State<ReservaScreen>
           _estaProcesando = false;
         });
 
-        if (paymentId != null) {
+        final paymentIdSeguro = paymentId;
+        if (paymentIdSeguro != null && paymentIdSeguro.isNotEmpty) {
           // Ejecutamos el registro. Nota: El webhook de Vercel ya debería estar
           // haciendo esto, pero dejarlo aquí sirve como respaldo (fallback).
           _ejecutarRegistroEnBaseDeDatos(
             status: 'approved',
-            paymentId: paymentId,
+            paymentId: paymentIdSeguro,
           );
         }
       } else if (urlString.contains("pago-fallido")) {
@@ -129,6 +130,17 @@ class _ReservaScreenState extends State<ReservaScreen>
 
     try {
       final mp = MPService();
+      final Map<String, dynamic> precios =
+          widget.lavadero['servicios_precios'] ?? {};
+      final List<Map<String, dynamic>> serviciosDetalle =
+          _serviciosSeleccionados
+              .map(
+                (servicio) => {
+                  "nombre": servicio,
+                  "precio": (precios[servicio] ?? 5000.0).toDouble(),
+                },
+              )
+              .toList();
 
       // IMPORTANTE: Los nombres de estas llaves (fecha_turno, hora_turno, etc)
       // deben ser EXACTAMENTE iguales a los que busca el Webhook en Node.js.
@@ -145,6 +157,7 @@ class _ReservaScreenState extends State<ReservaScreen>
           "servicios": _serviciosSeleccionados.isEmpty
               ? "Lavado General"
               : _serviciosSeleccionados.join(", "),
+          "servicios_detalle": serviciosDetalle,
         },
       );
 
@@ -956,3 +969,4 @@ class _ReservaScreenState extends State<ReservaScreen>
 
 //TENDENCIA tendencia de Bento Grid & Glassmorphism 2026 VER INFO EN INTERNET UX/UI
 //tambien la 2040 queda ahora.
+

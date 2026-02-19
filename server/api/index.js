@@ -36,13 +36,24 @@ const swaggerDefinition = {
           userId: { type: "string", example: "user_123" },
           metadata: {
             type: "object",
-            description: "Informacion extra del turno para registrar al aprobarse.",
+            description:
+              "Informacion extra del turno para registrar al aprobarse.",
             properties: {
               fecha_turno: { type: "string", example: "2026-02-20" },
               hora_turno: { type: "string", example: "10:30" },
               lavadero_id: { type: "string", example: "lav_001" },
               lavadero_nombre: { type: "string", example: "ATT Centro" },
               servicios: { type: "string", example: "Lavado + Cera" },
+              servicios_detalle: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    nombre: { type: "string", example: "Lavado Premium" },
+                    precio: { type: "number", example: 4500 },
+                  },
+                },
+              },
             },
           },
         },
@@ -106,6 +117,45 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
+function formatearMonto(value) {
+  const numero = Number(value);
+  if (Number.isNaN(numero)) return "$0.00";
+  return `$${numero.toFixed(2)}`;
+}
+
+function formatearFechaHoraTurno(fecha, hora) {
+  const fechaRaw = (fecha || "").toString();
+  const horaRaw = (hora || "").toString();
+  let fechaFormateada = fechaRaw;
+
+  if (fechaRaw.includes("-")) {
+    const partes = fechaRaw.split("-");
+    if (partes.length === 3) {
+      fechaFormateada = `${partes[2]}/${partes[1]}/${partes[0]}`;
+    }
+  }
+
+  if (!fechaFormateada && !horaRaw) return "No informado";
+  if (!horaRaw) return fechaFormateada || "No informado";
+  return `${fechaFormateada} ${horaRaw} hs`;
+}
+
+function obtenerServiciosDetalle(metadata) {
+  const detalleRaw = metadata?.servicios_detalle;
+  if (Array.isArray(detalleRaw)) return detalleRaw;
+
+  if (typeof detalleRaw === "string") {
+    try {
+      const parsed = JSON.parse(detalleRaw);
+      if (Array.isArray(parsed)) return parsed;
+    } catch (_) {
+      return [];
+    }
+  }
+
+  return [];
+}
+
 // --- 3. FUNCIÓN DE APOYO: GENERAR PDF Y FACTURA ---
 // Definimos la función que faltaba para procesar el comprobante en segundo plano
 async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
@@ -114,15 +164,34 @@ async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
     let buffers = [];
     doc.on("data", buffers.push.bind(buffers));
 
-
     doc
       .fontSize(25)
       .fillColor("#3ABEF9")
       .text("ATT! A TODO TRAPO", { align: "center" });
     doc.moveDown().fontSize(12).fillColor("black");
     doc.text(`Comprobante de Pago: ${paymentId}`);
-    doc.text(`Servicios: ${metadata.servicios || "Lavado"}`);
-    doc.text(`Turno: ${metadata.fecha_turno} - ${metadata.hora_turno}hs`);
+    doc.text(
+      `Turno: ${formatearFechaHoraTurno(
+        metadata.fecha_turno,
+        metadata.hora_turno
+      )}`
+    );
+    doc.moveDown(0.3);
+    doc.text("Servicios:");
+
+    const serviciosDetalle = obtenerServiciosDetalle(metadata);
+    if (serviciosDetalle.length > 0) {
+      serviciosDetalle.forEach((item) => {
+        const nombre = item?.nombre || "Servicio";
+        const precio = formatearMonto(item?.precio);
+        doc.text(`- ${nombre}: ${precio}`);
+      });
+    } else {
+      doc.text(`- ${metadata.servicios || "Lavado"}`);
+    }
+
+    doc.moveDown(0.4);
+    doc.text(`Total abonado: ${formatearMonto(payment.transaction_amount)}`);
     doc.end();
 
     doc.on("end", async () => {

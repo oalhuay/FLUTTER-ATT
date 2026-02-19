@@ -38,6 +38,18 @@ String obtenerRatingTexto(dynamic lavadero) {
 
 String ObtenerRatingTexto(dynamic lavadero) => obtenerRatingTexto(lavadero);
 
+String obtenerGestionadoPor(dynamic lavadero) {
+  if (lavadero is! Map) return 'Dueño no disponible';
+  final dynamic perfil = lavadero['perfiles_usuarios'];
+  if (perfil is Map) {
+    final nombre = (perfil['nombre'] ?? '').toString().trim();
+    final apellido = (perfil['apellido'] ?? '').toString().trim();
+    final completo = '$nombre $apellido'.trim();
+    if (completo.isNotEmpty) return completo;
+  }
+  return 'Dueño no disponible';
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('es', null); //
@@ -2473,34 +2485,33 @@ class _MainLayoutState extends State<MainLayout> {
           const SizedBox(height: 18),
 
           // --- SELLO DE AUTOR (DUEÑO) ---
-          if (_lavaderoSeleccionado['perfiles_usuarios'] != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 14),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF3ABEF9).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(
-                    Icons.verified_user,
-                    size: 16,
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF3ABEF9).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.verified_user,
+                  size: 16,
+                  color: Color(0xFF3ABEF9),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "Gestionado por: ${obtenerGestionadoPor(_lavaderoSeleccionado)}",
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
                     color: Color(0xFF3ABEF9),
                   ),
-                  const SizedBox(width: 8),
-                  Text(
-                    "Gestionado por: ${_lavaderoSeleccionado['perfiles_usuarios']['nombre'] ?? 'Dueño'} ${_lavaderoSeleccionado['perfiles_usuarios']['apellido'] ?? ''}",
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
-                      color: Color(0xFF3ABEF9),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
+          ),
           // Título dinámico según el rol
           Text(
             esDueno ? "GESTIONAR MI NEGOCIO" : "DETALLES DEL LAVADERO",
@@ -3755,13 +3766,13 @@ class _MapScreenState extends State<MapScreen> {
           );
           // Guardamos los nombres en un mapa para acceso rápido
           for (var p in perfilesData) {
-            mapaNombres[p['id']] = p;
+            mapaNombres[p['id'].toString()] = p;
           }
         }
 
         // 4. "Pegamos" manualmente la info del dueño a cada lavadero
         for (var lav in listaLavaderos) {
-          lav['perfiles_usuarios'] = mapaNombres[lav['dueño_id']];
+          lav['perfiles_usuarios'] = mapaNombres[lav['dueño_id']?.toString()];
         }
 
         // 5. Enviamos los datos actualizados al MainLayout
@@ -4085,6 +4096,18 @@ class TarjetaMarkerOverlay extends StatelessWidget {
                     color: Colors.green,
                     fontWeight: FontWeight.bold,
                   ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Gestionado por: ${obtenerGestionadoPor(l)}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF3ABEF9),
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
                 ),
               ],
             ),
