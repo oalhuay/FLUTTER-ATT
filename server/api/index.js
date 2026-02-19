@@ -377,37 +377,50 @@ app.post("/webhook", async (req, res) => {
 
       console.log("📝 Iniciando inserción en Supabase...");
 
-      // Ejecutamos ambas tareas y esperamos su cumplimiento
-      await Promise.all([
-        (async () => {
-          const turnoPayload = {
-            user_id: userId,
-            payment_id: id.toString(),
-            estado: "activo",
-            monto_pagado: payment.transaction_amount,
-            fecha: metadata.fecha_turno,
-            hora: metadata.hora_turno,
-            lavadero_id: metadata.lavadero_id || null,
-            lavadero_nombre: metadata.lavadero_nombre,
-            servicios: metadata.servicios || "Lavado",
+      const turnoPayload = {
+        user_id: userId,
+        payment_id: id.toString(),
+        estado: "activo",
+        monto_pagado: payment.transaction_amount,
+        fecha: metadata.fecha_turno,
+        hora: metadata.hora_turno,
+        lavadero_id: metadata.lavadero_id || null,
+        lavadero_nombre: metadata.lavadero_nombre,
+        servicios: metadata.servicios || "Lavado",
+      };
+
+      let { error } = await supabase.from("turnos").insert(turnoPayload);
+
+      if (error && /lavadero_id/i.test(error.message || "")) {
+        const payloadSinLavaderoId = { ...turnoPayload };
+        delete payloadSinLavaderoId.lavadero_id;
+        const retry = await supabase.from("turnos").insert(payloadSinLavaderoId);
+        error = retry.error;
+      }
+
+      if (error) console.error("Error DB Turno:", error.message);
+      else console.log("Turno insertado correctamente");
+
+      // Fallback fuerte: si metadata no trae fecha/hora, usamos lo persistido en turnos.
+      let metadataPdf = { ...metadata };
+      if (!metadataPdf.fecha_turno || !metadataPdf.hora_turno) {
+        const { data: turnoPersistido } = await supabase
+          .from("turnos")
+          .select("fecha, hora, servicios")
+          .eq("payment_id", id.toString())
+          .maybeSingle();
+
+        if (turnoPersistido) {
+          metadataPdf = {
+            ...metadataPdf,
+            fecha_turno: metadataPdf.fecha_turno || turnoPersistido.fecha,
+            hora_turno: metadataPdf.hora_turno || turnoPersistido.hora,
+            servicios: metadataPdf.servicios || turnoPersistido.servicios,
           };
+        }
+      }
 
-          let { error } = await supabase.from("turnos").insert(turnoPayload);
-
-          if (error && /lavadero_id/i.test(error.message || "")) {
-            const payloadSinLavaderoId = { ...turnoPayload };
-            delete payloadSinLavaderoId.lavadero_id;
-            const retry = await supabase
-              .from("turnos")
-              .insert(payloadSinLavaderoId);
-            error = retry.error;
-          }
-
-          if (error) console.error("Error DB Turno:", error.message);
-          else console.log("Turno insertado correctamente");
-        })(),
-        procesarPDFYFactura(payment, metadata, id.toString(), userId),
-      ]);
+      await procesarPDFYFactura(payment, metadataPdf, id.toString(), userId);
 
       console.log("🏁 Webhook procesado completamente.");
     }
