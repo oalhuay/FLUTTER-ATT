@@ -209,6 +209,16 @@ class _SeleccionRolScreenState extends State<SeleccionRolScreen> {
         'email': user.email,
       });
 
+      final metadataActual = Map<String, dynamic>.from(
+        user.userMetadata ?? const <String, dynamic>{},
+      );
+      if (nuevoRol == 'lavadero') {
+        metadataActual['tutorial_lavadero_sidebar_v1'] = false;
+      } else if (nuevoRol == 'cliente') {
+        metadataActual['tutorial_cliente_general_v1'] = false;
+      }
+      await supabase.auth.updateUser(UserAttributes(data: metadataActual));
+
       if (mounted) {
         Navigator.pushReplacement(
           context,
@@ -343,6 +353,13 @@ class _MainLayoutState extends State<MainLayout> {
   final List<_PasoTutorialSidebarLavadero>
   _pasosTutorialLavadero = const <_PasoTutorialSidebarLavadero>[
     _PasoTutorialSidebarLavadero(
+      objetivo: 'intro',
+      mostrarSidebar: false,
+      titulo: "Bienvenido a ATT!",
+      descripcion:
+          "¡Bienvenido a ATT! Esta guía rápida te mostrará dónde está cada función clave.",
+    ),
+    _PasoTutorialSidebarLavadero(
       objetivo: 'menu_reservas',
       mostrarSidebar: true,
       menuIndex: 1,
@@ -405,6 +422,13 @@ class _MainLayoutState extends State<MainLayout> {
   ];
   final List<_PasoTutorialSidebarLavadero>
   _pasosTutorialCliente = const <_PasoTutorialSidebarLavadero>[
+    _PasoTutorialSidebarLavadero(
+      objetivo: 'intro',
+      mostrarSidebar: false,
+      titulo: "Bienvenido a ATT!",
+      descripcion:
+          "¡Bienvenido a ATT! Esta guía rápida te mostrará dónde está cada función clave.",
+    ),
     _PasoTutorialSidebarLavadero(
       objetivo: 'buscador',
       mostrarSidebar: false,
@@ -4235,7 +4259,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
         'marca_modelo': _marcaController.text,
         'color_vehiculo': _colorController.text,
       });
-    } else if (_rolUsuario == 'dueño') {
+    } else if (_rolUsuario == 'lavadero') {
       updates.addAll({
         'cuil_cuit': _cuitController.text,
         'codigo_postal': _cpController.text,
@@ -4442,7 +4466,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         ],
                       ),
                     )
-                  else if (_rolUsuario == 'dueño')
+                  else if (_rolUsuario == 'lavadero')
                     _buildBentoCard(
                       title: "Información del Lavadero",
                       icon: Icons.storefront_rounded,
@@ -4526,9 +4550,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                     ),
                   const SizedBox(height: 16),
 
-                  if ((_rolUsuario == 'lavadero' ||
-                          _rolUsuario == 'dueño' ||
-                          _rolUsuario == 'cliente') &&
+                  if ((_rolUsuario == 'lavadero' || _rolUsuario == 'cliente') &&
                       widget.onMostrarTutorialGeneral != null)
                     _buildBentoCard(
                       child: _actionRow(
@@ -4538,9 +4560,7 @@ class _PerfilScreenState extends State<PerfilScreen> {
                         onTap: widget.onMostrarTutorialGeneral,
                       ),
                     ),
-                  if ((_rolUsuario == 'lavadero' ||
-                          _rolUsuario == 'dueño' ||
-                          _rolUsuario == 'cliente') &&
+                  if ((_rolUsuario == 'lavadero' || _rolUsuario == 'cliente') &&
                       widget.onMostrarTutorialGeneral != null)
                     const SizedBox(height: 16),
 
