@@ -156,6 +156,70 @@ function obtenerServiciosDetalle(metadata) {
   return [];
 }
 
+async function buscarTurnoPorPaymentId(paymentId) {
+  let { data } = await supabase
+    .from("turnos")
+    .select("fecha, hora, servicios, lavadero_id, lavadero_nombre")
+    .eq("payment_id", paymentId)
+    .maybeSingle();
+
+  if (!data) {
+    const paymentIdNumero = Number(paymentId);
+    if (!Number.isNaN(paymentIdNumero)) {
+      const retry = await supabase
+        .from("turnos")
+        .select("fecha, hora, servicios, lavadero_id, lavadero_nombre")
+        .eq("payment_id", paymentIdNumero)
+        .maybeSingle();
+      data = retry.data;
+    }
+  }
+
+  return data || null;
+}
+
+async function completarDetalleServicios(metadata) {
+  const detalleActual = obtenerServiciosDetalle(metadata);
+  if (detalleActual.length > 0) return metadata;
+
+  const serviciosTexto = (metadata?.servicios || "").toString();
+  const servicios = serviciosTexto
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (servicios.length === 0) return metadata;
+
+  let lavadero = null;
+  if (metadata?.lavadero_id) {
+    const byId = await supabase
+      .from("lavaderos")
+      .select("servicios_precios")
+      .eq("id", metadata.lavadero_id)
+      .maybeSingle();
+    lavadero = byId.data;
+  }
+
+  if (!lavadero && metadata?.lavadero_nombre) {
+    const byNombre = await supabase
+      .from("lavaderos")
+      .select("servicios_precios")
+      .eq("razon_social", metadata.lavadero_nombre)
+      .maybeSingle();
+    lavadero = byNombre.data;
+  }
+
+  const precios = lavadero?.servicios_precios || {};
+  const detalleReconstruido = servicios.map((nombre) => ({
+    nombre,
+    precio: Number(precios?.[nombre] ?? 0),
+  }));
+
+  return {
+    ...metadata,
+    servicios_detalle: JSON.stringify(detalleReconstruido),
+  };
+}
+
 // --- 3. FUNCIÓN DE APOYO: GENERAR PDF Y FACTURA ---
 // Definimos la función que faltaba para procesar el comprobante en segundo plano
 async function procesarPDFYFactura(payment, metadata, paymentId, userId) {
@@ -401,24 +465,22 @@ app.post("/webhook", async (req, res) => {
       if (error) console.error("Error DB Turno:", error.message);
       else console.log("Turno insertado correctamente");
 
-      // Fallback fuerte: si metadata no trae fecha/hora, usamos lo persistido en turnos.
+      // Completamos metadata del PDF usando lo persistido (turno) y precios del lavadero.
       let metadataPdf = { ...metadata };
-      if (!metadataPdf.fecha_turno || !metadataPdf.hora_turno) {
-        const { data: turnoPersistido } = await supabase
-          .from("turnos")
-          .select("fecha, hora, servicios")
-          .eq("payment_id", id.toString())
-          .maybeSingle();
-
-        if (turnoPersistido) {
-          metadataPdf = {
-            ...metadataPdf,
-            fecha_turno: metadataPdf.fecha_turno || turnoPersistido.fecha,
-            hora_turno: metadataPdf.hora_turno || turnoPersistido.hora,
-            servicios: metadataPdf.servicios || turnoPersistido.servicios,
-          };
-        }
+      const turnoPersistido = await buscarTurnoPorPaymentId(id.toString());
+      if (turnoPersistido) {
+        metadataPdf = {
+          ...metadataPdf,
+          fecha_turno: metadataPdf.fecha_turno || turnoPersistido.fecha,
+          hora_turno: metadataPdf.hora_turno || turnoPersistido.hora,
+          servicios: metadataPdf.servicios || turnoPersistido.servicios,
+          lavadero_id: metadataPdf.lavadero_id || turnoPersistido.lavadero_id,
+          lavadero_nombre:
+            metadataPdf.lavadero_nombre || turnoPersistido.lavadero_nombre,
+        };
       }
+
+      metadataPdf = await completarDetalleServicios(metadataPdf);
 
       await procesarPDFYFactura(payment, metadataPdf, id.toString(), userId);
 
