@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
@@ -1986,13 +1986,15 @@ class _MainLayoutState extends State<MainLayout> {
                         supabase.auth.currentUser != null &&
                         _indiceActual == 0) // <--- Solo en el mapa
                       Positioned(
+                        left: esMovil ? 15 : null,
                         right: 15,
                         top: 80,
                         bottom: 20,
-                        width: 330,
+                        width: esMovil ? null : 330,
                         child: Material(
                           elevation: 10,
                           borderRadius: BorderRadius.circular(20),
+                          clipBehavior: Clip.antiAlias,
                           child: Container(
                             decoration: BoxDecoration(
                               color: Colors.white,
@@ -2498,7 +2500,7 @@ class _MainLayoutState extends State<MainLayout> {
     bool esDueno = _rolUsuario == 'lavadero';
 
     return SingleChildScrollView(
-      physics: const NeverScrollableScrollPhysics(),
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 12),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
