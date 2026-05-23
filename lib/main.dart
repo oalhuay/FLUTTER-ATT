@@ -1992,16 +1992,18 @@ class _MainLayoutState extends State<MainLayout> {
                         top: 80,
                         bottom: 20,
                         width: esMovil ? null : 330,
-                        child: Material(
-                          elevation: 10,
-                          borderRadius: BorderRadius.circular(20),
-                          clipBehavior: Clip.antiAlias,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
+                        child: _buildPanelDerechoConCierrePorSwipe(
+                          child: Material(
+                            elevation: 10,
+                            borderRadius: BorderRadius.circular(20),
+                            clipBehavior: Clip.antiAlias,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: _buildPanelInformacion(),
                             ),
-                            child: _buildPanelInformacion(),
                           ),
                         ),
                       ),
@@ -2014,24 +2016,26 @@ class _MainLayoutState extends State<MainLayout> {
                         top: 80,
                         bottom: 12,
                         right: mostrarPanelDerechoWeb ? 12 : -362,
-                        child: Material(
-                          elevation: 10,
-                          borderRadius: BorderRadius.circular(20),
-                          clipBehavior: Clip.antiAlias,
-                          child: Container(
-                            width: 350,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black.withOpacity(0.05),
-                                  blurRadius: 10,
-                                  offset: const Offset(-5, 0),
-                                ),
-                              ],
+                        child: _buildPanelDerechoConCierrePorSwipe(
+                          child: Material(
+                            elevation: 10,
+                            borderRadius: BorderRadius.circular(20),
+                            clipBehavior: Clip.antiAlias,
+                            child: Container(
+                              width: 350,
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(20),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.05),
+                                    blurRadius: 10,
+                                    offset: const Offset(-5, 0),
+                                  ),
+                                ],
+                              ),
+                              child: _buildContenidoPanelDerecho(),
                             ),
-                            child: _buildContenidoPanelDerecho(),
                           ),
                         ),
                       ),
@@ -2060,6 +2064,42 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   // Mueve aquí el contenido que tenías antes en el Sidebar
+  Widget _buildPanelDerechoConCierrePorSwipe({required Widget child}) {
+    if (_lavaderoSeleccionado == null) return child;
+
+    final String lavaderoKey =
+        (_lavaderoSeleccionado['id'] ??
+                _lavaderoSeleccionado['razon_social'] ??
+                'seleccionado')
+            .toString();
+
+    return Dismissible(
+      key: ValueKey('detalle_lavadero_$lavaderoKey'),
+      direction: DismissDirection.startToEnd,
+      dismissThresholds: const {DismissDirection.startToEnd: 0.24},
+      resizeDuration: null,
+      movementDuration: const Duration(milliseconds: 180),
+      onDismissed: (_) {
+        if (!mounted) return;
+        setState(() => _lavaderoSeleccionado = null);
+      },
+      background: Container(
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.only(left: 22),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3ABEF9).withOpacity(0.14),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Icon(
+          Icons.keyboard_double_arrow_right_rounded,
+          color: Color(0xFF3ABEF9),
+          size: 30,
+        ),
+      ),
+      child: child,
+    );
+  }
+
   Widget _buildContenidoSidebar() {
     // --- PASO 1: VERIFICAR SESIÓN ACTIVA ---
     final bool tieneSesion = supabase.auth.currentUser != null;
