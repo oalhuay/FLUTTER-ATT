@@ -326,6 +326,7 @@ class _MainLayoutState extends State<MainLayout> {
   bool _filtroDistancia = false;
   int _indiceAnterior = 0;
   int _animacionContenidoKey = 0;
+  final ScrollController _sidebarScrollController = ScrollController();
   final ScrollController _scrollBentoController = ScrollController();
   int _paginaActual = 0;
   final int _itemsPorPagina =
@@ -2063,84 +2064,93 @@ class _MainLayoutState extends State<MainLayout> {
     // --- PASO 1: VERIFICAR SESIÓN ACTIVA ---
     final bool tieneSesion = supabase.auth.currentUser != null;
 
-    return Column(
-      children: [
-        const SizedBox(height: 50),
-        // --- LOGO PRINCIPAL ---
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final double logoWidth = (constraints.maxWidth - 4).clamp(
-                150.0,
-                210.0,
-              );
-              return Center(
-                child: Image.asset(
-                  'assets/sidebar_logo.png',
-                  width: logoWidth,
-                  fit: BoxFit.contain,
-                ),
-              );
-            },
-          ),
+    return Scrollbar(
+      controller: _sidebarScrollController,
+      thumbVisibility: true,
+      child: SingleChildScrollView(
+        controller: _sidebarScrollController,
+        primary: false,
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 20),
+        child: Column(
+          children: [
+            const SizedBox(height: 50),
+            // --- LOGO PRINCIPAL ---
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final double logoWidth = (constraints.maxWidth - 4).clamp(
+                    150.0,
+                    210.0,
+                  );
+                  return Center(
+                    child: Image.asset(
+                      'assets/sidebar_logo.png',
+                      width: logoWidth,
+                      fit: BoxFit.contain,
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 40),
+
+            // --- BOTONES DEL MENÚ ---
+            _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
+
+            // --- BOTÓN MIS RESERVAS: Solo si tiene sesión ---
+            if (tieneSesion)
+              _itemMenuLateral(
+                Icons.calendar_month,
+                "Mis Reservas",
+                1,
+                tutorialKey: _menuTutorialKeys[1],
+              ),
+
+            _itemMenuLateral(
+              Icons.person,
+              "Mi Perfil",
+              2,
+              tutorialKey: _menuTutorialKeys[2],
+            ),
+
+            // --- BOTÓN CONFIGURAR: Solo si tiene sesión Y es dueño ---
+            if (tieneSesion && _rolUsuario == 'lavadero')
+              _itemMenuLateral(
+                Icons.add_business,
+                "Registrar Mi Lavadero",
+                99,
+                tutorialKey: _menuTutorialKeys[99],
+              ),
+
+            // --- NUEVO BOTÓN: MIS CLIENTES (Solo para Dueños) ---
+            // Lo asignamos con el índice 100 para no chocar con los demás
+            if (tieneSesion && _rolUsuario == 'lavadero')
+              _itemMenuLateral(
+                Icons.people_alt_rounded,
+                "Mis Clientes",
+                100,
+                tutorialKey: _menuTutorialKeys[100],
+              ),
+            if (tieneSesion && _rolUsuario == 'lavadero')
+              _itemMenuLateral(
+                Icons.business_center_rounded,
+                "Mis Lavaderos",
+                101,
+                tutorialKey: _menuTutorialKeys[101],
+              ),
+            if (tieneSesion && _rolUsuario == 'cliente')
+              _itemMenuLateral(
+                Icons.help_outline_rounded,
+                "¿Cómo solicitar un turno en ATT!?",
+                200,
+              ),
+
+            const SizedBox(height: 20),
+          ],
         ),
-        const SizedBox(height: 40),
-
-        // --- BOTONES DEL MENÚ ---
-        _itemMenuLateral(Icons.map, "Explorar Mapa", 0),
-
-        // --- BOTÓN MIS RESERVAS: Solo si tiene sesión ---
-        if (tieneSesion)
-          _itemMenuLateral(
-            Icons.calendar_month,
-            "Mis Reservas",
-            1,
-            tutorialKey: _menuTutorialKeys[1],
-          ),
-
-        _itemMenuLateral(
-          Icons.person,
-          "Mi Perfil",
-          2,
-          tutorialKey: _menuTutorialKeys[2],
-        ),
-
-        // --- BOTÓN CONFIGURAR: Solo si tiene sesión Y es dueño ---
-        if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(
-            Icons.add_business,
-            "Registrar Mi Lavadero",
-            99,
-            tutorialKey: _menuTutorialKeys[99],
-          ),
-
-        // --- NUEVO BOTÓN: MIS CLIENTES (Solo para Dueños) ---
-        // Lo asignamos con el índice 100 para no chocar con los demás
-        if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(
-            Icons.people_alt_rounded,
-            "Mis Clientes",
-            100,
-            tutorialKey: _menuTutorialKeys[100],
-          ),
-        if (tieneSesion && _rolUsuario == 'lavadero')
-          _itemMenuLateral(
-            Icons.business_center_rounded,
-            "Mis Lavaderos",
-            101,
-            tutorialKey: _menuTutorialKeys[101],
-          ),
-        if (tieneSesion && _rolUsuario == 'cliente')
-          _itemMenuLateral(
-            Icons.help_outline_rounded,
-            "¿Cómo solicitar un turno en ATT!?",
-            200,
-          ),
-
-        const Spacer(),
-        const SizedBox(height: 20),
-      ],
+      ),
     );
   }
 
@@ -3488,6 +3498,7 @@ class _MainLayoutState extends State<MainLayout> {
   @override
   void dispose() {
     _authStateSub?.cancel();
+    _sidebarScrollController.dispose();
     _searchController.dispose();
     _nombreCtrl.dispose();
     _direccionCtrl.dispose();
